@@ -17,6 +17,7 @@ window.onload = () => {
   updateUI();
   showDate();
   renderCategoryList();
+  document.getElementById("appVersion").innerText = APP_VERSION;
 };
 
 /* =========================
@@ -947,6 +948,23 @@ function loadTheme() {
   if (t) changeTheme(t);
 }
 
+const APP_VERSION = "1.1"; // change every update
+
+function checkForUpdate() {
+  const savedVersion = localStorage.getItem("app_version");
+
+  if (savedVersion && savedVersion !== APP_VERSION) {
+
+    if (confirm("🚀 New version available!\n\nClick OK to update now.")) {
+      localStorage.setItem("app_version", APP_VERSION);
+      location.reload(true);
+    }
+
+  } else {
+    localStorage.setItem("app_version", APP_VERSION);
+  }
+}
+
 /* =========================
    📊 UI
 ========================= */
@@ -973,3 +991,5 @@ function showDate() {
   let el = document.getElementById("dateDisplay");
   if (el) el.innerText = new Date().toLocaleString();
 }
+
+checkForUpdate();
