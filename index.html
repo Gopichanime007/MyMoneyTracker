@@ -5,12 +5,13 @@
   <meta charset="UTF-8">
   <title>Money Tracker</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<link rel="manifest" href="manifest.json">
+
   <!-- FONT (consistent everywhere) -->
   <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600&display=swap" rel="stylesheet">
 
   <link rel="stylesheet" href="style.css">
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 </head>
 
 <body>
@@ -73,6 +74,7 @@
           <option value="month">This Month</option>
           <option value="period">Custom Period</option>
         </select>
+        <button class="primary" onclick="downloadPDF()">Download PDF</button>
 
         <div id="historyList"></div>
       </div>
