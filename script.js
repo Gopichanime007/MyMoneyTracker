@@ -240,17 +240,20 @@ function closeModal() {
 /* =========================
    📊 GRAPH
 ========================= */
-function loadGraph(type = "day") {
+function loadGraph(type = "day", mode = "app") {
   let ctx = document.getElementById("myChart");
 
   if (chart) chart.destroy();
 
-  let labels = [], data = [];
+  let labels = [], expenseData = [];
 
+  // ---------------------------
+  // 📊 DATA PREPARATION
+  // ---------------------------
   if (type === "day") {
     for (let i = 0; i < 24; i++) {
       labels.push(i + ":00");
-      data.push(sumBy(e => new Date(e.date).getHours() === i));
+      expenseData.push(sumBy(e => new Date(e.date).getHours() === i));
     }
   }
 
@@ -258,34 +261,74 @@ function loadGraph(type = "day") {
     let days = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
     for (let i = 0; i < 7; i++) {
       labels.push(days[i]);
-      data.push(sumBy(e => new Date(e.date).getDay() === i));
+      expenseData.push(sumBy(e => new Date(e.date).getDay() === i));
     }
   }
 
   if (type === "month") {
     for (let i = 1; i <= 30; i++) {
       labels.push(i);
-      data.push(sumBy(e => new Date(e.date).getDate() === i));
+      expenseData.push(sumBy(e => new Date(e.date).getDate() === i));
     }
   }
 
-  chart = new Chart(ctx, {
-    type: "bar",
-    data: {
-      labels,
-      datasets: [
+  let budgetData = labels.map(() => dailyBudget);
+
+  let chartType = mode === "app" ? "bar" : "line";
+
+  let datasets =
+    mode === "app"
+      ? [
         {
           label: "Expenses",
-          data,
-          backgroundColor: "#90caf9"
+          data: expenseData,
+          backgroundColor: "#4CAF50"
         },
         {
           label: "Budget",
-          data: labels.map(() => dailyBudget),
-          type: "line",
-          borderColor: "red"
+          data: budgetData,
+          backgroundColor: "#FF7043"
         }
       ]
+      : [
+        {
+          label: "Expenses",
+          data: expenseData,
+          borderColor: "#4CAF50",
+          backgroundColor: "transparent",
+          tension: 0.3
+        },
+        {
+          label: "Budget",
+          data: budgetData,
+          borderColor: "#FF7043",
+          backgroundColor: "transparent",
+          borderDash: [5, 5],
+          tension: 0.3
+        }
+      ];
+
+  chart = new Chart(ctx, {
+    type: chartType,
+    data: {
+      labels,
+      datasets
+    },
+    options: {
+      responsive: true,
+      animation: {
+        duration: 400 // important for PDF timing
+      },
+      plugins: {
+        legend: {
+          display: true
+        }
+      },
+      scales: {
+        y: {
+          beginAtZero: true
+        }
+      }
     }
   });
 }
@@ -293,31 +336,591 @@ function loadGraph(type = "day") {
 function sumBy(fn) {
   return expenses.reduce((sum, e) => fn(e) ? sum + e.amount : sum, 0);
 }
+
+function exportPDF() {
+  // Destroy old chart first
+  if (chart) chart.destroy();
+
+  let ctx = document.getElementById("myChart");
+
+  let labels = [], expenseData = [];
+
+  // Prepare data (same logic)
+  for (let i = 0; i < 24; i++) {
+    labels.push(i + ":00");
+    expenseData.push(sumBy(e => new Date(e.date).getHours() === i));
+  }
+
+  let budgetData = labels.map(() => dailyBudget);
+
+  // 🔥 Create PDF chart with CALLBACK
+  chart = new Chart(ctx, {
+    type: "line",
+    data: {
+      labels,
+      datasets: [
+        {
+          label: "Expenses",
+          data: expenseData,
+          borderColor: "#4CAF50",
+          backgroundColor: "transparent",
+          tension: 0.3
+        },
+        {
+          label: "Budget",
+          data: budgetData,
+          borderColor: "#FF7043",
+          backgroundColor: "transparent",
+          borderDash: [5, 5],
+          tension: 0.3
+        }
+      ]
+    },
+    options: {
+      responsive: true,
+
+      animation: {
+        onComplete: function () {
+          // ✅ ONLY after chart fully drawn
+          downloadPDF();
+
+          // Switch back to app graph
+          loadGraph("day", "app");
+        }
+      },
+
+      plugins: {
+        legend: {
+          display: true
+        }
+      },
+
+      scales: {
+        y: {
+          beginAtZero: true
+        }
+      }
+    }
+  });
+}
+
+// function downloadPDF() {
+//   const { jsPDF } = window.jspdf;
+//   const doc = new jsPDF();
+
+//   // ---------------------------
+//   // 🟢 TITLE
+//   // ---------------------------
+//   doc.setFontSize(18);
+//   doc.setFont(undefined, "bold");
+//   doc.text("Money Tracker Report", 14, 15);
+
+//   // ---------------------------
+//   // 🟡 SUBTITLE
+//   // ---------------------------
+//   doc.setFontSize(9);
+//   doc.setTextColor(120);
+//   doc.text("Generated on: " + new Date().toLocaleString(), 14, 22);
+
+//   doc.setDrawColor(200);
+//   doc.line(10, 25, 200, 25);
+
+//   let y = 32;
+
+//   // ---------------------------
+//   // 🟢 EXPENSE TABLE
+//   // ---------------------------
+//   const col = {
+//     date: 12,
+//     category: 40,
+//     amount: 90,
+//     purpose: 105
+//   };
+
+//   doc.setFillColor(76, 175, 80);
+//   doc.rect(10, y - 6, 190, 10, "F");
+
+//   doc.setTextColor(255);
+//   doc.setFontSize(10);
+//   doc.setFont(undefined, "bold");
+
+//   doc.text("Date", col.date, y);
+//   doc.text("Category", col.category, y);
+//   doc.text("Amount", col.amount, y, { align: "right" });
+//   doc.text("Purpose", col.purpose, y);
+
+//   y += 12;
+
+//   doc.setTextColor(0);
+//   doc.setFont(undefined, "normal");
+
+//   let total = 0;
+//   let list = document.querySelectorAll(".expense-item");
+
+//   list.forEach((item, index) => {
+//     let text = item.innerText.replace("🗑", "").trim().split("\n");
+
+//     let [categoryPart, datePart] = text;
+//     let [category, amountRaw] = categoryPart.split(" - ₹");
+
+//     let amount = Number(amountRaw);
+//     total += amount;
+
+//     let formatted = new Intl.NumberFormat("en-IN").format(amount);
+
+//     if (y > 280) {
+//       doc.addPage();
+//       y = 20;
+//     }
+
+//     if (index % 2 === 0) {
+//       doc.setFillColor(245, 245, 245);
+//       doc.rect(10, y - 5, 190, 8, "F");
+//     }
+
+//     doc.text(datePart.split(",")[0], col.date, y);
+//     doc.text(category, col.category, y);
+//     doc.text(`Rs. ${formatted}`, col.amount, y, { align: "right" });
+//     doc.text("-", col.purpose, y);
+
+//     y += 8;
+//   });
+
+//   // ---------------------------
+//   // 🔵 TOTAL
+//   // ---------------------------
+//   y += 4;
+//   doc.setDrawColor(200);
+//   doc.line(10, y, 200, y);
+
+//   y += 8;
+//   doc.setFont(undefined, "bold");
+
+//   let fTotal = new Intl.NumberFormat("en-IN").format(total);
+//   doc.text(`Total: Rs. ${fTotal}`, 190, y, { align: "right" });
+
+//   // ---------------------------
+//   // 🟣 MONTHLY SUMMARY
+//   // ---------------------------
+//   y += 12;
+
+//   if (y > 260) {
+//     doc.addPage();
+//     y = 20;
+//   }
+
+//   doc.setFontSize(13);
+//   doc.text("Budget Summary (Monthly)", 14, y);
+
+//   y += 6;
+//   doc.setDrawColor(180);
+//   doc.line(10, y, 200, y);
+
+//   y += 8;
+
+//   const mcol = {
+//     month: 14,
+//     budget: 90,
+//     spent: 130,
+//     remaining: 170
+//   };
+
+//   doc.setFontSize(10);
+//   doc.setFont(undefined, "bold");
+
+//   doc.text("Month", mcol.month, y);
+//   doc.text("Budget", mcol.budget, y, { align: "right" });
+//   doc.text("Spent", mcol.spent, y, { align: "right" });
+//   doc.text("Remaining", mcol.remaining, y, { align: "right" });
+
+//   y += 6;
+
+//   doc.setFont(undefined, "normal");
+
+//   // Group by month
+//   let monthMap = {};
+
+//   expenses.forEach(e => {
+//     let d = new Date(e.date);
+//     let key = d.toLocaleString("en-IN", { month: "short", year: "numeric" });
+
+//     if (!monthMap[key]) monthMap[key] = 0;
+//     monthMap[key] += e.amount;
+//   });
+
+//   Object.keys(monthMap).forEach((month, index) => {
+//     let spent = monthMap[month];
+//     let monthlyBudget = budget;
+//     let remaining = monthlyBudget - spent;
+
+//     let fBudget = new Intl.NumberFormat("en-IN").format(monthlyBudget);
+//     let fSpent = new Intl.NumberFormat("en-IN").format(spent);
+//     let fRemain = new Intl.NumberFormat("en-IN").format(remaining);
+
+//     if (y > 280) {
+//       doc.addPage();
+//       y = 20;
+//     }
+
+//     if (index % 2 === 0) {
+//       doc.setFillColor(245, 245, 245);
+//       doc.rect(10, y - 4, 190, 8, "F");
+//     }
+
+//     doc.text(month, mcol.month, y);
+//     doc.text(`Rs. ${fBudget}`, mcol.budget, y, { align: "right" });
+//     doc.text(`Rs. ${fSpent}`, mcol.spent, y, { align: "right" });
+
+//     if (remaining < 0) doc.setTextColor(200, 0, 0);
+//     else doc.setTextColor(0, 150, 0);
+
+//     doc.text(`Rs. ${fRemain}`, mcol.remaining, y, { align: "right" });
+
+//     doc.setTextColor(0);
+
+//     y += 8;
+//   });
+
+//   // ---------------------------
+//   // 📊 GRAPH
+//   // ---------------------------
+//   y += 12;
+
+//   const canvas = document.createElement("canvas");
+//   canvas.width = 800;
+//   canvas.height = 400;
+
+//   const ctx = canvas.getContext("2d");
+
+//   let labels = [];
+//   let data = [];
+
+//   for (let i = 0; i < 24; i++) {
+//     labels.push(i + ":00");
+//     data.push(sumBy(e => new Date(e.date).getHours() === i));
+//   }
+
+//   let budgetData = labels.map(() => dailyBudget);
+
+//   const chart = new Chart(ctx, {
+//     type: "line",
+//     data: {
+//       labels,
+//       datasets: [
+//         {
+//           label: "Expenses",
+//           data,
+//           borderColor: "#4CAF50",
+//           tension: 0.3
+//         },
+//         {
+//           label: "Budget",
+//           data: budgetData,
+//           borderColor: "#FF7043",
+//           borderDash: [5, 5],
+//           tension: 0.3
+//         }
+//       ]
+//     },
+//     options: {
+//       responsive: false,
+//       animation: false
+//     }
+//   });
+
+//   let img = canvas.toDataURL("image/png");
+
+//   if (y + 80 > 290) {
+//     doc.addPage();
+//     y = 20;
+//   }
+
+//   doc.setFont(undefined, "bold");
+//   doc.text("Expense Chart", 14, y);
+
+//   y += 6;
+
+//   doc.addImage(img, "PNG", 10, y, 180, 80);
+
+//   chart.destroy();
+
+//   // ---------------------------
+//   // 💾 SAVE
+//   // ---------------------------
+//   doc.save("expenses-report.pdf");
+// }
+
 function downloadPDF() {
   const { jsPDF } = window.jspdf;
   const doc = new jsPDF();
 
+  // ---------------------------
+  // 🟢 TITLE
+  // ---------------------------
+  doc.setFontSize(18);
+  doc.setFont(undefined, "bold");
+  doc.text("Money Tracker Report", 14, 15);
+
+  // Subtitle
+  doc.setFontSize(9);
+  doc.setTextColor(120);
+  doc.text("Generated on: " + new Date().toLocaleString(), 14, 22);
+
+  doc.setDrawColor(200);
+  doc.line(10, 25, 200, 25);
+
+  let y = 32;
+
+  // ---------------------------
+  // 🟢 EXPENSE TABLE
+  // ---------------------------
+  const col = {
+    date: 12,
+    category: 45,
+    amount: 120,
+    purpose: 140
+  };
+
+  doc.setFillColor(76, 175, 80);
+  doc.rect(10, y - 6, 190, 10, "F");
+
+  doc.setTextColor(255);
+  doc.setFontSize(10);
+  doc.setFont(undefined, "bold");
+
+  doc.text("Date", col.date, y);
+  doc.text("Category", col.category, y);
+  doc.text("Amount", col.amount, y, { align: "right" });
+  doc.text("Purpose", col.purpose, y);
+
+  y += 12;
+
+  doc.setTextColor(0);
+  doc.setFont(undefined, "normal");
+
+  let total = 0;
   let list = document.querySelectorAll(".expense-item");
 
-  doc.setFontSize(14);
-  doc.text("Money Tracker - History", 10, 10);
+  list.forEach((item, index) => {
+    let text = item.innerText.replace("🗑", "").trim().split("\n");
 
-  let y = 20;
+    let [categoryPart, datePart] = text;
+    let [category, amountRaw] = categoryPart.split(" - ₹");
 
-  list.forEach(item => {
-    let text = item.innerText.replace("🗑", "").trim();
+    let amount = Number(amountRaw);
+    total += amount;
+
+    let formatted = new Intl.NumberFormat("en-IN").format(amount);
 
     if (y > 280) {
       doc.addPage();
-      y = 10;
+      y = 20;
     }
 
-    doc.text(text, 10, y);
-    y += 10;
+    if (index % 2 === 0) {
+      doc.setFillColor(245, 245, 245);
+      doc.rect(10, y - 5, 190, 8, "F");
+    }
+
+    doc.text(datePart.split(",")[0], col.date, y);
+    doc.text(category, col.category, y);
+    doc.text(`Rs. ${formatted}`, col.amount, y, { align: "right" });
+    doc.text("-", col.purpose, y);
+
+    y += 8;
   });
 
-  doc.save("expenses.pdf");
+  // ---------------------------
+  // 🔵 TOTAL
+  // ---------------------------
+  y += 4;
+  doc.line(10, y, 200, y);
+
+  y += 8;
+  doc.setFont(undefined, "bold");
+
+  let fTotal = new Intl.NumberFormat("en-IN").format(total);
+  doc.text(`Total: Rs. ${fTotal}`, 190, y, { align: "right" });
+
+  // ---------------------------
+  // 🟣 MONTHLY SUMMARY
+  // ---------------------------
+  y += 12;
+
+  if (y > 260) {
+    doc.addPage();
+    y = 20;
+  }
+
+  doc.setFontSize(13);
+  doc.text("Budget Summary (Monthly)", 14, y);
+
+  y += 6;
+  doc.line(10, y, 200, y);
+
+  y += 8;
+
+  const mcol = {
+    month: 14,
+    budget: 90,
+    spent: 130,
+    remaining: 170
+  };
+
+  doc.setFontSize(10);
+  doc.setFont(undefined, "bold");
+
+  doc.text("Month", mcol.month, y);
+  doc.text("Budget", mcol.budget, y, { align: "right" });
+  doc.text("Spent", mcol.spent, y, { align: "right" });
+  doc.text("Remaining", mcol.remaining, y, { align: "right" });
+
+  y += 6;
+  doc.setFont(undefined, "normal");
+
+  let monthMap = {};
+
+  expenses.forEach(e => {
+    let d = new Date(e.date);
+    let key = d.toLocaleString("en-IN", { month: "short", year: "numeric" });
+
+    monthMap[key] = (monthMap[key] || 0) + e.amount;
+  });
+
+  Object.keys(monthMap).forEach((month, index) => {
+    let spent = monthMap[month];
+    let remaining = budget - spent;
+
+    let fBudget = new Intl.NumberFormat("en-IN").format(budget);
+    let fSpent = new Intl.NumberFormat("en-IN").format(spent);
+    let fRemain = new Intl.NumberFormat("en-IN").format(remaining);
+
+    if (y > 280) {
+      doc.addPage();
+      y = 20;
+    }
+
+    if (index % 2 === 0) {
+      doc.setFillColor(245, 245, 245);
+      doc.rect(10, y - 4, 190, 8, "F");
+    }
+
+    doc.text(month, mcol.month, y);
+    doc.text(`Rs. ${fBudget}`, mcol.budget, y, { align: "right" });
+    doc.text(`Rs. ${fSpent}`, mcol.spent, y, { align: "right" });
+
+    doc.setTextColor(remaining < 0 ? 200 : 0, remaining < 0 ? 0 : 150, 0);
+    doc.text(`Rs. ${fRemain}`, mcol.remaining, y, { align: "right" });
+
+    doc.setTextColor(0);
+    y += 8;
+  });
+
+  // ---------------------------
+  // 📊 GRAPH (FINAL FIXED ✅)
+  // ---------------------------
+  y += 12;
+
+  const canvas = document.createElement("canvas");
+  canvas.width = 800;
+  canvas.height = 400;
+
+  const ctx = canvas.getContext("2d");
+
+  // 🔥 GROUP BY DATE
+  let map = {};
+
+  expenses.forEach(e => {
+    let d = new Date(e.date).toLocaleDateString("en-IN");
+    map[d] = (map[d] || 0) + e.amount;
+  });
+
+  let labels = Object.keys(map);
+  let data = Object.values(map);
+  let budgetData = labels.map(() => dailyBudget);
+
+  // ---------------------------
+  // 🧠 FIX: HANDLE SINGLE DATA POINT
+  // ---------------------------
+  if (labels.length === 1) {
+    labels = [" ", labels[0], " "];
+    data = [0, data[0], 0];
+    budgetData = [0, budgetData[0], 0];
+  }
+
+  // ---------------------------
+  // 📈 CHART
+  // ---------------------------
+  const chart = new Chart(ctx, {
+    type: "line",
+    data: {
+      labels,
+      datasets: [
+        {
+          label: "Expenses",
+          data,
+          borderColor: "#4CAF50",
+          backgroundColor: "rgba(76,175,80,0.1)", // subtle fill
+          fill: true,
+          tension: 0.4,
+          pointRadius: 4
+        },
+        {
+          label: "Budget",
+          data: budgetData,
+          borderColor: "#FF7043",
+          borderDash: [5, 5],
+          tension: 0.4,
+          pointRadius: 3
+        }
+      ]
+    },
+    options: {
+      responsive: false,
+      animation: false,
+
+      plugins: {
+        legend: {
+          display: true
+        }
+      },
+
+      scales: {
+        y: {
+          beginAtZero: true,
+          suggestedMax: Math.max(...data) + 100
+        }
+      }
+    }
+  });
+
+  // Convert to image
+  let img = canvas.toDataURL("image/png");
+
+  // Page handling
+  if (y + 90 > 290) {
+    doc.addPage();
+    y = 20;
+  }
+
+  // Title
+  doc.setFont(undefined, "bold");
+  doc.text("Expense Chart", 14, y);
+
+  y += 6;
+
+  // Add chart image
+  doc.addImage(img, "PNG", 10, y, 180, 90);
+
+  chart.destroy();
+
+  // ---------------------------
+  // 💾 SAVE
+  // ---------------------------
+  doc.save("expenses-report.pdf");
 }
+
+
 
 /* =========================
    🎨 THEME
