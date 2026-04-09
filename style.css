@@ -225,6 +225,13 @@ canvas {
   margin-top: 10px;
 }
 
+/* ✅ ACTIVE NAV BUTTON */
+.nav button.active {
+  background: var(--theme);
+  color: white;
+  transform: translateY(-2px);
+}
+
 /* =========================
    🧭 SCREEN
 ========================= */
