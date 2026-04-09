@@ -345,3 +345,8 @@ function showDate() {
   let el = document.getElementById("dateDisplay");
   if (el) el.innerText = new Date().toLocaleString();
 }
+if ("serviceWorker" in navigator) {
+  navigator.serviceWorker.register("sw.js")
+    .then(() => console.log("SW Registered"))
+    .catch(err => console.log("SW Error", err));
+}
