@@ -293,6 +293,31 @@ function loadGraph(type = "day") {
 function sumBy(fn) {
   return expenses.reduce((sum, e) => fn(e) ? sum + e.amount : sum, 0);
 }
+function downloadPDF() {
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF();
+
+  let list = document.querySelectorAll(".expense-item");
+
+  doc.setFontSize(14);
+  doc.text("Money Tracker - History", 10, 10);
+
+  let y = 20;
+
+  list.forEach(item => {
+    let text = item.innerText.replace("🗑", "").trim();
+
+    if (y > 280) {
+      doc.addPage();
+      y = 10;
+    }
+
+    doc.text(text, 10, y);
+    y += 10;
+  });
+
+  doc.save("expenses.pdf");
+}
 
 /* =========================
    🎨 THEME
@@ -344,9 +369,4 @@ function updateUI() {
 function showDate() {
   let el = document.getElementById("dateDisplay");
   if (el) el.innerText = new Date().toLocaleString();
-}
-if ("serviceWorker" in navigator) {
-  navigator.serviceWorker.register("sw.js")
-    .then(() => console.log("SW Registered"))
-    .catch(err => console.log("SW Error", err));
 }
