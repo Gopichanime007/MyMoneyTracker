@@ -7,6 +7,7 @@ let budget = Number(localStorage.getItem("budget")) || 0;
 let dailyBudget = Number(localStorage.getItem("dailyBudget")) || 0;
 
 let chart;
+const appVersion = "1.1"; // change every update
 
 /* =========================
    🚀 INIT
@@ -17,16 +18,35 @@ window.onload = () => {
   updateUI();
   showDate();
   renderCategoryList();
-  document.getElementById("appVersion").innerText = APP_VERSION;
+
+  // ✅ Safe version update
+  loadVersion();
 };
 
 /* =========================
    🧭 NAVIGATION
 ========================= */
 function showScreen(id) {
+  // ---------------------------
+  // 🧭 SCREEN SWITCH
+  // ---------------------------
   document.querySelectorAll(".screen").forEach(s => s.classList.remove("active"));
   document.getElementById(id).classList.add("active");
 
+  // ---------------------------
+  // 🔥 NAV ACTIVE STATE
+  // ---------------------------
+  document.querySelectorAll(".nav button").forEach(btn => {
+    btn.classList.remove("active");
+  });
+
+  // Find clicked button and activate it
+  const btn = document.querySelector(`.nav button[onclick="showScreen('${id}')"]`);
+  if (btn) btn.classList.add("active");
+
+  // ---------------------------
+  // 📊 LOAD DATA
+  // ---------------------------
   if (id === "history") loadHistory();
   if (id === "graph") loadGraph();
   if (id === "budget") loadBudgetUI();
@@ -948,8 +968,6 @@ function loadTheme() {
   if (t) changeTheme(t);
 }
 
-const APP_VERSION = "1.1"; // change every update
-
 function checkForUpdate() {
   const savedVersion = localStorage.getItem("app_version");
 
@@ -990,6 +1008,19 @@ function updateUI() {
 function showDate() {
   let el = document.getElementById("dateDisplay");
   if (el) el.innerText = new Date().toLocaleString();
+}
+
+function loadVersion() {
+  setTimeout(() => {
+    const el = document.getElementById("appVersion");
+
+    if (!el) {
+      console.log("❌ Version element not found");
+      return;
+    }
+
+    el.textContent = "v" + appVersion;
+  }, 200);
 }
 
 checkForUpdate();
