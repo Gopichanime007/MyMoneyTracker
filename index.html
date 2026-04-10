@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+  <meta charset="UTF-8">
+  <title>Money Tracker</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <!-- FONT (consistent everywhere) -->
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600&display=swap" rel="stylesheet">
+
+  <link rel="stylesheet" href="style.css">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+</head>
+
+<body>
+
+  <div class="app">
+
+    <!-- HEADER -->
+    <div class="header">
+      <h2>💰 Money Tracker</h2>
+    </div>
+
+    <!-- NAV -->
+    <div class="nav">
+      <button onclick="showScreen('home')">🏠</button>
+      <button onclick="showScreen('add')">➕</button>
+      <button onclick="showScreen('history')">📜</button>
+      <button onclick="showScreen('budget')">💼</button>
+      <button onclick="showScreen('graph')">📊</button>
+      <button onclick="showScreen('settings')">⚙️</button>
+    </div>
+
+    <!-- HOME -->
+    <div id="home" class="screen active">
+      <div class="card">
+        <h3>Dashboard</h3>
+        <p>Budget: ₹<span id="budgetValue">0</span></p>
+        <p>Spent: ₹<span id="spent">0</span></p>
+        <p>Remaining: ₹<span id="remaining">0</span></p>
+        <p>Today: ₹<span id="todaySpent">0</span></p>
+        <p>Daily Limit: ₹<span id="dailyLimit">0</span></p>
+      </div>
+    </div>
+
+    <!-- ADD -->
+    <div id="add" class="screen">
+      <div class="card">
+        <h3>Add Expense</h3>
+
+        <input type="number" id="amount" placeholder="Amount">
+
+        <select id="category"></select>
+
+        <input type="text" id="purpose" placeholder="Purpose (optional)">
+
+        <p id="dateDisplay"></p>
+
+        <button class="primary" onclick="saveExpense()">Save</button>
+      </div>
+    </div>
+
+    <!-- HISTORY -->
+    <div id="history" class="screen">
+      <div class="card">
+        <h3>History</h3>
+
+        <select onchange="handleFilter(this.value)">
+          <option value="all">All</option>
+          <option value="today">Today</option>
+          <option value="week">This Week</option>
+          <option value="month">This Month</option>
+          <option value="period">Custom Period</option>
+        </select>
+        <button class="primary" onclick="downloadPDF()">Download PDF</button>
+
+        <div id="historyList"></div>
+      </div>
+    </div>
+
+    <!-- BUDGET -->
+    <div id="budget" class="screen">
+      <div class="card">
+        <h3>Set Budget</h3>
+
+        <p>Current Budget: ₹<span id="currentBudget">0</span></p>
+
+        <select id="budgetType">
+          <option value="daily">Daily</option>
+          <option value="weekly">Weekly</option>
+          <option value="monthly">Monthly</option>
+        </select>
+
+        <input type="number" id="budgetAmount" placeholder="Enter amount">
+
+        <p>Daily Budget: ₹<span id="calculatedDaily">0</span></p>
+
+        <button class="primary" onclick="saveBudget()">Save</button>
+      </div>
+    </div>
+
+    <!-- GRAPH
+    <div id="graph" class="screen">
+      <div class="card">
+        <h3>Analytics</h3>
+
+        <select onchange="loadGraph(this.value)">
+          <option value="day">Day</option>
+          <option value="week">Week</option>
+          <option value="month">Month</option>
+        </select>
+
+        <canvas id="myChart"></canvas>
+      </div>
+    </div> -->
+
+    <div id="graph" class="screen">
+      <div class="card">
+        <h3>Analytics</h3>
+
+        <select onchange="loadGraph(this.value)">
+          <option value="day">Day</option>
+          <option value="week">Week</option>
+          <option value="month">Month</option>
+        </select>
+
+        <!-- 🔥 FIX START -->
+        <div class="chart-container">
+          <canvas id="myChart"></canvas>
+        </div>
+        <!-- 🔥 FIX END -->
+
+      </div>
+    </div>
+
+    <!-- SETTINGS -->
+    <!-- SETTINGS -->
+    <div id="settings" class="screen">
+      <div class="card">
+
+        <h3>Settings</h3>
+
+        <!-- THEME -->
+        <h4>Theme</h4>
+        <select onchange="handleTheme(this.value)">
+          <option value="#4caf50">Green</option>
+          <option value="#ff5722">Orange</option>
+          <option value="#2196f3">Blue</option>
+          <option value="custom">Custom</option>
+        </select>
+
+        <input type="color" id="colorPicker" style="display:none; margin-top:10px;"
+          onchange="applyCustomColor(this.value)">
+
+        <!-- ADD CATEGORY -->
+        <h4>Add Category</h4>
+        <input type="text" id="newCategory" placeholder="New category">
+        <button onclick="addCategory()">Add</button>
+
+        <!-- CATEGORY LIST (✅ MOVED HERE) -->
+        <h4>Your Categories</h4>
+        <div id="categoryList"></div>
+
+        <p class="version">App Vers.1.1</p>
+
+      </div>
+    </div>
+
+  </div>
+
+  <!-- MODAL -->
+  <div id="dateModal" class="modal">
+    <div class="modal-content">
+      <h3>Select Period</h3>
+
+      <input type="date" id="fromDate">
+      <input type="date" id="toDate">
+
+      <div class="modal-actions">
+        <button onclick="applyDateFilter()">Apply</button>
+        <button onclick="closeModal()">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="script.js"></script>
+
+</body>
+
+</html>

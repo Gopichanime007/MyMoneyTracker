@@ -1,0 +1,267 @@
+/* =========================
+   🌍 GLOBAL
+========================= */
+* {
+  box-sizing: border-box;
+}
+
+body {
+  font-family: 'Poppins', sans-serif;
+  background: #f4f6f8;
+  margin: 0;
+}
+
+/* THEME */
+:root {
+  --theme: #4caf50;
+  --text: #222;
+  --muted: #777;
+}
+
+/* =========================
+   📱 APP
+========================= */
+.app {
+  max-width: 420px;
+  margin: auto;
+  padding: 12px;
+}
+
+/* =========================
+   🔝 HEADER
+========================= */
+.header {
+  text-align: center;
+  margin-bottom: 12px;
+}
+
+.header h2 {
+  margin: 0;
+  font-weight: 600;
+}
+
+/* =========================
+   🧭 NAV (FIXED BEAUTIFUL)
+========================= */
+.nav {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+
+.nav button {
+  flex: 1;
+  padding: 10px;
+  border-radius: 12px;
+  border: none;
+  background: #ececec;
+  font-size: 18px;
+  transition: 0.2s ease;
+}
+
+/* 🔥 HOVER + TOUCH */
+.nav button:hover {
+  background: var(--theme);
+  color: white;
+  transform: translateY(-2px);
+}
+
+.nav button:active {
+  transform: scale(0.95);
+}
+
+/* =========================
+   🧱 CARD
+========================= */
+.card {
+  background: white;
+  padding: 14px;
+  border-radius: 16px;
+  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.08);
+  margin-bottom: 10px;
+}
+
+.card h3 {
+  margin: 0 0 8px;
+}
+
+.card h4 {
+  margin: 8px 0 4px;
+}
+
+/* =========================
+   ✏️ INPUT
+========================= */
+input,
+select {
+  width: 100%;
+  padding: 10px;
+  margin: 6px 0;
+  border-radius: 10px;
+  border: 1px solid #ddd;
+  font-size: 14px;
+  font-family: 'Poppins', sans-serif;
+}
+
+/* =========================
+   🔘 BUTTONS
+========================= */
+button {
+  font-family: 'Poppins', sans-serif;
+  cursor: pointer;
+  transition: 0.2s;
+}
+
+/* PRIMARY */
+.primary {
+  background: var(--theme);
+  color: white;
+  border: none;
+  border-radius: 12px;
+  padding: 12px;
+  width: 100%;
+  font-weight: 600;
+}
+
+/* 🔥 HOVER */
+.primary:hover {
+  opacity: 0.9;
+  transform: translateY(-1px);
+}
+
+/* 🔥 CLICK */
+.primary:active {
+  transform: scale(0.96);
+}
+
+/* SMALL BUTTON */
+.small-btn {
+  padding: 6px 10px;
+  font-size: 12px;
+  border-radius: 8px;
+}
+
+/* =========================
+   📜 HISTORY
+========================= */
+.expense-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 0;
+  border-bottom: 1px solid #eee;
+}
+
+.expense-item div {
+  font-size: 13px;
+}
+
+.delete-btn {
+  background: #ff4d4d;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  padding: 6px 10px;
+  transition: 0.2s;
+}
+
+.delete-btn:hover {
+  background: #e60000;
+}
+
+.delete-btn:active {
+  transform: scale(0.9);
+}
+
+/* =========================
+   📅 MODAL
+========================= */
+.modal {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  display: none;
+  background: rgba(0, 0, 0, 0.4);
+  justify-content: center;
+  align-items: center;
+}
+
+.modal-content {
+  background: white;
+  padding: 18px;
+  border-radius: 16px;
+  width: 90%;
+  max-width: 350px;
+}
+
+.modal-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.modal-actions button {
+  flex: 1;
+  padding: 10px;
+  border-radius: 10px;
+  border: none;
+}
+
+.modal-actions button:first-child {
+  background: var(--theme);
+  color: white;
+}
+
+.modal-actions button:last-child {
+  background: #ccc;
+}
+
+/* =========================
+   📊 GRAPH (FIXED)
+========================= */
+
+.chart-container {
+  position: relative;
+  height: 260px;
+  /* 🔥 FIX: controls graph height */
+  width: 100%;
+}
+
+.chart-container canvas {
+  width: 100% !important;
+  height: 100% !important;
+  display: block;
+}
+
+/* ✅ ACTIVE NAV BUTTON */
+.nav button.active {
+  background: var(--theme);
+  color: white;
+  transform: translateY(-2px);
+}
+
+/* =========================
+   🧭 SCREEN
+========================= */
+.screen {
+  display: none;
+}
+
+#dateDisplay {
+  display: none;
+}
+
+.active {
+  display: block;
+}
+
+/* =========================
+   🧾 FOOTER
+========================= */
+.version {
+  margin-top: 10px;
+  color: #888;
+  font-size: 12px;
+}
