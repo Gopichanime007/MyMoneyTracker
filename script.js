@@ -8,6 +8,9 @@ let dailyBudget = Number(localStorage.getItem("dailyBudget")) || 0;
 
 let chart;
 const appVersion = "1.1"; // change every update
+let graphMode = false;
+
+let isClosingModal = false;
 
 /* =========================
    🚀 INIT
@@ -18,10 +21,16 @@ window.onload = () => {
   updateUI();
   showDate();
   renderCategoryList();
-
-  // ✅ Safe version update
   loadVersion();
   setDefaultDate();
+
+  // 🔥 Budget init
+  let monthInput = document.getElementById("budgetMonth");
+  if (monthInput) {
+    monthInput.value = new Date().toISOString().slice(0, 7);
+  }
+
+  loadBudgetUI();
 };
 
 function setDefaultDate() {
@@ -169,29 +178,73 @@ function saveExpense() {
 /* =========================
    💰 BUDGET
 ========================= */
+/* =========================
+💰 BUDGET SYSTEM (UPGRADED)
+========================= */
+
 function saveBudget() {
   let amount = Number(document.getElementById("budgetAmount").value);
   let type = document.getElementById("budgetType").value;
+  let month = document.getElementById("budgetMonth").value;
 
   if (!amount) return alert("Enter budget");
+  if (!month) return alert("Select month");
 
-  budget = amount;
+  // 🔥 Get existing budgets
+  let monthlyBudgets = JSON.parse(localStorage.getItem("monthlyBudgets")) || {};
 
-  if (type === "monthly") dailyBudget = amount / 30;
-  else if (type === "weekly") dailyBudget = amount / 7;
-  else dailyBudget = amount;
+  // 🔥 Save for selected month
+  monthlyBudgets[month] = amount;
 
-  localStorage.setItem("budget", budget);
-  localStorage.setItem("dailyBudget", dailyBudget);
+  localStorage.setItem("monthlyBudgets", JSON.stringify(monthlyBudgets));
 
-  loadBudgetUI();
-  updateUI();
+  // 🔥 UI update
+  document.getElementById("currentBudget").innerText = amount;
+
+  // 🔥 Calculate daily
+  let daily = 0;
+
+  if (type === "monthly") {
+    let [year, mon] = month.split("-");
+    let days = new Date(year, mon, 0).getDate();
+    daily = amount / days;
+  } else if (type === "weekly") {
+    daily = amount / 7;
+  } else {
+    daily = amount;
+  }
+
+  document.getElementById("calculatedDaily").innerText = Math.floor(daily);
+
+  // optional (for existing system compatibility)
+  localStorage.setItem("budget", amount);
+  localStorage.setItem("dailyBudget", daily);
+
+  alert("Budget saved for " + month);
 }
+
+/* =========================
+🔄 LOAD CURRENT MONTH BUDGET
+========================= */
 
 function loadBudgetUI() {
-  document.getElementById("currentBudget").innerText = budget;
-  document.getElementById("calculatedDaily").innerText = Math.floor(dailyBudget);
+  let month = new Date().toISOString().slice(0, 7);
+
+  let monthlyBudgets = JSON.parse(localStorage.getItem("monthlyBudgets")) || {};
+
+  let amount = monthlyBudgets[month] || 0;
+
+  document.getElementById("currentBudget").innerText = amount;
+
+  // calculate daily
+  let [year, mon] = month.split("-");
+  let days = new Date(year, mon, 0).getDate();
+
+  let daily = amount / days;
+
+  document.getElementById("calculatedDaily").innerText = Math.floor(daily);
 }
+
 
 /* =========================
    📜 HISTORY
@@ -264,18 +317,67 @@ function applyDateFilter() {
   let from = document.getElementById("fromDate").value;
   let to = document.getElementById("toDate").value;
 
+  if (!from || !to) {
+    alert("Select both dates");
+    return;
+  }
+
+  // ✅ CLOSE FIRST (NO MATTER WHAT)
+  closeModal();
+
+  // ✅ Format display text
+  let fromText = new Date(from).toLocaleDateString("en-IN");
+  let toText = new Date(to).toLocaleDateString("en-IN");
+
+  document.getElementById("graphDate").innerText = `${fromText} → ${toText}`;
+
+  // ✅ Update dropdown safely
+  let select = document.querySelector("#graph select");
+
+  if (select) {
+    let customOption = [...select.options].find(o => o.value === "custom");
+
+    if (!customOption) {
+      customOption = document.createElement("option");
+      customOption.value = "custom";
+      select.appendChild(customOption);
+    }
+
+    customOption.text = `Custom (${fromText} → ${toText})`;
+    select.value = "custom";
+  }
+
+  // ✅ FILTER ONLY ONCE
   let filtered = expenses.filter(e => {
     let d = new Date(e.date).toISOString().split("T")[0];
     return d >= from && d <= to;
   });
 
-  loadHistory(filtered);
-  closeModal();
+  // ✅ LOAD DATA
+  // if (graphMode === true) {
+  //   loadCustomGraph(filtered, from, to);
+  // } else {
+  //   loadHistory(filtered);
+  // }
+  graphMode = true;
+  loadCustomGraph(filtered, from, to);
 }
 
 function closeModal() {
-  document.getElementById("dateModal").style.display = "none";
+  const modal = document.getElementById("dateModal");
+
+  if (!modal) return;
+
+  isClosingModal = true; // 🔥 block reopen
+
+  modal.style.display = "none";
+  graphMode = false;
+
+  setTimeout(() => {
+    isClosingModal = false; // allow again after delay
+  }, 200);
 }
+
 
 function getThemeColors() {
   let theme = localStorage.getItem("theme") || "#4caf50";
@@ -596,48 +698,69 @@ function getThemeColors() {
 //   });
 // }
 
-function loadGraph(type = "day", mode = "app") {
+function loadGraph(type = "day") {
   let ctx = document.getElementById("myChart");
 
   if (chart) chart.destroy();
 
   let labels = [], expenseData = [];
 
+  let today = new Date();
+  document.getElementById("graphDate").innerText =
+    today.toLocaleDateString("en-IN");
+
   // ---------------------------
-  // 📊 DATA
+  // DAY
   // ---------------------------
   if (type === "day") {
     for (let i = 0; i < 24; i++) {
       labels.push(i + ":00");
-      expenseData.push(sumBy(e => new Date(e.date).getHours() === i));
-    }
-  }
-
-  if (type === "week") {
-    let now = new Date();
-    let start = new Date(now);
-    start.setDate(now.getDate() - now.getDay());
-
-    for (let i = 0; i < 7; i++) {
-      let current = new Date(start);
-      current.setDate(start.getDate() + i);
-
-      let dayName = current.toLocaleDateString("en-US", { weekday: "short" });
-      let date = current.getDate();
-
-      labels.push(`${dayName} (${date})`);
 
       expenseData.push(
         sumBy(e => {
           let d = new Date(e.date);
-          return d.toDateString() === current.toDateString();
+          return (
+            d.getFullYear() === today.getFullYear() &&
+            d.getMonth() === today.getMonth() &&
+            d.getDate() === today.getDate() &&
+            d.getHours() === i
+          );
         })
       );
     }
   }
 
+  // ---------------------------
+  // WEEK
+  // ---------------------------
+  if (type === "week") {
+    let start = new Date(today);
+    start.setDate(today.getDate() - today.getDay());
+
+    for (let i = 0; i < 7; i++) {
+      let current = new Date(start);
+      current.setDate(start.getDate() + i);
+
+      labels.push(
+        current.toLocaleDateString("en-IN", {
+          weekday: "short",
+          day: "numeric"
+        })
+      );
+
+      expenseData.push(
+        sumBy(e => new Date(e.date).toDateString() === current.toDateString())
+      );
+    }
+  }
+
+  // ---------------------------
+  // MONTH
+  // ---------------------------
   if (type === "month") {
-    for (let i = 1; i <= 30; i++) {
+    let days = new Date(today.getFullYear(), today.getMonth() + 1, 0).getDate();
+
+    for (let i = 1; i <= days; i++) {
       labels.push(i);
       expenseData.push(sumBy(e => new Date(e.date).getDate() === i));
     }
@@ -645,10 +768,73 @@ function loadGraph(type = "day", mode = "app") {
 
   let budgetData = labels.map(() => dailyBudget);
 
-  // 🔥 GET THEME COLORS
   let { expenseColor, budgetColor } = getThemeColors();
 
-  let datasets = [
+  chart = new Chart(ctx, {
+    type: "bar",
+    data: {
+      labels,
+      datasets: [
+        {
+          label: "Expenses",
+          data: expenseData,
+          backgroundColor: expenseColor
+        },
+        {
+          label: "Budget",
+          data: budgetData,
+          type: "line",
+          borderColor: budgetColor,
+          borderWidth: 2,
+          fill: false,
+          tension: 0,
+          pointRadius: 3,
+          pointHoverRadius: 6
+        }
+      ]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+
+      interaction: {
+        mode: "index",
+        intersect: false
+      },
+
+      plugins: {
+        tooltip: {
+          mode: "index",
+          intersect: false,
+          callbacks: {
+            label: function (context) {
+              return context.dataset.label + ": ₹" + context.raw;
+            }
+          }
+        },
+        legend: {
+          display: true
+        }
+      }
+    }
+  });
+}
+
+function renderChart(ctx, labels, expenseData, budgetData) {
+  if (!ctx) {
+    console.error("Chart canvas not found");
+    return;
+  }
+
+  // 🔥 Destroy previous chart safely
+  if (chart) {
+    chart.destroy();
+  }
+
+  // 🔥 Theme colors
+  const { expenseColor, budgetColor } = getThemeColors();
+
+  const datasets = [
     {
       label: "Expenses",
       data: expenseData,
@@ -662,12 +848,14 @@ function loadGraph(type = "day", mode = "app") {
       borderWidth: 2,
       fill: false,
       tension: 0,
-      pointRadius: 4,
-      pointHoverRadius: 6,
+      pointRadius: 3,
+      pointHoverRadius: 5,
       pointBackgroundColor: budgetColor
     }
   ];
 
+  // 🔥 Create chart
+  //renderChart(ctx, labels, expenseData, budgetData);
   chart = new Chart(ctx, {
     type: "bar",
     data: {
@@ -680,7 +868,8 @@ function loadGraph(type = "day", mode = "app") {
 
       interaction: {
         mode: "index",
-        intersect: false
+        intersect: false,
+        axis: "x"
       },
 
       plugins: {
@@ -688,6 +877,8 @@ function loadGraph(type = "day", mode = "app") {
           display: true
         },
         tooltip: {
+          mode: "index",
+          intersect: false,
           callbacks: {
             label: function (context) {
               return context.dataset.label + ": ₹" + context.raw;
@@ -1721,9 +1912,156 @@ function updateUI() {
   document.getElementById("spent").innerText = total;
   document.getElementById("remaining").innerText = budget - total;
   document.getElementById("todaySpent").innerText = todaySpent;
-  document.getElementById("dailyLimit").innerText = Math.floor(dailyBudget);
+  const dailyEl = document.getElementById("dailyLimit");
+  if (dailyEl) dailyEl.innerText = Math.floor(dailyBudget);
+  // 🔥 Progress calculation
+  updateProgressBar(total, budget);
 }
 
+function updateProgressBar(total, budget) {
+  total = Number(total) || 0;
+  budget = Number(budget) || 0;
+
+  let percent = 0;
+
+  if (budget > 0) {
+    percent = (total / budget) * 100;
+  }
+
+  // 🎯 Clamp between 0–100 for UI
+  let displayPercent = Math.min(percent, 100);
+
+  const bar = document.getElementById("progressFill");
+  const text = document.getElementById("progressText");
+
+  if (!bar || !text) return;
+
+  // 🔥 Update width
+  bar.style.width = displayPercent + "%";
+
+  // 🎨 Dynamic color
+  if (percent < 50) {
+    bar.style.background = "linear-gradient(90deg, #4caf50, #81c784)";
+  } else if (percent < 100) {
+    bar.style.background = "linear-gradient(90deg, #ffa726, #fb8c00)";
+  } else {
+    bar.style.background = "linear-gradient(90deg, #ef5350, #d32f2f)";
+  }
+
+  // 📝 Text update
+  text.innerText = Math.floor(percent) + "% used";
+}
+function renderCategoryList() {
+  const container = document.getElementById("categoryList");
+  if (!container) return;
+
+  container.innerHTML = "";
+
+  categories.forEach((cat, index) => {
+    let div = document.createElement("div");
+    div.className = "category-item";
+
+    div.innerHTML = `
+      <span>${cat}</span>
+      <button onclick="deleteCategory(${index})">✕</button>
+    `;
+
+    container.appendChild(div);
+  });
+}
+
+function openCategoryModal() {
+  document.getElementById("categoryModal").style.display = "flex";
+  renderCategoryList(); // load fresh
+}
+
+function closeCategoryModal() {
+  document.getElementById("categoryModal").style.display = "none";
+}
+
+function handleGraphFilter(type) {
+  // 🚫 DO NOTHING if custom already active
+  if (type === "custom") {
+    openCustomModal();
+    return;
+  }
+
+  // ✅ Only reset if NOT custom
+  graphMode = false;
+
+  loadGraph(type);
+
+  document.getElementById("graphDate").innerText =
+    new Date().toLocaleDateString("en-IN");
+}
+
+function applyCustomGraph() {
+  let from = document.getElementById("fromDateGraph").value;
+  let to = document.getElementById("toDateGraph").value;
+
+  if (!from || !to) {
+    alert("Select both dates");
+    return;
+  }
+
+  let filtered = expenses.filter(e => {
+    let d = new Date(e.date).toISOString().split("T")[0];
+    return d >= from && d <= to;
+  });
+  graphMode = true;
+  loadCustomGraph(filtered, from, to);
+
+}
+function loadCustomGraph(data, from, to) {
+  let ctx = document.getElementById("myChart");
+
+  if (chart) chart.destroy();
+
+  let map = {};
+
+  data.forEach(e => {
+    let d = new Date(e.date).toLocaleDateString("en-IN");
+    map[d] = (map[d] || 0) + e.amount;
+  });
+
+  let start = new Date(from);
+  let end = new Date(to);
+
+  start.setHours(0, 0, 0, 0);
+  end.setHours(0, 0, 0, 0);
+
+  let labels = [];
+  let values = [];
+
+  let current = new Date(start);
+
+  while (current <= end) {
+    let key = current.toLocaleDateString("en-IN");
+    labels.push(key);
+    values.push(map[key] || 0);
+    current.setDate(current.getDate() + 1);
+  }
+
+  // 🔥 Monthly budget logic
+  let monthlyBudgets = JSON.parse(localStorage.getItem("monthlyBudgets")) || {};
+
+  let budgetData = labels.map(dateStr => {
+    let parts = dateStr.split("/");
+    let d = new Date(parts[2], parts[1] - 1, parts[0]);
+
+    let key = d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0");
+
+    let monthly = monthlyBudgets[key] || 0;
+    let days = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
+
+    return monthly / days;
+  });
+
+  let { expenseColor, budgetColor } = getThemeColors();
+  renderChart(ctx, labels, values, budgetData);
+  document.getElementById("graphDate").innerText =
+    `${from} → ${to}`;
+}
 /* =========================
    🕒 DATE
 ========================= */
@@ -1743,6 +2081,19 @@ function loadVersion() {
 
     el.textContent = "v" + appVersion;
   }, 200);
+}
+function openCustomModal() {
+  const modal = document.getElementById("dateModal");
+
+  if (!modal) return;
+
+  // 🔥 BLOCK reopen while closing
+  if (isClosingModal) return;
+
+  if (modal.style.display === "flex") return;
+
+  graphMode = true;
+  modal.style.display = "flex";
 }
 
 checkForUpdate();

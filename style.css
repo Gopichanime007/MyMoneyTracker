@@ -7,7 +7,7 @@
 
 body {
   font-family: 'Poppins', sans-serif;
-  background: #f4f6f8;
+  background: linear-gradient(135deg, #f5f7fa, #e4e7ec);
   margin: 0;
 }
 
@@ -49,25 +49,30 @@ body {
   margin-bottom: 12px;
 }
 
+/* DEFAULT */
 .nav button {
   flex: 1;
-  padding: 10px;
-  border-radius: 12px;
+  padding: 12px;
+  border-radius: 14px;
   border: none;
   background: #ececec;
   font-size: 18px;
-  transition: 0.2s ease;
+  transition: all 0.25s ease;
+  color: var(--text);
 }
 
-/* 🔥 HOVER + TOUCH */
+/* 👆 HOVER (LIGHT EFFECT ONLY) */
 .nav button:hover {
+  background: #dcdcdc;
+  transform: translateY(-1px);
+}
+
+/* 👇 ACTIVE SCREEN (REAL SELECTED STATE) */
+.nav button.active {
   background: var(--theme);
   color: white;
   transform: translateY(-2px);
-}
-
-.nav button:active {
-  transform: scale(0.95);
+  box-shadow: 0 4px 12px rgba(76, 175, 80, 0.3);
 }
 
 /* =========================
@@ -75,10 +80,10 @@ body {
 ========================= */
 .card {
   background: white;
-  padding: 14px;
-  border-radius: 16px;
-  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.08);
-  margin-bottom: 10px;
+  padding: 16px;
+  border-radius: 20px;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.08);
+  margin-bottom: 12px;
 }
 
 .card h3 {
@@ -114,11 +119,11 @@ button {
 
 /* PRIMARY */
 .primary {
-  background: var(--theme);
+  background: linear-gradient(135deg, #ff3b30, #ff6b6b);
   color: white;
   border: none;
-  border-radius: 12px;
-  padding: 12px;
+  border-radius: 14px;
+  padding: 14px;
   width: 100%;
   font-weight: 600;
 }
@@ -223,10 +228,9 @@ button {
 ========================= */
 
 .chart-container {
-  position: relative;
-  height: 260px;
-  /* 🔥 FIX: controls graph height */
   width: 100%;
+  height: 260px;
+  /* stable fixed height */
 }
 
 .chart-container canvas {
@@ -286,4 +290,150 @@ button {
 
 .icon-btn:active {
   transform: scale(0.95);
+}
+
+.graph-date {
+  text-align: center;
+  font-size: 12px;
+  color: #777;
+  margin-top: 8px;
+  /* 🔥 space from graph */
+  margin-bottom: 4px;
+}
+
+.dashboard-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.dash-card {
+  padding: 14px;
+  border-radius: 14px;
+  color: white;
+}
+
+.dash-card {
+  position: relative;
+  overflow: hidden;
+}
+
+.dash-card::after {
+  content: "";
+  position: absolute;
+  width: 120%;
+  height: 120%;
+  background: rgba(255, 255, 255, 0.1);
+  top: -50%;
+  left: -50%;
+  transform: rotate(25deg);
+}
+
+.dash-card span {
+  font-size: 12px;
+  opacity: 0.8;
+}
+
+.dash-card h2 {
+  margin: 4px 0 0;
+}
+
+/* COLORS */
+.budget {
+  background: linear-gradient(135deg, #5c6bc0, #3949ab);
+}
+
+.spent {
+  background: linear-gradient(135deg, #ff5252, #d32f2f);
+}
+
+.remaining {
+  background: linear-gradient(135deg, #66bb6a, #2e7d32);
+}
+
+.today {
+  background: linear-gradient(135deg, #ffa726, #ef6c00);
+}
+
+/* PROGRESS */
+.progress-box {
+  margin-top: 12px;
+  text-align: center;
+}
+
+.progress-bar {
+  height: 10px;
+  background: #eee;
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--theme), #ff6b6b);
+  width: 0%;
+  transition: 0.4s ease;
+}
+
+.progress-fill {
+  transition: width 0.5s ease, background 0.3s ease;
+}
+
+/* CATEGORY LIST */
+.category-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 14px;
+  margin-bottom: 10px;
+  background: #f9f9f9;
+  border-radius: 14px;
+
+  /* 🔥 ADD THIS */
+  border: 1px solid #e0e0e0;
+
+  transition: 0.2s ease;
+}
+
+/* hover effect */
+.category-item:hover {
+  transform: translateY(-2px);
+  background: #f5f5f5;
+  border-color: var(--theme);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.06);
+}
+
+/* category text */
+.category-item span {
+  font-size: 14px;
+  font-weight: 500;
+}
+
+/* delete button (clean minimal) */
+.category-item button {
+  background: transparent;
+  border: none;
+  font-size: 16px;
+  color: #ff4d4d;
+  cursor: pointer;
+  transition: 0.2s;
+}
+
+/* hover delete */
+.category-item button:hover {
+  transform: scale(1.2);
+  color: #e60000;
+}
+
+.modal-content h3 {
+  margin-top: 0;
+}
+
+.modal-actions button {
+  background: var(--theme);
+  color: white;
+}
+
+.icon-btn {
+  min-width: 44px;
 }

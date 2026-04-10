@@ -37,11 +37,36 @@
     <div id="home" class="screen active">
       <div class="card">
         <h3>Dashboard</h3>
-        <p>Budget: ₹<span id="budgetValue">0</span></p>
-        <p>Spent: ₹<span id="spent">0</span></p>
-        <p>Remaining: ₹<span id="remaining">0</span></p>
-        <p>Today: ₹<span id="todaySpent">0</span></p>
-        <p>Daily Limit: ₹<span id="dailyLimit">0</span></p>
+        <div class="dashboard-grid">
+
+          <div class="dash-card budget">
+            <span>Budget</span>
+            <h2>₹<span id="budgetValue">0</span></h2>
+          </div>
+
+          <div class="dash-card spent">
+            <span>Spent</span>
+            <h2>₹<span id="spent">0</span></h2>
+          </div>
+
+          <div class="dash-card remaining">
+            <span>Remaining</span>
+            <h2>₹<span id="remaining">0</span></h2>
+          </div>
+
+          <div class="dash-card today">
+            <span>Today</span>
+            <h2>₹<span id="todaySpent">0</span></h2>
+          </div>
+
+        </div>
+
+        <div class="progress-box">
+          <div class="progress-bar">
+            <div class="progress-fill" id="progressFill"></div>
+          </div>
+          <p id="progressText">0% used</p>
+        </div>
       </div>
     </div>
 
@@ -100,18 +125,26 @@
       <div class="card">
         <h3>Set Budget</h3>
 
+        <!-- Current Budget -->
         <p>Current Budget: ₹<span id="currentBudget">0</span></p>
 
+        <!-- Budget Type -->
         <select id="budgetType">
           <option value="daily">Daily</option>
           <option value="weekly">Weekly</option>
-          <option value="monthly">Monthly</option>
+          <option value="monthly" selected>Monthly</option>
         </select>
 
+        <!-- Month + Year -->
+        <input type="month" id="budgetMonth">
+
+        <!-- Amount -->
         <input type="number" id="budgetAmount" placeholder="Enter amount">
 
+        <!-- Daily Calculation -->
         <p>Daily Budget: ₹<span id="calculatedDaily">0</span></p>
 
+        <!-- Save Button -->
         <button class="primary" onclick="saveBudget()">Save</button>
       </div>
     </div>
@@ -135,17 +168,24 @@
       <div class="card">
         <h3>Analytics</h3>
 
-        <select onchange="loadGraph(this.value)">
-          <option value="day">Day</option>
-          <option value="week">Week</option>
-          <option value="month">Month</option>
-        </select>
+        <div style="display:flex; gap:8px; align-items:center;">
+
+          <select onchange="handleGraphFilter(this.value)" style="flex:1;">
+            <option value="day">Day</option>
+            <option value="week">Week</option>
+            <option value="month">Month</option>
+          </select>
+
+          <button class="icon-btn" onclick="openCustomModal()">📅</button>
+
+        </div>
 
         <!-- 🔥 FIX START -->
         <div class="chart-container">
           <canvas id="myChart"></canvas>
         </div>
         <!-- 🔥 FIX END -->
+        <div id="graphDate" style="text-align:center; font-size:12px; color:#777; margin-top:6px;"></div>
 
       </div>
     </div>
@@ -175,10 +215,24 @@
         <button onclick="addCategory()">Add</button>
 
         <!-- CATEGORY LIST (✅ MOVED HERE) -->
-        <h4>Your Categories</h4>
-        <div id="categoryList"></div>
+        <h4 onclick="openCategoryModal()" style="cursor:pointer;">
+          Your Categories ⬇️
+        </h4>
 
-        <p class="version">App Vers.1.1</p>
+        <!-- MODAL -->
+        <div id="categoryModal" class="modal">
+          <div class="modal-content">
+            <h3>Your Categories</h3>
+
+            <div id="categoryList"></div>
+
+            <div class="modal-actions">
+              <button onclick="closeCategoryModal()">Close</button>
+            </div>
+          </div>
+        </div>
+
+        <!--<p class="version">App Vers.1.1</p>-->
 
       </div>
     </div>
@@ -194,8 +248,8 @@
       <input type="date" id="toDate">
 
       <div class="modal-actions">
-        <button onclick="applyDateFilter()">Apply</button>
-        <button onclick="closeModal()">Cancel</button>
+        <button type="button" onclick="applyDateFilter()">Apply</button>
+        <button type="button" onclick="closeModal()">Cancel</button>
       </div>
     </div>
   </div>
