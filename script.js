@@ -1683,43 +1683,26 @@ async function sharePDF() {
   const { jsPDF } = window.jspdf;
 
   let doc = new jsPDF();
-
-  let dataSource = currentFilteredExpenses.length
-    ? currentFilteredExpenses
-    : expenses;
-
-  // Simple content (you can reuse full PDF logic if needed)
   doc.text("Money Tracker Report", 14, 15);
 
-  let y = 25;
-
-  dataSource.forEach((e) => {
-    let date = new Date(e.date).toLocaleDateString("en-IN");
-    let text = `${date} - ${e.category} - ₹${e.amount}`;
-    doc.text(text, 14, y);
-    y += 8;
-  });
-
-  // 🔥 Convert PDF to Blob
   let pdfBlob = doc.output("blob");
+  let url = URL.createObjectURL(pdfBlob);
 
-  let file = new File([pdfBlob], "expenses-report.pdf", {
-    type: "application/pdf"
-  });
-
-  // 🔥 SHARE
-  if (navigator.canShare && navigator.canShare({ files: [file] })) {
+  // ✅ If basic share supported (TEXT ONLY)
+  if (navigator.share) {
     try {
       await navigator.share({
         title: "Money Tracker Report",
-        text: "Here is my expense report",
-        files: [file]
+        text: "Download my expense report:",
+        url: url
       });
     } catch (err) {
-      console.log("Share cancelled or failed", err);
+      console.log("Share cancelled");
     }
   } else {
-    alert("Sharing not supported on this device");
+    // 🔥 fallback
+    doc.save("expenses-report.pdf");
+    alert("Sharing not supported → PDF downloaded");
   }
 }
 /* =========================
