@@ -21,8 +21,13 @@ window.onload = () => {
 
   // ✅ Safe version update
   loadVersion();
+  setDefaultDate();
 };
 
+function setDefaultDate() {
+  let today = new Date().toISOString().split("T")[0];
+  document.getElementById("expenseDate").value = today;
+}
 /* =========================
    🧭 NAVIGATION
 ========================= */
@@ -132,20 +137,31 @@ function saveExpense() {
   let amount = document.getElementById("amount").value;
   let category = document.getElementById("category").value;
   let purpose = document.getElementById("purpose").value;
+  let selectedDate = document.getElementById("expenseDate").value;
 
   if (!amount) return alert("Enter amount!");
+
+  // 🔥 combine selected date + current time
+  let now = new Date();
+  let selected = new Date(selectedDate);
+
+  selected.setHours(now.getHours());
+  selected.setMinutes(now.getMinutes());
+  selected.setSeconds(now.getSeconds());
 
   expenses.push({
     amount: Number(amount),
     category,
     purpose,
-    date: new Date().toISOString() // ✅ dynamic timestamp (hidden from UI)
+    date: selected.toISOString() // ✅ date + hidden time
   });
 
   localStorage.setItem("expenses", JSON.stringify(expenses));
 
   document.getElementById("amount").value = "";
   document.getElementById("purpose").value = "";
+
+  setDefaultDate(); // reset to today
 
   updateUI();
   showScreen("home");
@@ -1362,8 +1378,9 @@ function downloadPDF() {
   const { jsPDF } = window.jspdf;
   const doc = new jsPDF();
 
-  // 🔥 FIX: declare FIRST
-  let list = document.querySelectorAll(".expense-item");
+  let dataSource = currentFilteredExpenses.length
+    ? currentFilteredExpenses
+    : expenses;
 
   // ---------------------------
   // 🟢 TITLE
@@ -1372,14 +1389,16 @@ function downloadPDF() {
   doc.setFont(undefined, "bold");
   doc.text("Money Tracker Report", 14, 15);
 
-  // Subtitle
+  // ---------------------------
+  // 🟡 SUBTITLE
+  // ---------------------------
   doc.setFontSize(9);
   doc.setTextColor(120);
 
   let generated = new Date().toLocaleString();
 
   doc.text(`Generated on: ${generated}`, 14, 22);
-  doc.text(`Total Entries: ${list.length}`, 14, 27);
+  doc.text(`Total Entries: ${dataSource.length}`, 14, 27);
 
   doc.setDrawColor(200);
   doc.line(10, 30, 200, 30);
@@ -1387,7 +1406,7 @@ function downloadPDF() {
   let y = 40;
 
   // ---------------------------
-  // 🟢 EXPENSE TABLE
+  // 🟢 TABLE HEADER
   // ---------------------------
   const col = {
     date: 12,
@@ -1413,17 +1432,17 @@ function downloadPDF() {
   doc.setTextColor(0);
   doc.setFont(undefined, "normal");
 
+  // ---------------------------
+  // 🟢 TABLE DATA
+  // ---------------------------
   let total = 0;
 
-  list.forEach((item, index) => {
-    let lines = item.innerText.replace("🗑", "").trim().split("\n");
+  dataSource.forEach((e, index) => {
+    let date = new Date(e.date).toLocaleDateString("en-IN");
+    let category = e.category;
+    let amount = e.amount;
+    let purpose = e.purpose || "-";
 
-    let [categoryPart, datePart] = lines;
-    let [category, amountRaw] = categoryPart.split(" - ₹");
-
-    let purpose = lines[2] || "-";
-
-    let amount = Number(amountRaw);
     total += amount;
 
     let formatted = new Intl.NumberFormat("en-IN").format(amount);
@@ -1438,7 +1457,7 @@ function downloadPDF() {
       doc.rect(10, y - 5, 190, 8, "F");
     }
 
-    doc.text(datePart.split(",")[0], col.date, y);
+    doc.text(date, col.date, y);
     doc.text(category, col.category, y);
     doc.text(`Rs. ${formatted}`, col.amount, y, { align: "right" });
     doc.text(purpose, col.purpose, y);
@@ -1447,7 +1466,7 @@ function downloadPDF() {
   });
 
   // ---------------------------
-  // 🔵 TOTAL + ROW COUNT
+  // 🔵 TOTAL
   // ---------------------------
   y += 4;
   doc.line(10, y, 200, y);
@@ -1457,10 +1476,6 @@ function downloadPDF() {
 
   let fTotal = new Intl.NumberFormat("en-IN").format(total);
   doc.text(`Total: Rs. ${fTotal}`, 190, y, { align: "right" });
-
-  y += 6;
-  doc.setFont(undefined, "normal");
-  // doc.text(`Total Entries: ${list.length}`, 14, y);
 
   // ---------------------------
   // 🟣 BUDGET SUMMARY
@@ -1473,10 +1488,8 @@ function downloadPDF() {
   }
 
   doc.setFontSize(13);
-  doc.setFont(undefined, "bold");
   doc.text("Budget Summary (Monthly)", 14, y);
 
-  // 🔥 subtitle added
   y += 5;
   doc.setFontSize(9);
   doc.setTextColor(120);
@@ -1509,7 +1522,7 @@ function downloadPDF() {
 
   let monthMap = {};
 
-  (currentFilteredExpenses.length ? currentFilteredExpenses : expenses).forEach(e => {
+  dataSource.forEach(e => {
     let d = new Date(e.date);
     let key = d.toLocaleString("en-IN", { month: "short", year: "numeric" });
 
@@ -1544,8 +1557,9 @@ function downloadPDF() {
     doc.setTextColor(0);
     y += 8;
   });
+
   // ---------------------------
-  // 📊 GRAPH (ADD THIS BACK)
+  // 📊 GRAPH
   // ---------------------------
   y += 12;
 
@@ -1554,11 +1568,6 @@ function downloadPDF() {
   canvas.height = 400;
 
   const ctx = canvas.getContext("2d");
-
-  // 🔥 USE FILTERED DATA
-  let dataSource = currentFilteredExpenses.length
-    ? currentFilteredExpenses
-    : expenses;
 
   let map = {};
 
@@ -1571,20 +1580,12 @@ function downloadPDF() {
   let data = Object.values(map);
   let budgetData = labels.map(() => dailyBudget);
 
-  if (labels.length === 0) {
-  labels = ["No Data"];
-  data = [0];
-  budgetData = [0];
-}
-
-  // Handle single point
   if (labels.length === 1) {
     labels = [" ", labels[0], " "];
     data = [0, data[0], 0];
     budgetData = [0, budgetData[0], 0];
   }
 
-  // Create chart
   const chart = new Chart(ctx, {
     type: "line",
     data: {
@@ -1615,25 +1616,22 @@ function downloadPDF() {
     }
   });
 
-  // Convert to image
   let img = canvas.toDataURL("image/png");
 
-  // Add new page if needed
   if (y + 90 > 290) {
     doc.addPage();
     y = 20;
   }
 
-  // Title
   doc.setFont(undefined, "bold");
   doc.text("Expense Chart", 14, y);
 
   y += 6;
 
-  // Add image
   doc.addImage(img, "PNG", 10, y, 180, 90);
 
   chart.destroy();
+
   // ---------------------------
   // 💾 SAVE
   // ---------------------------
@@ -1681,7 +1679,49 @@ function checkForUpdate() {
     localStorage.setItem("app_version", APP_VERSION);
   }
 }
+async function sharePDF() {
+  const { jsPDF } = window.jspdf;
 
+  let doc = new jsPDF();
+
+  let dataSource = currentFilteredExpenses.length
+    ? currentFilteredExpenses
+    : expenses;
+
+  // Simple content (you can reuse full PDF logic if needed)
+  doc.text("Money Tracker Report", 14, 15);
+
+  let y = 25;
+
+  dataSource.forEach((e) => {
+    let date = new Date(e.date).toLocaleDateString("en-IN");
+    let text = `${date} - ${e.category} - ₹${e.amount}`;
+    doc.text(text, 14, y);
+    y += 8;
+  });
+
+  // 🔥 Convert PDF to Blob
+  let pdfBlob = doc.output("blob");
+
+  let file = new File([pdfBlob], "expenses-report.pdf", {
+    type: "application/pdf"
+  });
+
+  // 🔥 SHARE
+  if (navigator.canShare && navigator.canShare({ files: [file] })) {
+    try {
+      await navigator.share({
+        title: "Money Tracker Report",
+        text: "Here is my expense report",
+        files: [file]
+      });
+    } catch (err) {
+      console.log("Share cancelled or failed", err);
+    }
+  } else {
+    alert("Sharing not supported on this device");
+  }
+}
 /* =========================
    📊 UI
 ========================= */
