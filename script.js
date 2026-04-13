@@ -716,7 +716,7 @@ function loadGraph(type = "day") {
 
   if (chart) chart.destroy();
 
-  let labels = [], expenseData = [];
+  let labels = [], expenseData = [], incomeData = [];
   let now = new Date();
 
   document.getElementById("graphDate").innerText =
@@ -731,17 +731,28 @@ function loadGraph(type = "day") {
     for (let i = 0; i < 24; i++) {
       labels.push(i + ":00");
 
-      expenseData.push(
-        sumBy(e => {
-          let d = new Date(e.date);
-          return (
-            d.getFullYear() === now.getFullYear() &&
-            d.getMonth() === now.getMonth() &&
-            d.getDate() === now.getDate() &&
-            d.getHours() === i
-          );
-        })
-      );
+      let expense = 0;
+      let income = 0;
+
+      expenses.forEach(e => {
+        let d = new Date(e.date);
+
+        if (
+          d.getFullYear() === now.getFullYear() &&
+          d.getMonth() === now.getMonth() &&
+          d.getDate() === now.getDate() &&
+          d.getHours() === i
+        ) {
+          if (e.amount < 0) {
+            expense += Math.abs(e.amount);
+          } else {
+            income += e.amount;
+          }
+        }
+      });
+
+      expenseData.push(expense);
+      incomeData.push(income);
     }
   }
 
@@ -761,11 +772,23 @@ function loadGraph(type = "day") {
         })
       );
 
-      expenseData.push(
-        sumBy(e =>
-          new Date(e.date).toDateString() === current.toDateString()
-        )
-      );
+      let expense = 0;
+      let income = 0;
+
+      expenses.forEach(e => {
+        let d = new Date(e.date);
+
+        if (d.toDateString() === current.toDateString()) {
+          if (e.amount < 0) {
+            expense += Math.abs(e.amount);
+          } else {
+            income += e.amount;
+          }
+        }
+      });
+
+      expenseData.push(expense);
+      incomeData.push(income);
     }
   }
 
@@ -776,16 +799,27 @@ function loadGraph(type = "day") {
     for (let i = 1; i <= days; i++) {
       labels.push(i);
 
-      expenseData.push(
-        sumBy(e => {
-          let d = new Date(e.date);
-          return (
-            d.getFullYear() === now.getFullYear() &&
-            d.getMonth() === now.getMonth() &&
-            d.getDate() === i
-          );
-        })
-      );
+      let expense = 0;
+      let income = 0;
+
+      expenses.forEach(e => {
+        let d = new Date(e.date);
+
+        if (
+          d.getFullYear() === now.getFullYear() &&
+          d.getMonth() === now.getMonth() &&
+          d.getDate() === i
+        ) {
+          if (e.amount < 0) {
+            expense += Math.abs(e.amount);
+          } else {
+            income += e.amount;
+          }
+        }
+      });
+
+      expenseData.push(expense);
+      incomeData.push(income);
     }
   }
 
@@ -808,6 +842,11 @@ function loadGraph(type = "day") {
           label: "Expenses",
           data: expenseData,
           backgroundColor: expenseColor
+        },
+        {
+          label: "Income",
+          data: incomeData,
+          backgroundColor: "#42a5f5"
         },
         {
           label: "Budget",
@@ -956,7 +995,7 @@ function loadGraph(type = "day") {
   renderCategoryBreakdown(groupByCategory(filtered));
 }
 
-function renderChart(ctx, labels, expenseData, budgetData, onClickHandler) {
+function renderChart(ctx, labels, expenseData, budgetData, onClickHandler, incomeData = []) {
   if (chart) chart.destroy();
 
   const { expenseColor, budgetColor } = getThemeColors();
@@ -972,6 +1011,11 @@ function renderChart(ctx, labels, expenseData, budgetData, onClickHandler) {
           backgroundColor: expenseColor
         },
         {
+          label: "Income",
+          data: incomeData,
+          backgroundColor: "#42a5f5"
+        },
+        {
           label: "Budget",
           data: budgetData,
           type: "line",
@@ -979,8 +1023,7 @@ function renderChart(ctx, labels, expenseData, budgetData, onClickHandler) {
           borderWidth: 2,
           fill: false,
           tension: 0,
-          pointRadius: 3,
-          pointHoverRadius: 5
+          pointRadius: 3
         }
       ]
     },
@@ -1346,12 +1389,28 @@ function exportPDF() {
 
   let ctx = document.getElementById("myChart");
 
-  let labels = [], expenseData = [];
+  let labels = [], expenseData = [], incomeData = [];
 
-  // 🔥 SAME LOGIC AS APP (IMPORTANT FIX)
   for (let i = 0; i < 24; i++) {
     labels.push(i + ":00");
-    expenseData.push(sumBy(e => new Date(e.date).getHours() === i));
+
+    let expense = 0;
+    let income = 0;
+
+    expenses.forEach(e => {
+      let d = new Date(e.date);
+
+      if (d.getHours() === i) {
+        if (e.amount < 0) {
+          expense += Math.abs(e.amount);
+        } else {
+          income += e.amount;
+        }
+      }
+    });
+
+    expenseData.push(expense);
+    incomeData.push(income);
   }
 
   let budgetData = labels.map(() => dailyBudget);
@@ -1365,7 +1424,12 @@ function exportPDF() {
           label: "Expenses",
           data: expenseData,
           borderColor: "#4CAF50",
-          backgroundColor: "transparent",
+          tension: 0.3
+        },
+        {
+          label: "Income",
+          data: incomeData,
+          borderColor: "#42a5f5",
           tension: 0.3
         },
         {
@@ -1403,6 +1467,10 @@ function exportPDF() {
       }
     }
   });
+  setTimeout(() => {
+    downloadPDF();
+    loadGraph("day");
+  }, 600);
 }
 
 // function downloadPDF() {
@@ -1922,15 +1990,26 @@ function downloadPDF() {
     let d = new Date(e.date);
     let key = d.toLocaleString("en-IN", { month: "short", year: "numeric" });
 
-    monthMap[key] = (monthMap[key] || 0) + e.amount;
+    if (!monthMap[key]) {
+      monthMap[key] = {
+        expense: 0,
+        income: 0
+      };
+    }
+
+    if (e.amount < 0) {
+      monthMap[key].expense += Math.abs(e.amount);
+    } else {
+      monthMap[key].income += e.amount;
+    }
   });
 
   Object.keys(monthMap).forEach((month, index) => {
-    let spent = monthMap[month];
+    let spent = monthMap[month].expense; // ✅ correct
     let remaining = budget - spent;
 
     let fBudget = new Intl.NumberFormat("en-IN").format(budget);
-    let fSpent = new Intl.NumberFormat("en-IN").format(spent);
+    let fSpent = new Intl.NumberFormat("en-IN").format(Math.abs(spent));
     let fRemain = new Intl.NumberFormat("en-IN").format(remaining);
 
     if (y > 280) {
@@ -1965,17 +2044,28 @@ function downloadPDF() {
 
   const ctx = canvas.getContext("2d");
 
-  let map = {};
+  let expenseMap = {};
+  let incomeMap = {};
 
   dataSource.forEach(e => {
-    if (e.amount < 0) { // 🔥 only expense
-      let d = new Date(e.date).toLocaleDateString("en-IN");
-      map[d] = (map[d] || 0) + Math.abs(e.amount);
+    let d = new Date(e.date).toLocaleDateString("en-IN");
+
+    if (e.amount < 0) {
+      expenseMap[d] = (expenseMap[d] || 0) + Math.abs(e.amount);
+    } else {
+      incomeMap[d] = (incomeMap[d] || 0) + e.amount;
     }
   });
 
-  let labels = Object.keys(map);
-  let data = Object.values(map);
+  let labels = Array.from(
+    new Set([
+      ...Object.keys(expenseMap),
+      ...Object.keys(incomeMap)
+    ])
+  );
+
+  let expenseData = labels.map(d => expenseMap[d] || 0);
+  let incomeData = labels.map(d => incomeMap[d] || 0);
   let budgetData = labels.map(() => dailyBudget);
 
   if (labels.length === 1) {
@@ -1991,9 +2081,18 @@ function downloadPDF() {
       datasets: [
         {
           label: "Expenses",
-          data,
+          data: expenseData,
           borderColor: "#4CAF50",
           backgroundColor: "rgba(76,175,80,0.15)",
+          fill: true,
+          tension: 0.4,
+          pointRadius: 4
+        },
+        {
+          label: "Income",
+          data: incomeData,
+          borderColor: "#42a5f5",
+          backgroundColor: "rgba(66,165,245,0.15)",
           fill: true,
           tension: 0.4,
           pointRadius: 4
@@ -2033,7 +2132,15 @@ function downloadPDF() {
   // ---------------------------
   // 💾 SAVE
   // ---------------------------
-  doc.save("expenses-report.pdf");
+  // doc.save("expenses-report.pdf");
+
+  let blob = doc.output("blob");
+  let url = URL.createObjectURL(blob);
+
+  let a = document.createElement("a");
+  a.href = url;
+  a.download = "expenses-report.pdf";
+  a.click();
 }
 
 
@@ -2234,12 +2341,16 @@ function loadCustomGraph(data, from, to) {
 
   if (chart) chart.destroy();
 
-  let map = {};
+  let expenseMap = {};
+  let incomeMap = {};
 
   data.forEach(e => {
-    if (e.amount < 0) { // 🔥 only expense
-      let d = new Date(e.date).toLocaleDateString("en-IN");
-      map[d] = (map[d] || 0) + Math.abs(e.amount);
+    let d = new Date(e.date).toLocaleDateString("en-IN");
+
+    if (e.amount < 0) {
+      expenseMap[d] = (expenseMap[d] || 0) + Math.abs(e.amount);
+    } else {
+      incomeMap[d] = (incomeMap[d] || 0) + e.amount;
     }
   });
 
@@ -2250,14 +2361,18 @@ function loadCustomGraph(data, from, to) {
   end.setHours(0, 0, 0, 0);
 
   let labels = [];
-  let values = [];
+  let expenseValues = [];
+  let incomeValues = [];
 
   let current = new Date(start);
 
   while (current <= end) {
     let key = current.toLocaleDateString("en-IN");
+
     labels.push(key);
-    values.push(map[key] || 0);
+    expenseValues.push(expenseMap[key] || 0);
+    incomeValues.push(incomeMap[key] || 0);
+
     current.setDate(current.getDate() + 1);
   }
 
@@ -2268,9 +2383,10 @@ function loadCustomGraph(data, from, to) {
     let parts = dateStr.split("/");
     let d = new Date(parts[2], parts[1] - 1, parts[0]);
 
-    let key = d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0");
+    let key = d.toISOString().slice(0, 7); // 🔥 FIXED (YYYY-MM)
 
     let monthly = monthlyBudgets[key] || 0;
+
     let days = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
 
     return monthly / days;
@@ -2293,7 +2409,7 @@ function loadCustomGraph(data, from, to) {
   };
 
   // 🔥 RENDER GRAPH
-  renderChart(ctx, labels, values, budgetData, onClickHandler);
+  renderChart(ctx, labels, expenseValues, budgetData, onClickHandler, incomeValues);
 
   // ---------------------------
   // 🔥 AUTO CATEGORY (MAIN FIX)
