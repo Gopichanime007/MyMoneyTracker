@@ -31,6 +31,7 @@ window.onload = () => {
   }
 
   loadBudgetUI();
+  migrateOldData();
 };
 
 function setDefaultDate() {
@@ -2376,6 +2377,33 @@ function renderCategoryBreakdown(map) {
 function renderFullCategoryBreakdown(data) {
   let map = groupByCategory(data);
   renderCategoryBreakdown(map);
+}
+
+function migrateOldData() {
+  let updated = false;
+
+  expenses.forEach(e => {
+    if (!e.type) {
+      // 🔥 OLD SYSTEM DETECTED
+
+      if (e.amount > 0) {
+        // OLD: expense was positive
+        e.type = "expense";
+        e.amount = -Math.abs(e.amount); // FIX SIGN
+      } else {
+        // OLD: income was negative
+        e.type = "income";
+        e.amount = Math.abs(e.amount); // FIX SIGN
+      }
+
+      updated = true;
+    }
+  });
+
+  if (updated) {
+    localStorage.setItem("expenses", JSON.stringify(expenses));
+    console.log("✅ Old data corrected & migrated");
+  }
 }
 
 checkForUpdate();
