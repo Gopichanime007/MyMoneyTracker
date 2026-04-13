@@ -78,7 +78,7 @@ body {
 .card {
   background: rgba(255, 255, 255, 0.9);
   backdrop-filter: blur(10px);
-  padding: 16px;
+  padding: 18px;
   border-radius: 20px;
   box-shadow:
     0 6px 20px rgba(0, 0, 0, 0.06),
@@ -241,12 +241,13 @@ button.action-btn:active {
 .dashboard-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 10px;
+  gap: 14px;
+  margin-bottom: 12px;
 }
 
 .dash-card {
-  padding: 14px;
-  border-radius: 16px;
+  padding: 16px;
+  border-radius: 18px;
   color: white;
   position: relative;
   overflow: hidden;
@@ -298,6 +299,7 @@ button.action-btn:active {
   background: #eee;
   border-radius: 10px;
   overflow: hidden;
+  margin: 10px 0 6px;
 }
 
 .progress-fill {
@@ -305,6 +307,10 @@ button.action-btn:active {
   background: linear-gradient(90deg, var(--theme), #81c784);
   width: 0%;
   transition: 0.4s ease;
+}
+
+.progress-wrapper {
+  margin-top: 12px;
 }
 
 /* =========================

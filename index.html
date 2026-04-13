@@ -63,11 +63,11 @@
 
         </div>
 
-        <div class="progress-box">
+        <div class="progress-wrapper">
           <div class="progress-bar">
-            <div class="progress-fill" id="progressFill"></div>
+            <div id="progressFill" class="progress-fill"></div>
           </div>
-          <p id="progressText">0% used</p>
+          <p id="progressText"></p>
         </div>
       </div>
     </div>
@@ -104,7 +104,7 @@
           <option value="period">Custom Period</option>
         </select>
         <div style="display:flex; gap:10px;">
-          <button class="icon-btn" onclick="downloadPDF()">
+          <button class="icon-btn" onclick="exportPDF()">
             <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor">
               <path d="M5 20h14v-2H5v2z" />
               <path d="M12 2v12m0 0l-4-4m4 4l4-4" stroke="currentColor" stroke-width="2" fill="none" />

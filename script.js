@@ -34,6 +34,21 @@ window.onload = () => {
   migrateOldData();
 };
 
+function hexToRgb(hex) {
+  let bigint = parseInt(hex.replace("#", ""), 16);
+  return {
+    r: (bigint >> 16) & 255,
+    g: (bigint >> 8) & 255,
+    b: bigint & 255
+  };
+}
+function getContrastColor(r, g, b) {
+  // 🔥 brightness formula
+  let brightness = (r * 299 + g * 587 + b * 114) / 1000;
+
+  return brightness > 150 ? "black" : "white";
+}
+
 function setDefaultDate() {
   let today = new Date().toISOString().split("T")[0];
   document.getElementById("expenseDate").value = today;
@@ -1384,136 +1399,10 @@ function sumBy(fn) {
 //   doc.save("expenses-report.pdf");
 // }
 
-// function exportPDF() {
-//   if (chart) chart.destroy();
-
-//   let ctx = document.getElementById("myChart");
-
-//   let labels = [], expenseData = [], incomeData = [];
-
-//   for (let i = 0; i < 24; i++) {
-//     labels.push(i + ":00");
-
-//     let expense = 0;
-//     let income = 0;
-
-//     expenses.forEach(e => {
-//       let d = new Date(e.date);
-
-//       if (d.getHours() === i) {
-//         if (e.amount < 0) {
-//           expense += Math.abs(e.amount);
-//         } else {
-//           income += e.amount;
-//         }
-//       }
-//     });
-
-//     expenseData.push(expense);
-//     incomeData.push(income);
-//   }
-
-//   let budgetData = labels.map(() => dailyBudget);
-
-//   chart = new Chart(ctx, {
-//     type: "line",
-//     data: {
-//       labels,
-//       datasets: [
-//         {
-//           label: "Expenses",
-//           data: expenseData,
-//           borderColor: "#4CAF50",
-//           tension: 0.3
-//         },
-//         {
-//           label: "Income",
-//           data: incomeData,
-//           borderColor: "#42a5f5",
-//           tension: 0.3
-//         },
-//         {
-//           label: "Budget",
-//           data: budgetData,
-//           borderColor: "#FF7043",
-//           borderDash: [5, 5],
-//           tension: 0.3
-//         }
-//       ]
-//     },
-//     options: {
-//       responsive: true,
-//       maintainAspectRatio: false,
-
-//       animation: false,
-
-//       plugins: {
-//         legend: {
-//           display: true
-//         }
-//       },
-
-//       scales: {
-//         y: {
-//           beginAtZero: true
-//         }
-//       }
-//     }
-//   });
-//   setTimeout(() => {
-//     downloadPDF();
-//     loadGraph("day");
-//   }, 800);
-// }
 function exportPDF() {
-  const element = document.getElementById("history");
-
-  if (!element) {
-    alert("History not found!");
-    return;
-  }
-
-  // 🔥 Force visible
-  document.querySelectorAll(".screen").forEach(s => s.classList.remove("active"));
-  element.classList.add("active");
-
-  setTimeout(() => {
-    html2canvas(element, {
-      scale: 2,
-      useCORS: true
-    }).then(canvas => {
-
-      const imgData = canvas.toDataURL("image/png");
-
-      const { jsPDF } = window.jspdf;
-      const doc = new jsPDF("p", "mm", "a4");
-
-      const pageWidth = 210;
-      const pageHeight = 297;
-
-      const imgWidth = pageWidth;
-      const imgHeight = (canvas.height * imgWidth) / canvas.width;
-
-      let heightLeft = imgHeight;
-      let position = 0;
-
-      // 🔥 First page
-      doc.addImage(imgData, "PNG", 0, position, imgWidth, imgHeight);
-      heightLeft -= pageHeight;
-
-      // 🔥 Multi-page support
-      while (heightLeft > 0) {
-        position = heightLeft - imgHeight;
-        doc.addPage();
-        doc.addImage(imgData, "PNG", 0, position, imgWidth, imgHeight);
-        heightLeft -= pageHeight;
-      }
-
-      doc.save("expenses-report.pdf");
-    });
-
-  }, 500);
+  downloadPDF();
 }
+
 
 // function downloadPDF() {
 //   const { jsPDF } = window.jspdf;
@@ -2189,14 +2078,17 @@ function downloadPDF() {
   const { jsPDF } = window.jspdf;
   const doc = new jsPDF();
 
-  let dataSource = currentFilteredExpenses.length
+  // =========================
+  // 📦 DATA SOURCE
+  // =========================
+  const dataSource = currentFilteredExpenses.length
     ? currentFilteredExpenses
     : expenses;
 
-  let y = 15;
+  let y = 12;
 
   // =========================
-  // 🟢 HEADER
+  // 🟢 HEADER TITLE
   // =========================
   doc.setFontSize(18);
   doc.setFont(undefined, "bold");
@@ -2206,120 +2098,135 @@ function downloadPDF() {
 
   doc.setFontSize(9);
   doc.setTextColor(120);
-
   doc.text(`Generated on: ${new Date().toLocaleString()}`, 14, y);
+
   y += 5;
   doc.text(`Total Entries: ${dataSource.length}`, 14, y);
 
   doc.setTextColor(0);
 
-  y += 5;
+  y += 3;
   doc.line(10, y, 200, y);
 
-  y += 10;
+  y += 6;
 
   // =========================
-  // 🟢 TABLE HEADER
+  // 📊 COLUMN POSITIONS
   // =========================
   const col = {
-    date: 10,
-    type: 38,
-    category: 65,
-    amount: 110,
-    purpose: 130
+    date: 20,
+    type: 50,
+    category: 80,
+    amount: 135,
+    purpose: 150
   };
 
-  doc.setFillColor(76, 175, 80);
-  doc.rect(10, y - 6, 190, 10, "F");
+  // =========================
+  // 🎨 THEME HEADER
+  // =========================
+  const theme = localStorage.getItem("theme") || "#4caf50";
+  const { r, g, b } = hexToRgb(theme);
 
-  doc.setTextColor(255);
+  const headerY = y;
+
+  doc.setFillColor(r, g, b);
+  doc.rect(10, headerY - 5, 190, 10, "F");
+
+  const textColor = getContrastColor(r, g, b);
+  doc.setTextColor(textColor === "white" ? 255 : 0);
+
   doc.setFont(undefined, "bold");
 
-  doc.text("Date", col.date, y);
-  doc.text("Type", col.type, y);
-  doc.text("Category", col.category, y);
-  doc.text("Amount", col.amount, y, { align: "right" });
-  doc.text("Purpose", col.purpose, y);
+  const textY = headerY + 1;
+
+  doc.text("Date", col.date, textY, { align: "center" });
+  doc.text("Type", col.type, textY, { align: "center" });
+  doc.text("Category", col.category, textY);
+  doc.text("Amount", col.amount, textY, { align: "right" });
+  doc.text("Purpose", col.purpose, textY);
 
   y += 10;
 
+  // =========================
+  // 📄 TABLE DATA
+  // =========================
   doc.setTextColor(0);
   doc.setFont(undefined, "normal");
 
-  // =========================
-  // 🟢 TABLE DATA
-  // =========================
   let totalIncome = 0;
   let totalExpense = 0;
 
   dataSource.forEach((e, index) => {
-    let date = new Date(e.date).toLocaleDateString("en-IN");
-    let category = e.category;
-    let amount = e.amount;
-    let purpose = e.purpose || "-";
-    let type = e.type || (amount < 0 ? "expense" : "income");
+    const date = new Date(e.date).toLocaleDateString("en-IN");
+    const category = e.category;
+    const amount = e.amount;
+    const purpose = e.purpose || "-";
+    const type = e.type || (amount < 0 ? "expense" : "income");
 
     if (amount > 0) totalIncome += amount;
     else totalExpense += Math.abs(amount);
 
-    let formatted = new Intl.NumberFormat("en-IN").format(amount);
+    const formatted = new Intl.NumberFormat("en-IN").format(amount);
 
+    // Page break
     if (y > 280) {
       doc.addPage();
       y = 20;
     }
 
+    // Alternate row color
     if (index % 2 === 0) {
-      doc.setFillColor(245, 245, 245);
+      doc.setFillColor(235, 235, 235);
       doc.rect(10, y - 5, 190, 8, "F");
     }
 
-    doc.text(date, col.date, y);
+    // Date
+    doc.text(date, col.date, y, { align: "center" });
 
-    // TYPE
+    // Type
     doc.setTextColor(type === "expense" ? 200 : 0, type === "expense" ? 0 : 150, 0);
-    doc.text(type === "expense" ? "Expense" : "Income", col.type, y);
+    doc.text(type === "expense" ? "Expense" : "Income", col.type, y, { align: "center" });
 
     doc.setTextColor(0);
 
+    // Category
     doc.text(category, col.category, y);
 
-    // AMOUNT
+    // Amount
     doc.setTextColor(amount < 0 ? 200 : 0, amount < 0 ? 0 : 150, 0);
     doc.text(`Rs. ${formatted}`, col.amount, y, { align: "right" });
 
     doc.setTextColor(0);
 
-    let splitPurpose = doc.splitTextToSize(purpose, 60);
+    // Purpose (multi-line)
+    const splitPurpose = doc.splitTextToSize(purpose, 55);
     doc.text(splitPurpose, col.purpose, y);
 
     y += Math.max(8, splitPurpose.length * 5);
   });
 
   // =========================
-  // 🔵 TOTAL SUMMARY
+  // 💰 SUMMARY
   // =========================
-  y += 5;
+  y += 8;
   doc.line(10, y, 200, y);
 
   y += 10;
-
   doc.setFont(undefined, "bold");
 
   doc.setTextColor(0, 150, 0);
-  doc.text(`Income: Rs. ${new Intl.NumberFormat("en-IN").format(totalIncome)}`, 14, y);
+  doc.text(`Income: Rs. ${totalIncome}`, 14, y);
 
   y += 8;
 
   doc.setTextColor(200, 0, 0);
-  doc.text(`Expense: Rs. ${new Intl.NumberFormat("en-IN").format(totalExpense)}`, 14, y);
+  doc.text(`Expense: Rs. ${totalExpense}`, 14, y);
 
   y += 8;
 
-  let net = totalIncome - totalExpense;
-
+  const net = totalIncome - totalExpense;
   doc.setTextColor(net >= 0 ? 0 : 200, net >= 0 ? 150 : 0, 0);
-  doc.text(`Net Balance: Rs. ${new Intl.NumberFormat("en-IN").format(net)}`, 14, y);
+  doc.text(`Net Balance: Rs. ${net}`, 14, y);
 
   doc.setTextColor(0);
 
@@ -2342,6 +2249,7 @@ function downloadPDF() {
   doc.text("Overview of budget vs spending", 14, y);
 
   doc.setTextColor(0);
+
   y += 6;
   doc.line(10, y, 200, y);
 
@@ -2364,24 +2272,22 @@ function downloadPDF() {
   y += 6;
   doc.setFont(undefined, "normal");
 
-  let monthMap = {};
+  const monthMap = {};
 
   dataSource.forEach(e => {
-    let d = new Date(e.date);
-    let key = d.toLocaleString("en-IN", { month: "short", year: "numeric" });
+    const d = new Date(e.date);
+    const key = d.toLocaleString("en-IN", { month: "short", year: "numeric" });
 
-    if (!monthMap[key]) {
-      monthMap[key] = { expense: 0 };
-    }
+    if (!monthMap[key]) monthMap[key] = 0;
 
     if (e.amount < 0) {
-      monthMap[key].expense += Math.abs(e.amount);
+      monthMap[key] += Math.abs(e.amount);
     }
   });
 
   Object.keys(monthMap).forEach((month, index) => {
-    let spent = monthMap[month].expense;
-    let remaining = budget - spent;
+    const spent = monthMap[month];
+    const remaining = budget - spent;
 
     if (y > 280) {
       doc.addPage();
@@ -2389,7 +2295,7 @@ function downloadPDF() {
     }
 
     if (index % 2 === 0) {
-      doc.setFillColor(245, 245, 245);
+      doc.setFillColor(235, 235, 235);
       doc.rect(10, y - 4, 190, 8, "F");
     }
 
@@ -2406,80 +2312,10 @@ function downloadPDF() {
   });
 
   // =========================
-  // 📊 GRAPH
+  // 💾 SAVE
   // =========================
-  y += 12;
-
-  const canvas = document.createElement("canvas");
-  canvas.width = 800;
-  canvas.height = 400;
-
-  const ctx = canvas.getContext("2d");
-
-  let expenseMap = {};
-  let incomeMap = {};
-
-  dataSource.forEach(e => {
-    let d = new Date(e.date).toLocaleDateString("en-IN");
-
-    if (e.amount < 0) expenseMap[d] = (expenseMap[d] || 0) + Math.abs(e.amount);
-    else incomeMap[d] = (incomeMap[d] || 0) + e.amount;
-  });
-
-  let labels = Array.from(new Set([...Object.keys(expenseMap), ...Object.keys(incomeMap)]));
-
-  let expenseData = labels.map(d => expenseMap[d] || 0);
-  let incomeData = labels.map(d => incomeMap[d] || 0);
-  let budgetData = labels.map(() => dailyBudget);
-
-  if (labels.length === 1) {
-    labels = [" ", labels[0], " "];
-    expenseData = [0, expenseData[0], 0];
-    incomeData = [0, incomeData[0], 0];
-    budgetData = [0, budgetData[0], 0];
-  }
-
-  const chart = new Chart(ctx, {
-    type: "line",
-    data: {
-      labels,
-      datasets: [
-        { label: "Expenses", data: expenseData, borderColor: "#4CAF50", fill: true },
-        { label: "Income", data: incomeData, borderColor: "#42a5f5", fill: true },
-        { label: "Budget", data: budgetData, borderColor: "#FF7043", borderDash: [5, 5] }
-      ]
-    },
-    options: {
-      responsive: false,
-      animation: false
-    }
-  });
-
-  setTimeout(() => {
-    let img = canvas.toDataURL("image/png", 1.0);
-
-    if (y > 200) {
-      doc.addPage();
-      y = 20;
-    }
-
-    doc.text("Expense Chart", 14, y);
-    y += 6;
-
-    doc.addImage(img, "PNG", 10, y, 180, 90);
-
-    chart.destroy();
-
-    let blob = doc.output("blob");
-    let url = URL.createObjectURL(blob);
-
-    let a = document.createElement("a");
-    a.href = url;
-    a.download = "expenses-report.pdf";
-    a.click();
-  }, 400);
+  doc.save("expenses-report.pdf");
 }
-
 /* =========================
    🎨 THEME
 ========================= */
