@@ -143,35 +143,41 @@ function deleteCategory(index) {
    ➕ ADD EXPENSE
 ========================= */
 function saveExpense() {
-  let amount = document.getElementById("amount").value;
+  let amount = Number(document.getElementById("amount").value);
   let category = document.getElementById("category").value;
   let purpose = document.getElementById("purpose").value;
   let selectedDate = document.getElementById("expenseDate").value;
+  let type = document.getElementById("entryType").value;
 
   if (!amount) return alert("Enter amount!");
 
-  // 🔥 combine selected date + current time
+  // 🔥 FORCE SIGN BASED ON TYPE
+  if (type === "expense") {
+    amount = -Math.abs(amount);
+  } else {
+    amount = Math.abs(amount);
+  }
+
   let now = new Date();
   let selected = new Date(selectedDate);
 
-  selected.setHours(now.getHours());
-  selected.setMinutes(now.getMinutes());
-  selected.setSeconds(now.getSeconds());
+  selected.setHours(now.getHours(), now.getMinutes(), now.getSeconds());
 
   expenses.push({
-    amount: Number(amount),
+    amount,
     category,
     purpose,
-    date: selected.toISOString() // ✅ date + hidden time
+    type, // 🔥 NEW FIELD
+    date: selected.toISOString()
   });
 
   localStorage.setItem("expenses", JSON.stringify(expenses));
 
   document.getElementById("amount").value = "";
   document.getElementById("purpose").value = "";
+  document.getElementById("entryType").value = "expense";
 
-  setDefaultDate(); // reset to today
-
+  setDefaultDate();
   updateUI();
   showScreen("home");
 }
@@ -262,13 +268,15 @@ function loadHistory(list = expenses) {
     div.className = "expense-item";
 
     div.innerHTML = `
-      <div>
-        <strong>${e.category}</strong> - ₹${e.amount}<br>
-        <small>${new Date(e.date).toLocaleString()}</small>
-      </div>
-      <button class="delete-btn" onclick="deleteExpense(${i})">🗑</button>
-    `;
-
+  <div>
+    <strong>${e.category}</strong> -
+    <strong style="color:${e.amount < 0 ? 'red' : 'green'}">
+      ₹${e.amount}
+    </strong><br>
+    <small>${new Date(e.date).toLocaleString()}</small>
+  </div>
+  <button class="delete-btn" onclick="deleteExpense(${i})">🗑</button>
+`;
     container.appendChild(div);
   });
 }
@@ -300,7 +308,11 @@ function handleFilter(type) {
     if (type === "week") {
       let start = new Date(now);
       start.setDate(now.getDate() - now.getDay());
-      return d >= start;
+
+      let end = new Date(start);
+      end.setDate(start.getDate() + 6);
+
+      return d >= start && d <= end;
     }
 
     if (type === "month") {
@@ -1007,7 +1019,12 @@ function renderChart(ctx, labels, expenseData, budgetData, onClickHandler) {
 }
 
 function sumBy(fn) {
-  return expenses.reduce((sum, e) => fn(e) ? sum + e.amount : sum, 0);
+  return expenses.reduce((sum, e) => {
+    if (fn(e) && e.amount < 0) {
+      return sum + Math.abs(e.amount); // only expense
+    }
+    return sum;
+  }, 0);
 }
 
 // function exportPDF() {
@@ -1710,10 +1727,11 @@ function downloadPDF() {
   // 🟢 TABLE HEADER
   // ---------------------------
   const col = {
-    date: 12,
-    category: 45,
-    amount: 120,
-    purpose: 155
+    date: 10,
+    type: 38,
+    category: 65,
+    amount: 110,
+    purpose: 130
   };
 
   doc.setFillColor(76, 175, 80);
@@ -1724,6 +1742,7 @@ function downloadPDF() {
   doc.setFont(undefined, "bold");
 
   doc.text("Date", col.date, y);
+  doc.text("Type", col.type, y);
   doc.text("Category", col.category, y);
   doc.text("Amount", col.amount, y, { align: "right" });
   doc.text("Purpose", col.purpose, y);
@@ -1736,15 +1755,21 @@ function downloadPDF() {
   // ---------------------------
   // 🟢 TABLE DATA
   // ---------------------------
-  let total = 0;
+  let totalIncome = 0;
+  let totalExpense = 0;
 
   dataSource.forEach((e, index) => {
     let date = new Date(e.date).toLocaleDateString("en-IN");
     let category = e.category;
     let amount = e.amount;
     let purpose = e.purpose || "-";
+    let type = e.type || (amount < 0 ? "expense" : "income");
 
-    total += amount;
+    if (amount > 0) {
+      totalIncome += amount;
+    } else {
+      totalExpense += Math.abs(amount);
+    }
 
     let formatted = new Intl.NumberFormat("en-IN").format(amount);
 
@@ -1759,11 +1784,38 @@ function downloadPDF() {
     }
 
     doc.text(date, col.date, y);
-    doc.text(category, col.category, y);
-    doc.text(`Rs. ${formatted}`, col.amount, y, { align: "right" });
-    doc.text(purpose, col.purpose, y);
 
-    y += 8;
+    // 🔥 TYPE
+    if (type === "expense") {
+      doc.setTextColor(200, 0, 0);
+      doc.text("Expense", col.type, y);
+    } else {
+      doc.setTextColor(0, 150, 0);
+      doc.text("Income", col.type, y);
+    }
+
+    doc.setTextColor(0);
+
+    // CATEGORY
+    doc.text(category, col.category, y);
+
+    // 🔥 AMOUNT COLOR
+    if (amount < 0) {
+      doc.setTextColor(200, 0, 0);
+    } else {
+      doc.setTextColor(0, 150, 0);
+    }
+
+    doc.text(`Rs. ${formatted}`, col.amount, y, { align: "right" });
+
+    doc.setTextColor(0);
+
+    // PURPOSE
+    let splitPurpose = doc.splitTextToSize(purpose, 60);
+    doc.text(splitPurpose, col.purpose, y);
+
+    // 🔥 dynamic height
+    y += Math.max(8, splitPurpose.length * 5);
   });
 
   // ---------------------------
@@ -1775,8 +1827,50 @@ function downloadPDF() {
   y += 8;
   doc.setFont(undefined, "bold");
 
-  let fTotal = new Intl.NumberFormat("en-IN").format(total);
-  doc.text(`Total: Rs. ${fTotal}`, 190, y, { align: "right" });
+  //let fTotal = new Intl.NumberFormat("en-IN").format(total);
+  //y += 6;
+  //doc.line(10, y, 200, y);
+
+  y += 10;
+  doc.setFont(undefined, "bold");
+
+  // 🔥 Income (Green)
+  doc.setTextColor(0, 150, 0);
+  doc.text(
+    `Income: Rs. ${new Intl.NumberFormat("en-IN").format(totalIncome)}`,
+    14,
+    y
+  );
+
+  y += 8;
+
+  // 🔥 Expense (Red)
+  doc.setTextColor(200, 0, 0);
+  doc.text(
+    `Expense: Rs. ${new Intl.NumberFormat("en-IN").format(totalExpense)}`,
+    14,
+    y
+  );
+
+  y += 8;
+
+  // 🔥 Net (Smart Color)
+  let net = totalIncome - totalExpense;
+
+  if (net >= 0) {
+    doc.setTextColor(0, 150, 0);
+  } else {
+    doc.setTextColor(200, 0, 0);
+  }
+
+  doc.text(
+    `Net Balance: Rs. ${new Intl.NumberFormat("en-IN").format(net)}`,
+    14,
+    y
+  );
+
+  // reset color
+  doc.setTextColor(0);
 
   // ---------------------------
   // 🟣 BUDGET SUMMARY
@@ -1873,8 +1967,10 @@ function downloadPDF() {
   let map = {};
 
   dataSource.forEach(e => {
-    let d = new Date(e.date).toLocaleDateString("en-IN");
-    map[d] = (map[d] || 0) + e.amount;
+    if (e.amount < 0) { // 🔥 only expense
+      let d = new Date(e.date).toLocaleDateString("en-IN");
+      map[d] = (map[d] || 0) + Math.abs(e.amount);
+    }
   });
 
   let labels = Object.keys(map);
@@ -2010,7 +2106,15 @@ async function sharePDF() {
    📊 UI
 ========================= */
 function updateUI() {
-  let total = expenses.reduce((s, e) => s + e.amount, 0);
+  let spent = expenses
+    .filter(e => e.amount < 0)
+    .reduce((s, e) => s + Math.abs(e.amount), 0);
+
+  let income = expenses
+    .filter(e => e.amount > 0)
+    .reduce((s, e) => s + e.amount, 0);
+
+  let total = income - spent;
 
   let today = new Date().toISOString().split("T")[0];
 
@@ -2019,13 +2123,15 @@ function updateUI() {
     .reduce((s, e) => s + e.amount, 0);
 
   document.getElementById("budgetValue").innerText = budget;
-  document.getElementById("spent").innerText = total;
-  document.getElementById("remaining").innerText = budget - total;
-  document.getElementById("todaySpent").innerText = todaySpent;
+  document.getElementById("spent").innerText = spent;
+  document.getElementById("remaining").innerText = budget - spent;
+  document.getElementById("todaySpent").innerText = expenses
+    .filter(e => e.date.startsWith(today) && e.amount < 0)
+    .reduce((s, e) => s + Math.abs(e.amount), 0);
   const dailyEl = document.getElementById("dailyLimit");
   if (dailyEl) dailyEl.innerText = Math.floor(dailyBudget);
   // 🔥 Progress calculation
-  updateProgressBar(total, budget);
+  updateProgressBar(spent, budget);
 }
 
 function updateProgressBar(total, budget) {
@@ -2130,8 +2236,10 @@ function loadCustomGraph(data, from, to) {
   let map = {};
 
   data.forEach(e => {
-    let d = new Date(e.date).toLocaleDateString("en-IN");
-    map[d] = (map[d] || 0) + e.amount;
+    if (e.amount < 0) { // 🔥 only expense
+      let d = new Date(e.date).toLocaleDateString("en-IN");
+      map[d] = (map[d] || 0) + Math.abs(e.amount);
+    }
   });
 
   let start = new Date(from);
@@ -2230,11 +2338,15 @@ function openCustomModal() {
   graphMode = true;
   modal.style.display = "flex";
 }
+
+
 function groupByCategory(data) {
   let map = {};
 
   data.forEach(e => {
-    map[e.category] = (map[e.category] || 0) + e.amount;
+    if (e.amount < 0) {
+      map[e.category] = (map[e.category] || 0) + Math.abs(e.amount);
+    }
   });
 
   return map;
