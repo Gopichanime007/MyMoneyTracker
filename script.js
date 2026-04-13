@@ -704,14 +704,16 @@ function loadGraph(type = "day") {
   if (chart) chart.destroy();
 
   let labels = [], expenseData = [];
+  let now = new Date();
 
-  let today = new Date();
   document.getElementById("graphDate").innerText =
-    today.toLocaleDateString("en-IN");
+    now.toLocaleDateString("en-IN");
 
   // ---------------------------
-  // DAY
+  // 📊 DATA PREPARATION
   // ---------------------------
+
+  // DAY
   if (type === "day") {
     for (let i = 0; i < 24; i++) {
       labels.push(i + ":00");
@@ -720,9 +722,9 @@ function loadGraph(type = "day") {
         sumBy(e => {
           let d = new Date(e.date);
           return (
-            d.getFullYear() === today.getFullYear() &&
-            d.getMonth() === today.getMonth() &&
-            d.getDate() === today.getDate() &&
+            d.getFullYear() === now.getFullYear() &&
+            d.getMonth() === now.getMonth() &&
+            d.getDate() === now.getDate() &&
             d.getHours() === i
           );
         })
@@ -730,12 +732,10 @@ function loadGraph(type = "day") {
     }
   }
 
-  // ---------------------------
   // WEEK
-  // ---------------------------
   if (type === "week") {
-    let start = new Date(today);
-    start.setDate(today.getDate() - today.getDay());
+    let start = new Date(now);
+    start.setDate(now.getDate() - now.getDay());
 
     for (let i = 0; i < 7; i++) {
       let current = new Date(start);
@@ -749,27 +749,43 @@ function loadGraph(type = "day") {
       );
 
       expenseData.push(
-        sumBy(e => new Date(e.date).toDateString() === current.toDateString())
+        sumBy(e =>
+          new Date(e.date).toDateString() === current.toDateString()
+        )
+      );
+    }
+  }
+
+  // MONTH
+  if (type === "month") {
+    let days = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+
+    for (let i = 1; i <= days; i++) {
+      labels.push(i);
+
+      expenseData.push(
+        sumBy(e => {
+          let d = new Date(e.date);
+          return (
+            d.getFullYear() === now.getFullYear() &&
+            d.getMonth() === now.getMonth() &&
+            d.getDate() === i
+          );
+        })
       );
     }
   }
 
   // ---------------------------
-  // MONTH
+  // 💰 BUDGET
   // ---------------------------
-  if (type === "month") {
-    let days = new Date(today.getFullYear(), today.getMonth() + 1, 0).getDate();
-
-    for (let i = 1; i <= days; i++) {
-      labels.push(i);
-      expenseData.push(sumBy(e => new Date(e.date).getDate() === i));
-    }
-  }
-
   let budgetData = labels.map(() => dailyBudget);
 
   let { expenseColor, budgetColor } = getThemeColors();
 
+  // ---------------------------
+  // 📊 CHART
+  // ---------------------------
   chart = new Chart(ctx, {
     type: "bar",
     data: {
@@ -799,10 +815,64 @@ function loadGraph(type = "day") {
 
       interaction: {
         mode: "index",
-        intersect: false
+        intersect: false,
+        axis: "x"
+      },
+
+      // ---------------------------
+      // 🔥 CLICK = DRILL DOWN
+      // ---------------------------
+      onClick: function (evt, elements) {
+        if (!elements.length) return;
+
+        let index = elements[0].index;
+        let filtered = [];
+
+        // DAY → hour
+        if (type === "day") {
+          filtered = expenses.filter(e => {
+            let d = new Date(e.date);
+            return (
+              d.getFullYear() === now.getFullYear() &&
+              d.getMonth() === now.getMonth() &&
+              d.getDate() === now.getDate() &&
+              d.getHours() === index
+            );
+          });
+        }
+
+        // WEEK → specific day
+        if (type === "week") {
+          let start = new Date(now);
+          start.setDate(now.getDate() - now.getDay());
+
+          let selected = new Date(start);
+          selected.setDate(start.getDate() + index);
+
+          filtered = expenses.filter(e =>
+            new Date(e.date).toDateString() === selected.toDateString()
+          );
+        }
+
+        // MONTH → specific date
+        if (type === "month") {
+          filtered = expenses.filter(e => {
+            let d = new Date(e.date);
+            return (
+              d.getFullYear() === now.getFullYear() &&
+              d.getMonth() === now.getMonth() &&
+              d.getDate() === index + 1
+            );
+          });
+        }
+
+        renderCategoryBreakdown(groupByCategory(filtered));
       },
 
       plugins: {
+        legend: {
+          display: true
+        },
         tooltip: {
           mode: "index",
           intersect: false,
@@ -811,56 +881,95 @@ function loadGraph(type = "day") {
               return context.dataset.label + ": ₹" + context.raw;
             }
           }
-        },
-        legend: {
-          display: true
+        }
+      },
+
+      scales: {
+        y: {
+          beginAtZero: true
         }
       }
     }
   });
+
+  // ---------------------------
+  // 🔥 AUTO CATEGORY (MAIN FEATURE)
+  // ---------------------------
+  let filtered = [];
+
+  // DAY
+  if (type === "day") {
+    filtered = expenses.filter(e => {
+      let d = new Date(e.date);
+      return (
+        d.getFullYear() === now.getFullYear() &&
+        d.getMonth() === now.getMonth() &&
+        d.getDate() === now.getDate()
+      );
+    });
+  }
+
+  // WEEK (exact same logic as graph)
+  if (type === "week") {
+    let start = new Date(now);
+    start.setDate(now.getDate() - now.getDay());
+
+    filtered = expenses.filter(e => {
+      let d = new Date(e.date);
+
+      for (let i = 0; i < 7; i++) {
+        let temp = new Date(start);
+        temp.setDate(start.getDate() + i);
+
+        if (d.toDateString() === temp.toDateString()) return true;
+      }
+
+      return false;
+    });
+  }
+
+  // MONTH
+  if (type === "month") {
+    filtered = expenses.filter(e => {
+      let d = new Date(e.date);
+      return (
+        d.getFullYear() === now.getFullYear() &&
+        d.getMonth() === now.getMonth()
+      );
+    });
+  }
+
+  // 🔥 FINAL RENDER
+  renderCategoryBreakdown(groupByCategory(filtered));
 }
 
-function renderChart(ctx, labels, expenseData, budgetData) {
-  if (!ctx) {
-    console.error("Chart canvas not found");
-    return;
-  }
+function renderChart(ctx, labels, expenseData, budgetData, onClickHandler) {
+  if (chart) chart.destroy();
 
-  // 🔥 Destroy previous chart safely
-  if (chart) {
-    chart.destroy();
-  }
-
-  // 🔥 Theme colors
   const { expenseColor, budgetColor } = getThemeColors();
 
-  const datasets = [
-    {
-      label: "Expenses",
-      data: expenseData,
-      backgroundColor: expenseColor
-    },
-    {
-      label: "Budget",
-      data: budgetData,
-      type: "line",
-      borderColor: budgetColor,
-      borderWidth: 2,
-      fill: false,
-      tension: 0,
-      pointRadius: 3,
-      pointHoverRadius: 5,
-      pointBackgroundColor: budgetColor
-    }
-  ];
-
-  // 🔥 Create chart
-  //renderChart(ctx, labels, expenseData, budgetData);
   chart = new Chart(ctx, {
     type: "bar",
     data: {
       labels,
-      datasets
+      datasets: [
+        {
+          label: "Expenses",
+          data: expenseData,
+          backgroundColor: expenseColor
+        },
+        {
+          label: "Budget",
+          data: budgetData,
+          type: "line",
+          borderColor: budgetColor,
+          borderWidth: 2,
+          fill: false,
+          tension: 0,
+          pointRadius: 3,
+          pointHoverRadius: 5
+        }
+      ]
     },
     options: {
       responsive: true,
@@ -872,13 +981,14 @@ function renderChart(ctx, labels, expenseData, budgetData) {
         axis: "x"
       },
 
+      // 🔥 USE PASSED CLICK HANDLER
+      onClick: onClickHandler,
+
       plugins: {
         legend: {
           display: true
         },
         tooltip: {
-          mode: "index",
-          intersect: false,
           callbacks: {
             label: function (context) {
               return context.dataset.label + ": ₹" + context.raw;
@@ -2042,7 +2152,7 @@ function loadCustomGraph(data, from, to) {
     current.setDate(current.getDate() + 1);
   }
 
-  // 🔥 Monthly budget logic
+  // 🔥 Budget logic
   let monthlyBudgets = JSON.parse(localStorage.getItem("monthlyBudgets")) || {};
 
   let budgetData = labels.map(dateStr => {
@@ -2057,8 +2167,33 @@ function loadCustomGraph(data, from, to) {
     return monthly / days;
   });
 
-  let { expenseColor, budgetColor } = getThemeColors();
-  renderChart(ctx, labels, values, budgetData);
+  // ---------------------------
+  // 🔥 CLICK HANDLER (WORKING NOW)
+  // ---------------------------
+  let onClickHandler = function (evt, elements) {
+    if (!elements.length) return;
+
+    let index = elements[0].index;
+    let selectedDate = labels[index];
+
+    let filtered = data.filter(e =>
+      new Date(e.date).toLocaleDateString("en-IN") === selectedDate
+    );
+
+    renderCategoryBreakdown(groupByCategory(filtered));
+  };
+
+  // 🔥 RENDER GRAPH
+  renderChart(ctx, labels, values, budgetData, onClickHandler);
+
+  // ---------------------------
+  // 🔥 AUTO CATEGORY (MAIN FIX)
+  // ---------------------------
+  renderCategoryBreakdown(groupByCategory(data));
+
+  // ---------------------------
+  // 📅 DATE LABEL
+  // ---------------------------
   document.getElementById("graphDate").innerText =
     `${from} → ${to}`;
 }
@@ -2094,6 +2229,41 @@ function openCustomModal() {
 
   graphMode = true;
   modal.style.display = "flex";
+}
+function groupByCategory(data) {
+  let map = {};
+
+  data.forEach(e => {
+    map[e.category] = (map[e.category] || 0) + e.amount;
+  });
+
+  return map;
+}
+
+function renderCategoryBreakdown(map) {
+  let container = document.getElementById("categoryListGraph");
+  if (!container) return;
+
+  container.innerHTML = "";
+
+  Object.keys(map).forEach(cat => {
+    let div = document.createElement("div");
+    div.className = "expense-item";
+
+    div.innerHTML = `
+      <div>
+        <strong>${cat}</strong>
+      </div>
+      <div>₹${map[cat]}</div>
+    `;
+
+    container.appendChild(div);
+  });
+}
+
+function renderFullCategoryBreakdown(data) {
+  let map = groupByCategory(data);
+  renderCategoryBreakdown(map);
 }
 
 checkForUpdate();
