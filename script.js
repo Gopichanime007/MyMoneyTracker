@@ -1384,86 +1384,135 @@ function sumBy(fn) {
 //   doc.save("expenses-report.pdf");
 // }
 
+// function exportPDF() {
+//   if (chart) chart.destroy();
+
+//   let ctx = document.getElementById("myChart");
+
+//   let labels = [], expenseData = [], incomeData = [];
+
+//   for (let i = 0; i < 24; i++) {
+//     labels.push(i + ":00");
+
+//     let expense = 0;
+//     let income = 0;
+
+//     expenses.forEach(e => {
+//       let d = new Date(e.date);
+
+//       if (d.getHours() === i) {
+//         if (e.amount < 0) {
+//           expense += Math.abs(e.amount);
+//         } else {
+//           income += e.amount;
+//         }
+//       }
+//     });
+
+//     expenseData.push(expense);
+//     incomeData.push(income);
+//   }
+
+//   let budgetData = labels.map(() => dailyBudget);
+
+//   chart = new Chart(ctx, {
+//     type: "line",
+//     data: {
+//       labels,
+//       datasets: [
+//         {
+//           label: "Expenses",
+//           data: expenseData,
+//           borderColor: "#4CAF50",
+//           tension: 0.3
+//         },
+//         {
+//           label: "Income",
+//           data: incomeData,
+//           borderColor: "#42a5f5",
+//           tension: 0.3
+//         },
+//         {
+//           label: "Budget",
+//           data: budgetData,
+//           borderColor: "#FF7043",
+//           borderDash: [5, 5],
+//           tension: 0.3
+//         }
+//       ]
+//     },
+//     options: {
+//       responsive: true,
+//       maintainAspectRatio: false,
+
+//       animation: false,
+
+//       plugins: {
+//         legend: {
+//           display: true
+//         }
+//       },
+
+//       scales: {
+//         y: {
+//           beginAtZero: true
+//         }
+//       }
+//     }
+//   });
+//   setTimeout(() => {
+//     downloadPDF();
+//     loadGraph("day");
+//   }, 800);
+// }
 function exportPDF() {
-  if (chart) chart.destroy();
+  const element = document.getElementById("history");
 
-  let ctx = document.getElementById("myChart");
-
-  let labels = [], expenseData = [], incomeData = [];
-
-  for (let i = 0; i < 24; i++) {
-    labels.push(i + ":00");
-
-    let expense = 0;
-    let income = 0;
-
-    expenses.forEach(e => {
-      let d = new Date(e.date);
-
-      if (d.getHours() === i) {
-        if (e.amount < 0) {
-          expense += Math.abs(e.amount);
-        } else {
-          income += e.amount;
-        }
-      }
-    });
-
-    expenseData.push(expense);
-    incomeData.push(income);
+  if (!element) {
+    alert("History not found!");
+    return;
   }
 
-  let budgetData = labels.map(() => dailyBudget);
+  // 🔥 Force visible
+  document.querySelectorAll(".screen").forEach(s => s.classList.remove("active"));
+  element.classList.add("active");
 
-  chart = new Chart(ctx, {
-    type: "line",
-    data: {
-      labels,
-      datasets: [
-        {
-          label: "Expenses",
-          data: expenseData,
-          borderColor: "#4CAF50",
-          tension: 0.3
-        },
-        {
-          label: "Income",
-          data: incomeData,
-          borderColor: "#42a5f5",
-          tension: 0.3
-        },
-        {
-          label: "Budget",
-          data: budgetData,
-          borderColor: "#FF7043",
-          borderDash: [5, 5],
-          tension: 0.3
-        }
-      ]
-    },
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
-
-      animation: false,
-
-      plugins: {
-        legend: {
-          display: true
-        }
-      },
-
-      scales: {
-        y: {
-          beginAtZero: true
-        }
-      }
-    }
-  });
   setTimeout(() => {
-    downloadPDF();
-    loadGraph("day");
-  }, 800);
+    html2canvas(element, {
+      scale: 2,
+      useCORS: true
+    }).then(canvas => {
+
+      const imgData = canvas.toDataURL("image/png");
+
+      const { jsPDF } = window.jspdf;
+      const doc = new jsPDF("p", "mm", "a4");
+
+      const pageWidth = 210;
+      const pageHeight = 297;
+
+      const imgWidth = pageWidth;
+      const imgHeight = (canvas.height * imgWidth) / canvas.width;
+
+      let heightLeft = imgHeight;
+      let position = 0;
+
+      // 🔥 First page
+      doc.addImage(imgData, "PNG", 0, position, imgWidth, imgHeight);
+      heightLeft -= pageHeight;
+
+      // 🔥 Multi-page support
+      while (heightLeft > 0) {
+        position = heightLeft - imgHeight;
+        doc.addPage();
+        doc.addImage(imgData, "PNG", 0, position, imgWidth, imgHeight);
+        heightLeft -= pageHeight;
+      }
+
+      doc.save("expenses-report.pdf");
+    });
+
+  }, 500);
 }
 
 // function downloadPDF() {
