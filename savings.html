@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Savings</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+
+<body>
+
+<div class="app">
+
+  <!-- HEADER -->
+  <header class="header">
+    <h2>💰 Savings</h2>
+  </header>
+
+  <!-- NAV -->
+  <nav class="nav">
+    <button onclick="showSavingsScreen('home')">🏠</button>
+    <button onclick="showSavingsScreen('add')">➕</button>
+    <button onclick="showSavingsScreen('history')">📜</button>
+  </nav>
+
+  <!-- HOME -->
+  <section id="home" class="screen active">
+    <div class="card">
+      <h3>Total Savings</h3>
+      <h2 id="savingsBalance">₹0</h2>
+    </div>
+  </section>
+
+  <!-- ADD -->
+  <section id="add" class="screen">
+    <div class="card">
+      <h3>Add Savings</h3>
+
+      <select id="sType">
+        <option value="income">Income</option>
+        <option value="expense">Withdraw</option>
+      </select>
+
+      <input type="number" id="sAmount" placeholder="Amount" />
+      <input type="text" id="sPerson" placeholder="Person" />
+      <input type="text" id="sNote" placeholder="Note" />
+
+      <button class="primary" onclick="addSavings()">Add</button>
+    </div>
+  </section>
+
+  <!-- HISTORY -->
+  <section id="history" class="screen">
+    <div class="card">
+      <h3>History</h3>
+      <div id="savingsHistory"></div>
+    </div>
+  </section>
+
+  <button class="action-btn" onclick="goBack()">⬅ Back</button>
+
+</div>
+
+<script src="savings.js"></script>
+
+<script>
+  loadSavings();
+
+  function goBack() {
+    window.location.href = "index.html";
+  }
+</script>
+
+</body>
+</html>

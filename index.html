@@ -1,15 +1,18 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 
 <head>
-  <meta charset="UTF-8">
+  <meta charset="UTF-8" />
   <title>Money Tracker</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 
-  <!-- FONT (consistent everywhere) -->
+  <!-- Fonts -->
   <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600&display=swap" rel="stylesheet">
 
+  <!-- Styles -->
   <link rel="stylesheet" href="style.css">
+
+  <!-- Libraries -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
@@ -21,24 +24,25 @@
   <div class="app">
 
     <!-- HEADER -->
-    <div class="header">
+    <header class="header">
       <h2>💰 Money Tracker</h2>
-    </div>
+    </header>
 
-    <!-- NAV -->
-    <div class="nav">
-      <button onclick="showScreen('home')">🏠</button>
-      <button onclick="showScreen('add')">➕</button>
-      <button onclick="showScreen('history')">📜</button>
-      <button onclick="showScreen('budget')">💼</button>
-      <button onclick="showScreen('graph')">📊</button>
-      <button onclick="showScreen('settings')">⚙️</button>
-    </div>
+    <!-- NAVIGATION -->
+    <nav class="nav">
+      <button type="button" onclick="showScreen('home')">🏠</button>
+      <button type="button" onclick="showScreen('add')">➕</button>
+      <button type="button" onclick="showScreen('history')">📜</button>
+      <button type="button" onclick="showScreen('budget')">💼</button>
+      <button type="button" onclick="showScreen('graph')">📊</button>
+      <button type="button" onclick="showScreen('settings')">⚙️</button>
+    </nav>
 
-    <!-- HOME -->
-    <div id="home" class="screen active">
+    <!-- ================= HOME ================= -->
+    <section id="home" class="screen active">
       <div class="card">
         <h3>Dashboard</h3>
+
         <div class="dashboard-grid">
 
           <div class="dash-card budget">
@@ -51,7 +55,7 @@
             <h2>₹<span id="spent">0</span></h2>
           </div>
 
-          <div class="dash-card remaining">
+          <div id="remainingCard" class="dash-card remaining clickable-card">
             <span>Remaining</span>
             <h2>₹<span id="remaining">0</span></h2>
           </div>
@@ -63,36 +67,46 @@
 
         </div>
 
+        <!-- Progress -->
         <div class="progress-wrapper">
           <div class="progress-bar">
             <div id="progressFill" class="progress-fill"></div>
           </div>
           <p id="progressText"></p>
         </div>
-      </div>
-    </div>
 
-    <!-- ADD -->
-    <div id="add" class="screen">
+      </div>
+    </section>
+
+    <!-- ================= ADD ================= -->
+    <section id="add" class="screen">
       <div class="card">
-        <h3>Add Expense</h3>
+        <h3>Add Entry</h3>
+
         <select id="entryType">
           <option value="expense">Expense</option>
           <option value="income">Income</option>
         </select>
+
         <input type="number" id="amount" placeholder="Amount">
-
         <select id="category"></select>
-
         <input type="text" id="purpose" placeholder="Purpose (optional)">
         <input type="date" id="expenseDate">
 
-        <button class="primary" onclick="saveExpense()">Save</button>
-      </div>
-    </div>
+        <select id="paymentType">
+          <option value="Cash">Cash</option>
+          <option value="UPI">UPI</option>
+          <option value="PhonePe">PhonePe</option>
+          <option value="Google Pay">Google Pay</option>
+          <option value="Bank Transfer">Bank Transfer</option>
+        </select>
 
-    <!-- HISTORY -->
-    <div id="history" class="screen">
+        <button type="button" class="primary" onclick="saveExpense()">Save</button>
+      </div>
+    </section>
+
+    <!-- ================= HISTORY ================= -->
+    <section id="history" class="screen">
       <div class="card">
         <h3>History</h3>
 
@@ -103,110 +117,73 @@
           <option value="month">This Month</option>
           <option value="period">Custom Period</option>
         </select>
-        <div style="display:flex; gap:10px;">
-          <button class="icon-btn" onclick="exportPDF()">
-            <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor">
-              <path d="M5 20h14v-2H5v2z" />
-              <path d="M12 2v12m0 0l-4-4m4 4l4-4" stroke="currentColor" stroke-width="2" fill="none" />
-            </svg>
-          </button>
 
-          <button class="icon-btn" onclick="sharePDF()">
-            <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor">
-              <circle cx="18" cy="5" r="3" />
-              <circle cx="6" cy="12" r="3" />
-              <circle cx="18" cy="19" r="3" />
-              <path d="M8.59 13.51L15.42 17.49M15.41 6.51L8.59 10.49" stroke="currentColor" stroke-width="2"
-                fill="none" />
-            </svg>
-          </button>
+        <div style="display:flex; gap:10px; margin-top:10px;">
+          <button type="button" class="icon-btn" onclick="exportPDF()">⬇</button>
+          <button type="button" class="icon-btn" onclick="sharePDF()">📤</button>
         </div>
+
         <div id="historyList"></div>
       </div>
-    </div>
+    </section>
 
-    <!-- BUDGET -->
-    <div id="budget" class="screen">
+    <!-- ================= BUDGET ================= -->
+    <section id="budget" class="screen">
       <div class="card">
-        <h3>Set Budget</h3>
+        <h3>Budget</h3>
 
-        <!-- Current Budget -->
-        <p>Current Budget: ₹<span id="currentBudget">0</span></p>
+        <p>Current: ₹<span id="currentBudget">0</span></p>
 
-        <!-- Budget Type -->
         <select id="budgetType">
           <option value="daily">Daily</option>
           <option value="weekly">Weekly</option>
           <option value="monthly" selected>Monthly</option>
         </select>
 
-        <!-- Month + Year -->
         <input type="month" id="budgetMonth">
+        <input type="number" id="budgetAmount" placeholder="Amount">
 
-        <!-- Amount -->
-        <input type="number" id="budgetAmount" placeholder="Enter amount">
+        <p>Daily Limit: ₹<span id="calculatedDaily">0</span></p>
 
-        <!-- Daily Calculation -->
-        <p>Daily Budget: ₹<span id="calculatedDaily">0</span></p>
-
-        <!-- Save Button -->
-        <button class="primary" onclick="saveBudget()">Save</button>
+        <button type="button" class="primary" onclick="saveBudget()">Save</button>
       </div>
-    </div>
+    </section>
 
-    <!-- GRAPH
-    <div id="graph" class="screen">
+    <!-- ================= GRAPH ================= -->
+    <section id="graph" class="screen">
       <div class="card">
         <h3>Analytics</h3>
 
-        <select onchange="loadGraph(this.value)">
-          <option value="day">Day</option>
-          <option value="week">Week</option>
-          <option value="month">Month</option>
-        </select>
-
-        <canvas id="myChart"></canvas>
-      </div>
-    </div> -->
-
-    <div id="graph" class="screen">
-      <div class="card">
-        <h3>Analytics</h3>
-
-        <div style="display:flex; gap:8px; align-items:center;">
-
-          <select onchange="handleGraphFilter(this.value)" style="flex:1;">
+        <div style="display:flex; gap:8px;">
+          <select onchange="handleGraphFilter(this.value)">
             <option value="day">Day</option>
             <option value="week">Week</option>
             <option value="month">Month</option>
           </select>
 
-          <button class="icon-btn" onclick="openCustomModal()">📅</button>
-
+          <button type="button" class="icon-btn" onclick="openCustomModal()">📅</button>
         </div>
 
-        <!-- 🔥 FIX START -->
         <div class="chart-container">
           <canvas id="myChart"></canvas>
         </div>
-        <div id="categoryBreakdown" class="card" style="margin-top:10px;">
+
+        <div class="card" style="margin-top:10px;">
           <h4>Category Breakdown</h4>
           <div id="categoryListGraph"></div>
         </div>
-        <!-- 🔥 FIX END -->
-        <div id="graphDate" style="text-align:center; font-size:12px; color:#777; margin-top:6px;"></div>
 
+        <div id="graphDate" style="text-align:center; font-size:12px; color:#777;"></div>
       </div>
-    </div>
+    </section>
 
-    <!-- SETTINGS -->
-    <!-- SETTINGS -->
-    <div id="settings" class="screen">
+    <!-- ================= SETTINGS ================= -->
+    <section id="settings" class="screen">
       <div class="card">
 
         <h3>Settings</h3>
 
-        <!-- THEME -->
+        <!-- Theme -->
         <h4>Theme</h4>
         <select onchange="handleTheme(this.value)">
           <option value="#4caf50">Green</option>
@@ -215,40 +192,30 @@
           <option value="custom">Custom</option>
         </select>
 
-        <input type="color" id="colorPicker" style="display:none; margin-top:10px;"
-          onchange="applyCustomColor(this.value)">
+        <input type="color" id="colorPicker" style="display:none;" onchange="applyCustomColor(this.value)">
 
-        <!-- ADD CATEGORY -->
+        <!-- Category -->
         <h4>Add Category</h4>
         <input type="text" id="newCategory" placeholder="New category">
-        <button onclick="addCategory()">Add</button>
+        <button type="button" onclick="addCategory()">Add</button>
 
-        <!-- CATEGORY LIST (✅ MOVED HERE) -->
-        <h4 onclick="openCategoryModal()" style="cursor:pointer;">
-          Your Categories ⬇️
-        </h4>
+        <h4 onclick="openCategoryModal()" style="cursor:pointer;">Your Categories ⬇️</h4>
 
-        <!-- MODAL -->
+        <!-- Modal -->
         <div id="categoryModal" class="modal">
           <div class="modal-content">
             <h3>Your Categories</h3>
-
             <div id="categoryList"></div>
-
-            <div class="modal-actions">
-              <button onclick="closeCategoryModal()">Close</button>
-            </div>
+            <button type="button" onclick="closeCategoryModal()">Close</button>
           </div>
         </div>
 
-        <!--<p class="version">App Vers.1.1</p>-->
-
       </div>
-    </div>
+    </section>
 
   </div>
 
-  <!-- MODAL -->
+  <!-- DATE MODAL -->
   <div id="dateModal" class="modal">
     <div class="modal-content">
       <h3>Select Period</h3>
@@ -256,13 +223,12 @@
       <input type="date" id="fromDate">
       <input type="date" id="toDate">
 
-      <div class="modal-actions">
-        <button type="button" onclick="applyDateFilter()">Apply</button>
-        <button type="button" onclick="closeModal()">Cancel</button>
-      </div>
+      <button type="button" onclick="applyDateFilter()">Apply</button>
+      <button type="button" onclick="closeModal()">Cancel</button>
     </div>
   </div>
 
+  <!-- SCRIPT -->
   <script src="script.js"></script>
 
 </body>

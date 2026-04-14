@@ -5,12 +5,13 @@ let expenses = JSON.parse(localStorage.getItem("expenses")) || [];
 let categories = JSON.parse(localStorage.getItem("categories")) || [];
 let budget = Number(localStorage.getItem("budget")) || 0;
 let dailyBudget = Number(localStorage.getItem("dailyBudget")) || 0;
+let budgetAllocations = JSON.parse(localStorage.getItem("budgetAllocations")) || {};
 
 let chart;
-const appVersion = "1.1"; // change every update
 let graphMode = false;
 
 let isClosingModal = false;
+let transfers = JSON.parse(localStorage.getItem("transfers")) || [];
 
 /* =========================
    🚀 INIT
@@ -21,10 +22,8 @@ window.onload = () => {
   updateUI();
   showDate();
   renderCategoryList();
-  loadVersion();
   setDefaultDate();
 
-  // 🔥 Budget init
   let monthInput = document.getElementById("budgetMonth");
   if (monthInput) {
     monthInput.value = new Date().toISOString().slice(0, 7);
@@ -32,7 +31,15 @@ window.onload = () => {
 
   loadBudgetUI();
   migrateOldData();
+  initSecretTap();
 };
+function getTotalBudget(monthKey) {
+  let budgetAllocations = JSON.parse(localStorage.getItem("budgetAllocations")) || {};
+
+  let allocations = budgetAllocations[monthKey] || [];
+
+  return allocations.reduce((sum, b) => sum + b.amount, 0);
+}
 
 function hexToRgb(hex) {
   let bigint = parseInt(hex.replace("#", ""), 16);
@@ -164,10 +171,11 @@ function saveExpense() {
   let purpose = document.getElementById("purpose").value;
   let selectedDate = document.getElementById("expenseDate").value;
   let type = document.getElementById("entryType").value;
+  let paymentType = document.getElementById("paymentType").value;
 
   if (!amount) return alert("Enter amount!");
 
-  // 🔥 FORCE SIGN BASED ON TYPE
+  // 🔥 FORCE SIGN
   if (type === "expense") {
     amount = -Math.abs(amount);
   } else {
@@ -179,16 +187,46 @@ function saveExpense() {
 
   selected.setHours(now.getHours(), now.getMinutes(), now.getSeconds());
 
+  // 🔥 MONTH KEY FROM SELECTED DATE
+  let monthKey = selectedDate.slice(0, 7);
+
+  // 🔥 UNIQUE ID (SAFE)
+  let id = Date.now() + "-" + Math.floor(Math.random() * 1000);
+
+  // 🔥 DISPLAY ID (READABLE)
+  let day = selectedDate.split("-")[2];
+
+  let counterMap = JSON.parse(localStorage.getItem("idCounter")) || {};
+  let key = `${monthKey}-${day}`;
+
+  let serial = (counterMap[key] || 0) + 1;
+  counterMap[key] = serial;
+
+  localStorage.setItem("idCounter", JSON.stringify(counterMap));
+
+  let displayId = `${key}-${String(serial).padStart(3, '0')}`;
+
+  // 🔥 SAVE OBJECT
   expenses.push({
+    id,
+    displayId,
+
     amount,
     category,
     purpose,
-    type, // 🔥 NEW FIELD
+
+    type,
+    paymentType,
+
+    source: "budget",   // 🔥 AUTO
+
+    monthKey,
     date: selected.toISOString()
   });
 
   localStorage.setItem("expenses", JSON.stringify(expenses));
 
+  // RESET
   document.getElementById("amount").value = "";
   document.getElementById("purpose").value = "";
   document.getElementById("entryType").value = "expense";
@@ -212,18 +250,28 @@ function saveBudget() {
   if (!amount) return alert("Enter budget");
   if (!month) return alert("Select month");
 
-  // 🔥 Get existing budgets
-  let monthlyBudgets = JSON.parse(localStorage.getItem("monthlyBudgets")) || {};
+  // 🔥 LOAD ALLOCATION STORAGE
+  let budgetAllocations = JSON.parse(localStorage.getItem("budgetAllocations")) || {};
 
-  // 🔥 Save for selected month
-  monthlyBudgets[month] = amount;
+  if (!budgetAllocations[month]) {
+    budgetAllocations[month] = [];
+  }
 
-  localStorage.setItem("monthlyBudgets", JSON.stringify(monthlyBudgets));
+  // 🔥 ADD NEW ALLOCATION (NO OVERWRITE)
+  budgetAllocations[month].push({
+    amount: amount,
+    type: type,
+    date: new Date().toISOString()
+  });
 
-  // 🔥 UI update
-  document.getElementById("currentBudget").innerText = amount;
+  localStorage.setItem("budgetAllocations", JSON.stringify(budgetAllocations));
 
-  // 🔥 Calculate daily
+  // 🔥 CALCULATE TOTAL BUDGET
+  let totalBudget = budgetAllocations[month].reduce((sum, b) => sum + b.amount, 0);
+
+  document.getElementById("currentBudget").innerText = totalBudget;
+
+  // 🔥 DAILY CALCULATION (based on latest entry)
   let daily = 0;
 
   if (type === "monthly") {
@@ -238,11 +286,16 @@ function saveBudget() {
 
   document.getElementById("calculatedDaily").innerText = Math.floor(daily);
 
-  // optional (for existing system compatibility)
-  localStorage.setItem("budget", amount);
+  // 🔥 OPTIONAL (for compatibility with old system)
+  localStorage.setItem("budget", totalBudget);
   localStorage.setItem("dailyBudget", daily);
 
-  alert("Budget saved for " + month);
+  // RESET
+  document.getElementById("budgetAmount").value = "";
+
+  alert("Budget updated for " + month);
+
+  updateUI();
 }
 
 /* =========================
@@ -252,17 +305,15 @@ function saveBudget() {
 function loadBudgetUI() {
   let month = new Date().toISOString().slice(0, 7);
 
-  let monthlyBudgets = JSON.parse(localStorage.getItem("monthlyBudgets")) || {};
+  let totalBudget = getTotalBudget(month);
 
-  let amount = monthlyBudgets[month] || 0;
+  document.getElementById("currentBudget").innerText = totalBudget;
 
-  document.getElementById("currentBudget").innerText = amount;
-
-  // calculate daily
+  // 🔥 daily calculation
   let [year, mon] = month.split("-");
   let days = new Date(year, mon, 0).getDate();
 
-  let daily = amount / days;
+  let daily = totalBudget / days;
 
   document.getElementById("calculatedDaily").innerText = Math.floor(daily);
 }
@@ -2073,14 +2124,16 @@ function exportPDF() {
 //   a.download = "expenses-report.pdf";
 //   a.click();
 // }
+function getTotalBudget(monthKey) {
+  let budgetAllocations = JSON.parse(localStorage.getItem("budgetAllocations")) || {};
+  let allocations = budgetAllocations[monthKey] || [];
+  return allocations.reduce((sum, b) => sum + b.amount, 0);
+}
 
 function downloadPDF() {
   const { jsPDF } = window.jspdf;
   const doc = new jsPDF();
 
-  // =========================
-  // 📦 DATA SOURCE
-  // =========================
   const dataSource = currentFilteredExpenses.length
     ? currentFilteredExpenses
     : expenses;
@@ -2088,172 +2141,158 @@ function downloadPDF() {
   let y = 12;
 
   // =========================
-  // 🟢 HEADER TITLE
+  // 🟢 HEADER CARD
   // =========================
-  doc.setFontSize(18);
+  doc.setFillColor(245, 245, 245);
+  doc.roundedRect(10, 8, 190, 22, 3, 3, "F");
+
+  doc.setFontSize(16); // 🔽 reduced
   doc.setFont(undefined, "bold");
-  doc.text("Money Tracker Report", 14, y);
+  doc.text("Money Tracker Report", 14, 17);
 
-  y += 7;
-
-  doc.setFontSize(9);
-  doc.setTextColor(120);
-  doc.text(`Generated on: ${new Date().toLocaleString()}`, 14, y);
-
-  y += 5;
-  doc.text(`Total Entries: ${dataSource.length}`, 14, y);
+  doc.setFontSize(8); // 🔽 reduced
+  doc.setTextColor(100);
+  doc.text(`Generated on: ${new Date().toLocaleString()}`, 14, 22);
+  doc.text(`Total Entries: ${dataSource.length}`, 14, 26);
 
   doc.setTextColor(0);
-
-  y += 3;
-  doc.line(10, y, 200, y);
-
-  y += 6;
+  y = 34;
 
   // =========================
-  // 📊 COLUMN POSITIONS
+  // 💰 SUMMARY CARDS
+  // =========================
+  const drawCard = (x, title, value, r, g, b) => {
+    doc.setFillColor(252, 252, 252);
+    doc.setDrawColor(230);
+    doc.roundedRect(x, y, 60, 18, 3, 3, "FD");
+
+    doc.setFontSize(8);
+    doc.setTextColor(120);
+    doc.text(title, x + 5, y + 6);
+
+    doc.setFontSize(11);
+    doc.setTextColor(r, g, b);
+    doc.text(`Rs. ${value}`, x + 5, y + 13);
+  };
+
+  const totalIncome = dataSource.filter(e => e.amount > 0)
+    .reduce((s, e) => s + e.amount, 0);
+
+  const totalExpense = dataSource.filter(e => e.amount < 0)
+    .reduce((s, e) => s + Math.abs(e.amount), 0);
+
+  const net = totalIncome - totalExpense;
+
+  drawCard(10, "Income", totalIncome, 0, 150, 0);
+  drawCard(75, "Expense", totalExpense, 200, 0, 0);
+  drawCard(140, "Net", net, net >= 0 ? 0 : 200, net >= 0 ? 150 : 0, 0);
+
+  y += 28;
+
+  // =========================
+  // 📊 TABLE HEADER
   // =========================
   const col = {
     date: 20,
-    type: 50,
-    category: 80,
-    amount: 135,
-    purpose: 150
+    type: 45,
+    category: 70,
+    payment: 100,
+    amount: 150,
+    purpose: 170
   };
 
-  // =========================
-  // 🎨 THEME HEADER
-  // =========================
   const theme = localStorage.getItem("theme") || "#4caf50";
   const { r, g, b } = hexToRgb(theme);
 
-  const headerY = y;
+  doc.setFillColor(Math.max(0, r - 20), Math.max(0, g - 20), Math.max(0, b - 20));
+  doc.rect(10, y - 5, 190, 9, "F"); // 🔽 reduced height
 
-  doc.setFillColor(r, g, b);
-  doc.rect(10, headerY - 5, 190, 10, "F");
-
-  const textColor = getContrastColor(r, g, b);
-  doc.setTextColor(textColor === "white" ? 255 : 0);
-
+  doc.setTextColor(255);
   doc.setFont(undefined, "bold");
+  doc.setFontSize(9); // 🔽 reduced
 
-  const textY = headerY + 1;
+  doc.text("Date", col.date, y + 2, { align: "center" });
+  doc.text("Type", col.type, y + 2, { align: "center" });
+  doc.text("Category", col.category, y + 2);
 
-  doc.text("Date", col.date, textY, { align: "center" });
-  doc.text("Type", col.type, textY, { align: "center" });
-  doc.text("Category", col.category, textY);
-  doc.text("Amount", col.amount, textY, { align: "right" });
-  doc.text("Purpose", col.purpose, textY);
+  // ✅ SINGLE LINE PayType
+  doc.text("PayType", col.payment, y + 2);
 
-  y += 10;
+  doc.text("Amount", col.amount, y + 2, { align: "right" });
+  doc.text("Purpose", col.purpose, y + 2);
+
+  y += 9;
 
   // =========================
   // 📄 TABLE DATA
   // =========================
   doc.setTextColor(0);
   doc.setFont(undefined, "normal");
-
-  let totalIncome = 0;
-  let totalExpense = 0;
+  doc.setFontSize(8); // 🔽 reduced
 
   dataSource.forEach((e, index) => {
     const date = new Date(e.date).toLocaleDateString("en-IN");
     const category = e.category;
     const amount = e.amount;
-    const purpose = e.purpose || "-";
-    const type = e.type || (amount < 0 ? "expense" : "income");
+    const purpose = e.purpose || "N/A";
+    const payment = e.paymentType || "-";
+    const type = amount < 0 ? "Expense" : "Income";
 
-    if (amount > 0) totalIncome += amount;
-    else totalExpense += Math.abs(amount);
+    const formatted = new Intl.NumberFormat("en-IN").format(Math.abs(amount));
 
-    const formatted = new Intl.NumberFormat("en-IN").format(amount);
-
-    // Page break
     if (y > 280) {
       doc.addPage();
       y = 20;
     }
 
-    // Alternate row color
     if (index % 2 === 0) {
-      doc.setFillColor(235, 235, 235);
-      doc.rect(10, y - 5, 190, 8, "F");
+      doc.setFillColor(248, 248, 248);
+      doc.rect(10, y - 4, 190, 8, "F");
     }
 
-    // Date
     doc.text(date, col.date, y, { align: "center" });
 
-    // Type
-    doc.setTextColor(type === "expense" ? 200 : 0, type === "expense" ? 0 : 150, 0);
-    doc.text(type === "expense" ? "Expense" : "Income", col.type, y, { align: "center" });
+    doc.setTextColor(amount < 0 ? 200 : 0, amount < 0 ? 0 : 150, 0);
+    doc.text(type, col.type, y, { align: "center" });
 
     doc.setTextColor(0);
-
-    // Category
     doc.text(category, col.category, y);
 
-    // Amount
+    doc.text(payment, col.payment, y);
+
     doc.setTextColor(amount < 0 ? 200 : 0, amount < 0 ? 0 : 150, 0);
     doc.text(`Rs. ${formatted}`, col.amount, y, { align: "right" });
 
     doc.setTextColor(0);
 
-    // Purpose (multi-line)
-    const splitPurpose = doc.splitTextToSize(purpose, 55);
+    const splitPurpose = doc.splitTextToSize(purpose, 40);
     doc.text(splitPurpose, col.purpose, y);
 
-    y += Math.max(8, splitPurpose.length * 5);
+    y += Math.max(9, splitPurpose.length * 5);
   });
-
-  // =========================
-  // 💰 SUMMARY
-  // =========================
-  y += 8;
-  doc.line(10, y, 200, y);
-
-  y += 10;
-  doc.setFont(undefined, "bold");
-
-  doc.setTextColor(0, 150, 0);
-  doc.text(`Income: Rs. ${totalIncome}`, 14, y);
-
-  y += 8;
-
-  doc.setTextColor(200, 0, 0);
-  doc.text(`Expense: Rs. ${totalExpense}`, 14, y);
-
-  y += 8;
-
-  const net = totalIncome - totalExpense;
-  doc.setTextColor(net >= 0 ? 0 : 200, net >= 0 ? 150 : 0, 0);
-  doc.text(`Net Balance: Rs. ${net}`, 14, y);
-
-  doc.setTextColor(0);
 
   // =========================
   // 🟣 BUDGET SUMMARY
   // =========================
-  y += 12;
+  y += 8;
 
-  if (y > 260) {
-    doc.addPage();
-    y = 20;
-  }
+  doc.setDrawColor(200);
+  doc.line(10, y, 200, y);
 
-  doc.setFontSize(13);
+  y += 6;
+
+  doc.setFontSize(11);
+  doc.setFont(undefined, "bold");
   doc.text("Budget Summary (Monthly)", 14, y);
 
   y += 5;
-  doc.setFontSize(9);
+  doc.setFontSize(8);
   doc.setTextColor(120);
   doc.text("Overview of budget vs spending", 14, y);
 
   doc.setTextColor(0);
 
-  y += 6;
-  doc.line(10, y, 200, y);
-
-  y += 8;
+  y += 5;
 
   const mcol = {
     month: 14,
@@ -2263,21 +2302,20 @@ function downloadPDF() {
   };
 
   doc.setFont(undefined, "bold");
+  doc.setFontSize(8);
 
   doc.text("Month", mcol.month, y);
   doc.text("Budget", mcol.budget, y, { align: "right" });
   doc.text("Spent", mcol.spent, y, { align: "right" });
   doc.text("Remaining", mcol.remaining, y, { align: "right" });
 
-  y += 6;
+  y += 5;
   doc.setFont(undefined, "normal");
 
   const monthMap = {};
 
   dataSource.forEach(e => {
-    const d = new Date(e.date);
-    const key = d.toLocaleString("en-IN", { month: "short", year: "numeric" });
-
+    let key = new Date(e.date).toISOString().slice(0, 7);
     if (!monthMap[key]) monthMap[key] = 0;
 
     if (e.amount < 0) {
@@ -2286,8 +2324,9 @@ function downloadPDF() {
   });
 
   Object.keys(monthMap).forEach((month, index) => {
-    const spent = monthMap[month];
-    const remaining = budget - spent;
+    let spent = monthMap[month];
+    let budget = getTotalBudget(month);
+    let remaining = budget - spent;
 
     if (y > 280) {
       doc.addPage();
@@ -2295,8 +2334,8 @@ function downloadPDF() {
     }
 
     if (index % 2 === 0) {
-      doc.setFillColor(235, 235, 235);
-      doc.rect(10, y - 4, 190, 8, "F");
+      doc.setFillColor(248, 248, 248);
+      doc.rect(10, y - 3, 190, 7, "F");
     }
 
     doc.text(month, mcol.month, y);
@@ -2308,13 +2347,13 @@ function downloadPDF() {
 
     doc.setTextColor(0);
 
-    y += 8;
+    y += 7;
   });
 
   // =========================
   // 💾 SAVE
   // =========================
-  doc.save("expenses-report.pdf");
+  doc.save("money-tracker-report.pdf");
 }
 /* =========================
    🎨 THEME
@@ -2341,20 +2380,6 @@ function loadTheme() {
   if (t) changeTheme(t);
 }
 
-function checkForUpdate() {
-  const savedVersion = localStorage.getItem("app_version");
-
-  if (savedVersion && savedVersion !== APP_VERSION) {
-
-    if (confirm("🚀 New version available!\n\nClick OK to update now.")) {
-      localStorage.setItem("app_version", APP_VERSION);
-      location.reload(true);
-    }
-
-  } else {
-    localStorage.setItem("app_version", APP_VERSION);
-  }
-}
 async function sharePDF() {
   const { jsPDF } = window.jspdf;
 
@@ -2385,32 +2410,53 @@ async function sharePDF() {
    📊 UI
 ========================= */
 function updateUI() {
-  let spent = expenses
+  // =========================
+  // 📊 BASIC CALCULATIONS
+  // =========================
+  const today = new Date().toISOString().split("T")[0];
+  const currentMonth = new Date().toISOString().slice(0, 7);
+
+  const totalBudget = getTotalBudget(currentMonth);
+
+  const spent = expenses
     .filter(e => e.amount < 0)
-    .reduce((s, e) => s + Math.abs(e.amount), 0);
+    .reduce((sum, e) => sum + Math.abs(e.amount), 0);
 
-  let income = expenses
+  const income = expenses
     .filter(e => e.amount > 0)
-    .reduce((s, e) => s + e.amount, 0);
+    .reduce((sum, e) => sum + e.amount, 0);
 
-  let total = income - spent;
+  const remaining = totalBudget - spent;
 
-  let today = new Date().toISOString().split("T")[0];
-
-  let todaySpent = expenses
-    .filter(e => e.date.startsWith(today))
-    .reduce((s, e) => s + e.amount, 0);
-
-  document.getElementById("budgetValue").innerText = budget;
-  document.getElementById("spent").innerText = spent;
-  document.getElementById("remaining").innerText = budget - spent;
-  document.getElementById("todaySpent").innerText = expenses
+  const todaySpent = expenses
     .filter(e => e.date.startsWith(today) && e.amount < 0)
-    .reduce((s, e) => s + Math.abs(e.amount), 0);
+    .reduce((sum, e) => sum + Math.abs(e.amount), 0);
+
+  // =========================
+  // 📅 DAILY LIMIT
+  // =========================
+  let [year, month] = currentMonth.split("-");
+  let daysInMonth = new Date(year, month, 0).getDate();
+
+  const dailyLimit = totalBudget > 0 ? totalBudget / daysInMonth : 0;
+
+  // =========================
+  // 🖥️ UI UPDATE
+  // =========================
+  document.getElementById("budgetValue").innerText = totalBudget;
+  document.getElementById("spent").innerText = spent;
+  document.getElementById("remaining").innerText = remaining;
+  document.getElementById("todaySpent").innerText = todaySpent;
+
   const dailyEl = document.getElementById("dailyLimit");
-  if (dailyEl) dailyEl.innerText = Math.floor(dailyBudget);
-  // 🔥 Progress calculation
-  updateProgressBar(spent, budget);
+  if (dailyEl) {
+    dailyEl.innerText = Math.floor(dailyLimit);
+  }
+
+  // =========================
+  // 📊 PROGRESS BAR
+  // =========================
+  updateProgressBar(spent, totalBudget);
 }
 
 function updateProgressBar(total, budget) {
@@ -2601,18 +2647,6 @@ function showDate() {
   if (el) el.innerText = new Date().toLocaleString();
 }
 
-function loadVersion() {
-  setTimeout(() => {
-    const el = document.getElementById("appVersion");
-
-    if (!el) {
-      console.log("❌ Version element not found");
-      return;
-    }
-
-    el.textContent = "v" + appVersion;
-  }, 200);
-}
 function openCustomModal() {
   const modal = document.getElementById("dateModal");
 
@@ -2669,28 +2703,257 @@ function renderFullCategoryBreakdown(data) {
 function migrateOldData() {
   let updated = false;
 
-  expenses.forEach(e => {
-    if (!e.type) {
-      // 🔥 OLD SYSTEM DETECTED
+  let counterMap = JSON.parse(localStorage.getItem("idCounter")) || {};
 
+  expenses.forEach(e => {
+
+    // 🔥 FIX TYPE + SIGN
+    if (!e.type) {
       if (e.amount > 0) {
-        // OLD: expense was positive
         e.type = "expense";
-        e.amount = -Math.abs(e.amount); // FIX SIGN
+        e.amount = -Math.abs(e.amount);
       } else {
-        // OLD: income was negative
         e.type = "income";
-        e.amount = Math.abs(e.amount); // FIX SIGN
+        e.amount = Math.abs(e.amount);
+      }
+      updated = true;
+    }
+
+    // 🔥 PAYMENT TYPE (CATEGORY BASED)
+    // 🔥 PAYMENT TYPE (TARGETED FIX)
+    if (!e.paymentType) {
+      let d = new Date(e.date);
+      let day = String(d.getDate()).padStart(2, "0");
+      let month = String(d.getMonth() + 1).padStart(2, "0");
+      let year = d.getFullYear();
+
+      let formattedDate = `${day}/${month}/${year}`;
+
+      // 🔥 YOUR SPECIFIC ENTRIES
+      if (
+        (Math.abs(e.amount) === 210 && formattedDate === "12/04/2026") ||
+        (Math.abs(e.amount) === 70 && formattedDate === "13/04/2026") ||
+        (Math.abs(e.amount) === 65 && formattedDate === "09/04/2026")
+      ) {
+        e.paymentType = "Cash";
+      } else {
+        e.paymentType = "PhonePe";
       }
 
       updated = true;
     }
+
+    // 🔥 SOURCE (ALL EXPENSE FROM BUDGET)
+    if (!e.source) {
+      e.source = "budget";
+      updated = true;
+    }
+
+    // 🔥 MONTH KEY
+    if (!e.monthKey) {
+      let d = new Date(e.date);
+      e.monthKey = d.toISOString().slice(0, 7);
+      updated = true;
+    }
+
+    // 🔥 UNIQUE ID
+    if (!e.id) {
+      e.id = Date.now() + "-" + Math.floor(Math.random() * 1000);
+      updated = true;
+    }
+
+    // 🔥 DISPLAY ID (READABLE)
+    if (!e.displayId) {
+      let d = new Date(e.date);
+
+      let monthKey = d.toISOString().slice(0, 7);
+      let day = String(d.getDate()).padStart(2, "0");
+
+      let key = `${monthKey}-${day}`;
+      let serial = (counterMap[key] || 0) + 1;
+      counterMap[key] = serial;
+
+      e.displayId = `${key}-${String(serial).padStart(3, '0')}`;
+
+      updated = true;
+    }
+
   });
+
+  localStorage.setItem("idCounter", JSON.stringify(counterMap));
 
   if (updated) {
     localStorage.setItem("expenses", JSON.stringify(expenses));
-    console.log("✅ Old data corrected & migrated");
+    console.log("✅ Data migrated successfully");
   }
 }
+/* =========================
+   🔐 SECRET NAVIGATION (PRO)
+========================= */
 
-checkForUpdate();
+function initSecretTap() {
+  const card = document.getElementById("remainingCard");
+  if (!card) return;
+
+  let taps = 0;
+  let timer;
+
+  card.addEventListener("click", () => {
+    taps++;
+
+    // 🔥 subtle feedback
+    card.style.transform = "scale(0.95)";
+    setTimeout(() => (card.style.transform = "scale(1)"), 120);
+
+    // 🔄 reset timer
+    clearTimeout(timer);
+    timer = setTimeout(() => {
+      taps = 0;
+    }, 1500);
+
+    // 🧠 DEBUG (optional remove later)
+    console.log("Secret taps:", taps);
+
+    // 🎯 SECRET 1 → Savings
+    if (taps === 5) {
+      unlockEffect(card);
+      navigateTo("savings.html");
+      taps = 0;
+    }
+
+    // 🎯 SECRET 2 → Transfer (optional)
+    if (taps === 10) {
+      unlockEffect(card);
+      navigateTo("transfer.html");
+      taps = 0;
+    }
+  });
+}
+
+/* =========================
+   ✨ UNLOCK EFFECT
+========================= */
+function unlockEffect(el) {
+  el.style.transition = "all 0.3s ease";
+  el.style.boxShadow = "0 0 20px #4caf50";
+  el.style.transform = "scale(1.05)";
+
+  setTimeout(() => {
+    el.style.boxShadow = "";
+    el.style.transform = "scale(1)";
+  }, 300);
+}
+
+/* =========================
+   🚀 NAVIGATION HANDLER
+========================= */
+function navigateTo(page) {
+  setTimeout(() => {
+    window.location.href = page;
+  }, 200); // slight delay = premium feel
+}
+
+function saveTransfer() {
+  let person = document.getElementById("tPerson").value;
+  let direction = document.getElementById("tDirection").value;
+  let amount = Number(document.getElementById("tAmount").value);
+  let payment = document.getElementById("tPayment").value;
+  let note = document.getElementById("tNote").value;
+
+  if (!person || !amount) return alert("Enter data");
+
+  let obj = {
+    id: Date.now(),
+    person,
+    direction,
+    amount,
+    payment,
+    note,
+    date: new Date().toISOString()
+  };
+
+  transfers.push(obj);
+  localStorage.setItem("transfers", JSON.stringify(transfers));
+
+  // 🔥 IMPORTANT: Affect Savings
+  applyTransferToSavings(obj);
+
+  document.getElementById("tPerson").value = "";
+  document.getElementById("tAmount").value = "";
+  document.getElementById("tNote").value = "";
+
+  loadTransferUI();
+}
+function applyTransferToSavings(t) {
+  let savingsTransactions =
+    JSON.parse(localStorage.getItem("savingsTransactions")) || [];
+
+  let entry = {
+    id: Date.now(),
+    amount: t.amount,
+    type: "transfer",
+    person: t.person,
+    payment: t.payment,
+    date: t.date
+  };
+
+  savingsTransactions.push(entry);
+
+  localStorage.setItem("savingsTransactions", JSON.stringify(savingsTransactions));
+}
+function calculatePersonBalance(name) {
+
+  let given = transfers
+    .filter(t => t.person === name && t.direction === "given")
+    .reduce((s, t) => s + t.amount, 0);
+
+  let received = transfers
+    .filter(t => t.person === name && t.direction === "received")
+    .reduce((s, t) => s + t.amount, 0);
+
+  return given - received;
+}
+function loadTransferUI() {
+
+  let summaryDiv = document.getElementById("peopleSummary");
+  let historyDiv = document.getElementById("transferHistory");
+
+  summaryDiv.innerHTML = "";
+  historyDiv.innerHTML = "";
+
+  let people = [...new Set(transfers.map(t => t.person))];
+
+  // 🔥 SUMMARY
+  people.forEach(name => {
+    let bal = calculatePersonBalance(name);
+
+    let div = document.createElement("div");
+    div.className = "expense-item";
+
+    div.innerHTML = `
+      <strong>${name}</strong><br>
+      Balance: ₹${bal}
+    `;
+
+    summaryDiv.appendChild(div);
+  });
+
+  // 🔥 HISTORY
+  transfers.slice().reverse().forEach(t => {
+
+    let div = document.createElement("div");
+    div.className = "expense-item";
+
+    div.innerHTML = `
+      <strong>${t.person}</strong> - ₹${t.amount}<br>
+      <small>${t.direction} • ${t.payment}</small>
+    `;
+
+    historyDiv.appendChild(div);
+  });
+
+}
+function showScreen(id) {
+  document.querySelectorAll(".screen").forEach(s => s.classList.remove("active"));
+  document.getElementById(id).classList.add("active");
+}

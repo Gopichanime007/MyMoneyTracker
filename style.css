@@ -416,3 +416,11 @@ button.action-btn:active {
 .icon-btn:active {
   transform: scale(0.95);
 }
+
+.clickable-card {
+  cursor: pointer;
+}
+
+.clickable-card:active {
+  transform: scale(0.98);
+}
