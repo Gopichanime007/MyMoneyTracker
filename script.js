@@ -64,31 +64,28 @@ function setDefaultDate() {
    🧭 NAVIGATION
 ========================= */
 function showScreen(id) {
-  // ---------------------------
-  // 🧭 SCREEN SWITCH
-  // ---------------------------
-  document.querySelectorAll(".screen").forEach(s => s.classList.remove("active"));
-  document.getElementById(id).classList.add("active");
+  const screens = document.querySelectorAll(".screen");
+  const buttons = document.querySelectorAll(".nav button");
 
-  // ---------------------------
-  // 🔥 NAV ACTIVE STATE
-  // ---------------------------
-  document.querySelectorAll(".nav button").forEach(btn => {
+  // 🧭 switch screens
+  screens.forEach(s => s.classList.remove("active"));
+  const target = document.getElementById(id);
+  if (target) target.classList.add("active");
+
+  // 🔥 FIX ACTIVE NAV (SAFE)
+  buttons.forEach(btn => {
     btn.classList.remove("active");
+
+    if (btn.dataset.screen === id) {
+      btn.classList.add("active");
+    }
   });
 
-  // Find clicked button and activate it
-  const btn = document.querySelector(`.nav button[onclick="showScreen('${id}')"]`);
-  if (btn) btn.classList.add("active");
-
-  // ---------------------------
-  // 📊 LOAD DATA
-  // ---------------------------
+  // 📊 Load data
   if (id === "history") loadHistory();
   if (id === "graph") loadGraph();
   if (id === "budget") loadBudgetUI();
 }
-
 /* =========================
    📂 CATEGORY (FIXED CLEAN)
 ========================= */
@@ -243,35 +240,109 @@ function saveExpense() {
 ========================= */
 
 function saveBudget() {
+  const btn = document.querySelector("#budget button.primary");
+
+  // 🚫 Prevent multiple clicks
+  if (btn.disabled) return;
+  btn.disabled = true;
+
   let amount = Number(document.getElementById("budgetAmount").value);
   let type = document.getElementById("budgetType").value;
   let month = document.getElementById("budgetMonth").value;
 
-  if (!amount) return alert("Enter budget");
-  if (!month) return alert("Select month");
+  // ❌ VALIDATION
+  if (!amount || amount <= 0) {
+    showToast("⚠️ Enter valid budget amount");
+    btn.disabled = false;
+    return;
+  }
 
-  // 🔥 LOAD ALLOCATION STORAGE
-  let budgetAllocations = JSON.parse(localStorage.getItem("budgetAllocations")) || {};
+  if (!month) {
+    showToast("⚠️ Select month");
+    btn.disabled = false;
+    return;
+  }
 
+  // =========================
+  // 💾 LOAD STORAGE
+  // =========================
+  let budgetAllocations =
+    JSON.parse(localStorage.getItem("budgetAllocations")) || {};
+
+  let savingsTransactions =
+    JSON.parse(localStorage.getItem("savingsTransactions")) || [];
+
+  // =========================
+  // 🔒 PREVENT DUPLICATE (same day, same amount)
+  // =========================
+  let alreadyExists = savingsTransactions.find(t =>
+    t.type === "budget_allocation" &&
+    t.amount === -amount &&
+    new Date(t.date).toDateString() === new Date().toDateString()
+  );
+
+  if (alreadyExists) {
+    showToast("⚠️ Budget already allocated today");
+    btn.disabled = false;
+    return;
+  }
+
+  // =========================
+  // 💰 CHECK SAVINGS BALANCE
+  // =========================
+  let currentSavings = savingsTransactions.reduce((sum, t) => sum + t.amount, 0);
+
+  if (amount > currentSavings) {
+    showToast("❌ Not enough savings");
+    btn.disabled = false;
+    return;
+  }
+
+  // =========================
+  // ➕ ADD BUDGET
+  // =========================
   if (!budgetAllocations[month]) {
     budgetAllocations[month] = [];
   }
 
-  // 🔥 ADD NEW ALLOCATION (NO OVERWRITE)
   budgetAllocations[month].push({
     amount: amount,
     type: type,
     date: new Date().toISOString()
   });
 
-  localStorage.setItem("budgetAllocations", JSON.stringify(budgetAllocations));
+  localStorage.setItem(
+    "budgetAllocations",
+    JSON.stringify(budgetAllocations)
+  );
 
-  // 🔥 CALCULATE TOTAL BUDGET
-  let totalBudget = budgetAllocations[month].reduce((sum, b) => sum + b.amount, 0);
+  // =========================
+  // 🔗 LINK TO SAVINGS
+  // =========================
+  savingsTransactions.push({
+    id: Date.now(),
+    type: "budget_allocation",
+    amount: -amount,
+    note: "Allocated to Budget",
+    date: new Date().toISOString()
+  });
+
+  localStorage.setItem(
+    "savingsTransactions",
+    JSON.stringify(savingsTransactions)
+  );
+
+  // =========================
+  // 📊 UPDATE UI
+  // =========================
+  let totalBudget = budgetAllocations[month].reduce(
+    (sum, b) => sum + b.amount,
+    0
+  );
 
   document.getElementById("currentBudget").innerText = totalBudget;
 
-  // 🔥 DAILY CALCULATION (based on latest entry)
+  // DAILY CALCULATION
   let daily = 0;
 
   if (type === "monthly") {
@@ -286,16 +357,44 @@ function saveBudget() {
 
   document.getElementById("calculatedDaily").innerText = Math.floor(daily);
 
-  // 🔥 OPTIONAL (for compatibility with old system)
+  // STORE (compatibility)
   localStorage.setItem("budget", totalBudget);
   localStorage.setItem("dailyBudget", daily);
 
-  // RESET
+  // RESET INPUT
   document.getElementById("budgetAmount").value = "";
 
-  alert("Budget updated for " + month);
+  // SUCCESS FEEDBACK
+  showToast("✅ Budget saved");
 
   updateUI();
+
+  // 🔓 Re-enable button
+  setTimeout(() => {
+    btn.disabled = false;
+  }, 800);
+}
+
+function showToast(msg) {
+  let toast = document.createElement("div");
+  toast.innerText = msg;
+
+  toast.style.position = "fixed";
+  toast.style.bottom = "20px";
+  toast.style.left = "50%";
+  toast.style.transform = "translateX(-50%)";
+  toast.style.background = "#333";
+  toast.style.color = "#fff";
+  toast.style.padding = "10px 16px";
+  toast.style.borderRadius = "10px";
+  toast.style.zIndex = "9999";
+  toast.style.fontSize = "14px";
+
+  document.body.appendChild(toast);
+
+  setTimeout(() => {
+    toast.remove();
+  }, 2000);
 }
 
 /* =========================
@@ -363,7 +462,8 @@ function handleFilter(type) {
   let now = new Date();
 
   if (type === "period") {
-    document.getElementById("dateModal").style.display = "flex";
+    let modal = document.getElementById("periodModal");
+    if (modal) modal.style.display = "flex";
     return;
   }
 
@@ -443,7 +543,7 @@ function applyDateFilter() {
 }
 
 function closeModal() {
-  const modal = document.getElementById("dateModal");
+  const modal = document.getElementById("periodModal");
 
   if (!modal) return;
 
@@ -2648,7 +2748,7 @@ function showDate() {
 }
 
 function openCustomModal() {
-  const modal = document.getElementById("dateModal");
+  const modal = document.getElementById("periodModal");
 
   if (!modal) return;
 
@@ -2890,7 +2990,9 @@ function applyTransferToSavings(t) {
 
   let entry = {
     id: Date.now(),
-    amount: t.amount,
+    amount: t.direction === "given"
+      ? -Math.abs(t.amount)
+      : Math.abs(t.amount),
     type: "transfer",
     person: t.person,
     payment: t.payment,
@@ -2953,7 +3055,82 @@ function loadTransferUI() {
   });
 
 }
-function showScreen(id) {
-  document.querySelectorAll(".screen").forEach(s => s.classList.remove("active"));
-  document.getElementById(id).classList.add("active");
+// function showScreen(id) {
+//   document.querySelectorAll(".screen").forEach(s => s.classList.remove("active"));
+//   document.getElementById(id).classList.add("active");
+
+//   // 🔥 AUTO LOAD DATA
+//   if (id === "history") {
+//     handleFilter("all"); // default load
+//   }
+
+//   if (id === "graph") {
+//     handleGraphFilter("day"); // default graph load
+//   }
+// }
+
+
+function handleSavingsFilter(type) {
+  if (type === "period") {
+    const modal = document.getElementById("savingsDateModal");
+
+    if (!modal) {
+      console.error("Modal not found");
+      return;
+    }
+
+    modal.style.display = "flex";
+    modal.style.visibility = "visible";   // 🔥 fix
+    modal.style.opacity = "1";            // 🔥 fix
+    return;
+  }
+
+  // rest unchanged
+}
+function closePeriod() {
+  const modal = document.getElementById("periodModal");
+  if (modal) modal.style.display = "none";
+}
+
+function applyPeriod() {
+  const start = document.getElementById("startDate").value;
+  const end = document.getElementById("endDate").value;
+
+  if (!start || !end) {
+    showToast("Please select both dates");
+    return;
+  }
+
+  // 🔥 Filter data (same logic you already use)
+  let filtered = expenses.filter(e => {
+    let d = new Date(e.date).toISOString().split("T")[0];
+    return d >= start && d <= end;
+  });
+
+  // 👉 Use where you want
+  loadCustomGraph(filtered, start, end);
+
+  // ✅ close modal
+  closePeriod();
+}
+
+function initDateValidation() {
+  const startInput = document.getElementById("startDate");
+  const endInput = document.getElementById("endDate");
+  const applyBtn = document.querySelector("#periodModal .primary");
+
+  function checkDates() {
+    if (startInput.value && endInput.value) {
+      applyBtn.disabled = false;
+      applyBtn.style.opacity = "1";
+    } else {
+      applyBtn.disabled = true;
+      applyBtn.style.opacity = "0.5";
+    }
+  }
+
+  startInput.addEventListener("input", checkDates);
+  endInput.addEventListener("input", checkDates);
+
+  checkDates(); // initial state
 }

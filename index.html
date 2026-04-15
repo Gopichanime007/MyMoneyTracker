@@ -28,16 +28,14 @@
       <h2>💰 Money Tracker</h2>
     </header>
 
-    <!-- NAVIGATION -->
-    <nav class="nav">
-      <button type="button" onclick="showScreen('home')">🏠</button>
-      <button type="button" onclick="showScreen('add')">➕</button>
-      <button type="button" onclick="showScreen('history')">📜</button>
-      <button type="button" onclick="showScreen('budget')">💼</button>
-      <button type="button" onclick="showScreen('graph')">📊</button>
-      <button type="button" onclick="showScreen('settings')">⚙️</button>
-    </nav>
-
+    <div class="nav">
+      <button data-screen="home" onclick="showScreen('home')" class="active">🏠</button>
+      <button data-screen="add" onclick="showScreen('add')">➕</button>
+      <button data-screen="history" onclick="showScreen('history')">📜</button>
+      <button data-screen="budget" onclick="showScreen('budget')">💰</button>
+      <button data-screen="graph" onclick="showScreen('graph')">📊</button>
+      <button data-screen="settings" onclick="showScreen('settings')">⚙️</button>
+    </div>
     <!-- ================= HOME ================= -->
     <section id="home" class="screen active">
       <div class="card">
@@ -81,7 +79,7 @@
     <!-- ================= ADD ================= -->
     <section id="add" class="screen">
       <div class="card">
-        <h3>Add Entry</h3>
+        <h3>Add Expense</h3>
 
         <select id="entryType">
           <option value="expense">Expense</option>
@@ -119,8 +117,27 @@
         </select>
 
         <div style="display:flex; gap:10px; margin-top:10px;">
-          <button type="button" class="icon-btn" onclick="exportPDF()">⬇</button>
-          <button type="button" class="icon-btn" onclick="sharePDF()">📤</button>
+
+          <!-- DOWNLOAD -->
+          <button class="icon-btn" onclick="exportPDF()">
+            <svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2">
+              <path d="M12 3v12"></path>
+              <path d="M7 10l5 5 5-5"></path>
+              <path d="M5 21h14"></path>
+            </svg>
+          </button>
+
+          <!-- SHARE -->
+          <button class="icon-btn" onclick="sharePDF()">
+            <svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2">
+              <circle cx="18" cy="5" r="3"></circle>
+              <circle cx="6" cy="12" r="3"></circle>
+              <circle cx="18" cy="19" r="3"></circle>
+              <path d="M8.5 13.5l7 4"></path>
+              <path d="M15.5 6.5l-7 4"></path>
+            </svg>
+          </button>
+
         </div>
 
         <div id="historyList"></div>
@@ -216,20 +233,29 @@
   </div>
 
   <!-- DATE MODAL -->
-  <div id="dateModal" class="modal">
-    <div class="modal-content">
+  <div class="modal" id="periodModal" onclick="closePeriod()">
+    <div class="modal-content" onclick="event.stopPropagation()">
+
       <h3>Select Period</h3>
 
-      <input type="date" id="fromDate">
-      <input type="date" id="toDate">
+      <input type="date" id="startDate">
+      <input type="date" id="endDate">
 
-      <button type="button" onclick="applyDateFilter()">Apply</button>
-      <button type="button" onclick="closeModal()">Cancel</button>
+      <div class="modal-actions">
+        <button class="secondary" onclick="closePeriod()">Cancel</button>
+        <button class="primary" onclick="applyPeriod()">Apply</button>
+      </div>
+
     </div>
   </div>
 
   <!-- SCRIPT -->
   <script src="script.js"></script>
+  <script>
+    document.addEventListener("DOMContentLoaded", () => {
+      showScreen('home');
+    });
+  </script>
 
 </body>
 
