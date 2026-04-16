@@ -6,9 +6,72 @@ window.onload = function () {
   let theme = localStorage.getItem("theme") || "#4caf50";
   document.documentElement.style.setProperty("--theme", theme);
 
-  // 🔥 ADD THIS
   showSavingsScreen("home");
+
+  // ✅ MOVE HERE
+  document.getElementById("sType").addEventListener("change", function () {
+    let val = this.value;
+
+    if (val === "income") {
+      showToast("Adding to savings 💰");
+    } else if (val === "withdraw_budget") {
+      showToast("Moving to budget 📦");
+    } else if (val === "transfer") {
+      showToast("Transfer mode 🔁");
+    }
+  });
 };
+
+
+let toastQueue = [];
+let isToastShowing = false;
+
+function showToast(message, type = "info") {
+  toastQueue.push({ message, type });
+
+  if (!isToastShowing) {
+    processToastQueue();
+  }
+}
+
+function processToastQueue() {
+  if (toastQueue.length === 0) {
+    isToastShowing = false;
+    return;
+  }
+
+  isToastShowing = true;
+
+  let { message, type } = toastQueue.shift();
+
+  let toast = document.createElement("div");
+  toast.className = "premium-toast";
+  toast.innerText = message;
+
+  let theme = getComputedStyle(document.documentElement)
+    .getPropertyValue("--theme").trim();
+
+  let bg = "#333";
+
+  if (type === "success") bg = theme;
+  else if (type === "error") bg = "#e53935";
+  else if (type === "warning") bg = "#fb8c00";
+
+  toast.style.background = bg;
+
+  document.body.appendChild(toast);
+
+  setTimeout(() => toast.classList.add("show"), 50);
+
+  setTimeout(() => {
+    toast.classList.remove("show");
+
+    setTimeout(() => {
+      toast.remove();
+      processToastQueue();
+    }, 300);
+  }, 2200);
+}
 
 /* =========================
    💰 STORAGE
@@ -27,43 +90,149 @@ function saveSavings(data) {
 function addSavings() {
   let type = document.getElementById("sType").value;
   let amount = Number(document.getElementById("sAmount").value);
-  let person = document.getElementById("sPerson").value;
   let note = document.getElementById("sNote").value;
   let date = document.getElementById("sDate").value;
-  let payment = document.getElementById("sPayment").value;
 
-  if (!amount) return alert("Enter amount");
+  if (!amount || amount <= 0) {
+    showToast("Enter valid amount ❗", "warning");
+    return;
+  }
 
-  // 🔥 DATE FIX
   let finalDate = date ? new Date(date).toISOString() : new Date().toISOString();
-
-  // 🔥 SIGN LOGIC
-  amount = type === "expense"
-    ? -Math.abs(amount)
-    : Math.abs(amount);
-
   let data = getSavings();
 
+  // =========================
+  // 💰 INCOME
+  // =========================
+  if (type === "income") {
+    data.push({
+      id: Date.now(),
+      type: "income",
+      amount: Math.abs(amount),
+      note: note || "Income",
+      date: finalDate
+    });
+
+    saveSavings(data);
+    loadSavings();
+
+    showToast("Income added 💰", "success");
+
+    // 🔄 RESET HERE ALSO
+    document.getElementById("sAmount").value = "";
+    document.getElementById("sNote").value = "";
+    setTodayDate();
+
+    return;
+  }
+
+  // =========================
+  // 📦 VALIDATE SOURCE
+  // =========================
+  let sourceId = document.getElementById("sourceSelect").value;
+
+  if (!sourceId) {
+    showToast("Select source ❗", "warning");
+    return;
+  }
+
+  let source = data.find(t => t.id == sourceId);
+
+  if (!source) {
+    showToast("Invalid source ❌", "error");
+    return;
+  }
+
+  // =========================
+  // ➖ OUTGOING ENTRY
+  // =========================
   data.push({
     id: Date.now(),
     type,
-    amount,
-    person,
+    amount: -Math.abs(amount),
+    sourceId: source.id,
+    sourceName: source.note,
     note,
-    payment,
     date: finalDate
   });
 
+  // =========================
+  // 📦 MOVE TO BUDGET
+  // =========================
+  if (type === "withdraw_budget") {
+    let monthKey = finalDate.slice(0, 7);
+
+    let budgetAllocations =
+      JSON.parse(localStorage.getItem("budgetAllocations")) || {};
+
+    if (!budgetAllocations[monthKey]) {
+      budgetAllocations[monthKey] = [];
+    }
+
+    budgetAllocations[monthKey].push({
+      amount: Math.abs(amount),
+      date: finalDate
+    });
+
+    localStorage.setItem("budgetAllocations", JSON.stringify(budgetAllocations));
+  }
+
   saveSavings(data);
-
-  // RESET
-  document.getElementById("sAmount").value = "";
-  document.getElementById("sPerson").value = "";
-  document.getElementById("sNote").value = "";
-  document.getElementById("sDate").value = "";
-
   loadSavings();
-  showSavingsScreen("home");
+
+  showToast("Saved successfully ✅", "success");
+
+  // =========================
+  // 🔄 RESET FORM AFTER SAVE
+  // =========================
+  document.getElementById("sAmount").value = "";
+  document.getElementById("sNote").value = "";
+  document.getElementById("sourceSelect").value = "";
+
+  // Optional resets
+  document.getElementById("sType").value = "income";
+  document.getElementById("sPayment").value = "Cash";
+
+  // Hide source again
+  document.getElementById("sourceSelect").style.display = "none";
+
+  // Reset date
+  setTodayDate();
+}
+
+// =========================
+// 🔗 SOURCE HELPERS
+// =========================
+function getAvailableSources() {
+  let data = getSavings();
+
+  return data.filter(t => t.type === "income");
+}
+
+function loadSourceOptions() {
+  let select = document.getElementById("sourceSelect");
+  let data = getSavings();
+
+  let sources = data.filter(t => t.type === "income");
+
+  select.innerHTML = "<option value=''>Select Source</option>";
+
+  sources.forEach(s => {
+    let option = document.createElement("option");
+    option.value = s.id;
+
+    let date = new Date(s.date);
+    let monthYear = date.toLocaleString("en-IN", {
+      month: "short",
+      year: "numeric"
+    });
+
+    let name = s.note || `${monthYear} Salary`;
+
+    option.textContent = `${name} (₹${s.amount})`;
+
+    select.appendChild(option);
+  });
 }
 
 /* =========================
@@ -72,20 +241,17 @@ function addSavings() {
 function loadSavings() {
   let data = getSavings();
 
-  // 💰 TOTAL
+  // 💰 TOTAL BALANCE
   let total = data.reduce((sum, t) => sum + t.amount, 0);
 
-  // 📦 ALLOCATED
+  // 📦 ALLOCATED (only budget movements)
   let allocated = data
-    .filter(t => t.type === "budget_allocation")
+    .filter(t => t.type === "withdraw_budget")
     .reduce((sum, t) => sum + Math.abs(t.amount), 0);
 
-  // 💵 AVAILABLE
+  // 💵 AVAILABLE (real remaining savings)
   let available = total;
 
-  // =========================
-  // UI UPDATE
-  // =========================
   document.getElementById("savingsBalance").innerText = "₹" + total;
 
   let allocatedEl = document.getElementById("allocatedToBudget");
@@ -94,33 +260,29 @@ function loadSavings() {
   let availableEl = document.getElementById("availableBalance");
   if (availableEl) availableEl.innerText = "₹" + available;
 
-  // =========================
-  // HISTORY (ONLY ONE CALL)
-  // =========================
   renderSavingsHistory(data);
 }
-
 /* =========================
    🧭 NAVIGATION
 ========================= */
-function showSavingsScreen(id) {
-  // hide all screens
-  document.querySelectorAll(".screen").forEach(s =>
-    s.classList.remove("active")
-  );
+// function showSavingsScreen(id) {
+//   // hide all screens
+//   document.querySelectorAll(".screen").forEach(s =>
+//     s.classList.remove("active")
+//   );
 
-  // show selected
-  document.getElementById(id).classList.add("active");
+//   // show selected
+//   document.getElementById(id).classList.add("active");
 
-  // 🔥 FIX ACTIVE TAB
-  document.querySelectorAll(".nav button").forEach(btn => {
-    btn.classList.remove("active");
+//   // 🔥 FIX ACTIVE TAB
+//   document.querySelectorAll(".nav button").forEach(btn => {
+//     btn.classList.remove("active");
 
-    if (btn.dataset.screen === id) {
-      btn.classList.add("active");
-    }
-  });
-}
+//     if (btn.dataset.screen === id) {
+//       btn.classList.add("active");
+//     }
+//   });
+// }
 
 function handleSavingsFilter(type) {
   if (type === "period") {
@@ -165,7 +327,7 @@ function applySavingsDateFilter() {
   let to = document.getElementById("sToDate").value;
 
   if (!from || !to) {
-    alert("Select both dates");
+    showToast("Select both dates", "warning");
     return;
   }
 
@@ -202,24 +364,34 @@ function renderSavingsHistory(data) {
     let div = document.createElement("div");
     div.className = "expense-item";
 
-    let label = "";
-    let color = t.amount < 0 ? "red" : "green";
+    let labelMap = {
+      income: "💰 Income",
+      withdraw_budget: "📦 Budget",
+      transfer: "🔁 Transfer"
+    };
 
-    if (t.type === "income") label = "💰 Income";
-    else if (t.type === "expense") label = "💸 Withdraw";
-    else if (t.type === "budget_allocation") label = "📦 Budget";
-    else if (t.type === "transfer") label = "🔁 Transfer";
-    else label = t.type;
+    let label = labelMap[t.type] || t.type;
+    let color = t.amount < 0 ? "red" : "green";
 
     div.innerHTML = `
       <div>
-        <strong>${t.person || "Self"}</strong><br>
+        <strong>${t.note || t.sourceName || "Self"}</strong><br>
         <small>${label} • ${new Date(t.date).toLocaleString()}</small>
       </div>
       <div style="color:${color}; font-weight:600;">
         ₹${t.amount}
       </div>
     `;
+
+    // ✅ CLICK ONLY FOR INCOME
+    if (t.type === "income") {
+      div.style.cursor = "pointer";
+
+      div.onclick = () => {
+        showSavingsScreen("details");
+        renderSourceDetails(t.id);
+      };
+    }
 
     container.appendChild(div);
   });
@@ -267,16 +439,48 @@ function goToTransfers() {
   window.location.href = "transfer.html";
 }
 
+// function showSavingsScreen(id) {
+//   // hide all screens
+//   document.querySelectorAll(".screen").forEach(s =>
+//     s.classList.remove("active")
+//   );
+
+//   // show selected
+//   document.getElementById(id).classList.add("active");
+
+//   // active tab
+//   document.querySelectorAll(".nav button").forEach(btn => {
+//     btn.classList.remove("active");
+
+//     if (btn.dataset.screen === id) {
+//       btn.classList.add("active");
+//     }
+//   });
+
+//   // 🔥 THIS WAS MISSING
+//   if (id === "graph") {
+//     loadSavingsGraph(
+//       filteredSavingsData.length ? filteredSavingsData : getSavings()
+//     );
+//   }
+//   showToast("Opened " + id + " screen", "info");
+// }
+
 function showSavingsScreen(id) {
-  // hide all screens
+  // store previous screen
+  let current = document.querySelector(".screen.active");
+  if (current) {
+    previousScreen = current.id;
+  }
+
+  // switch screen
   document.querySelectorAll(".screen").forEach(s =>
     s.classList.remove("active")
   );
 
-  // show selected
   document.getElementById(id).classList.add("active");
 
-  // active tab
+  // update nav
   document.querySelectorAll(".nav button").forEach(btn => {
     btn.classList.remove("active");
 
@@ -285,7 +489,11 @@ function showSavingsScreen(id) {
     }
   });
 
-  // 🔥 THIS WAS MISSING
+  // load special screens
+  if (id === "income") {
+    renderIncomeList();
+  }
+
   if (id === "graph") {
     loadSavingsGraph(
       filteredSavingsData.length ? filteredSavingsData : getSavings()
@@ -303,3 +511,222 @@ window.addEventListener("click", function (e) {
     modal.style.display = "none";
   }
 });
+
+function exportSavingsPDF() {
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF();
+
+  let data = getSavings();
+
+  if (!data.length) {
+    showToast("No data to export", "warning");
+    return;
+  }
+
+  let y = 12;
+
+  // HEADER
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(16);
+  doc.text("Savings Report", 14, 15);
+
+  doc.setFontSize(8);
+  doc.text(`Generated: ${new Date().toLocaleString()}`, 14, 20);
+
+  y = 28;
+
+  // TABLE
+  data.forEach((t, index) => {
+    let date = new Date(t.date).toLocaleDateString("en-IN");
+    let amount = t.amount;
+    let type = t.type;
+
+    if (y > 280) {
+      doc.addPage();
+      y = 20;
+    }
+
+    doc.setTextColor(amount < 0 ? 200 : 0, amount < 0 ? 0 : 150, 0);
+
+    doc.text(`${date} | ${type} | ₹${Math.abs(amount)}`, 14, y);
+
+    doc.setTextColor(0);
+
+    y += 8;
+  });
+
+  doc.save("savings-report.pdf");
+
+  showToast("Savings report downloaded 📄", "success");
+}
+function hexToRgb(hex) {
+  hex = hex.replace("#", "");
+
+  let bigint = parseInt(hex, 16);
+
+  return {
+    r: (bigint >> 16) & 255,
+    g: (bigint >> 8) & 255,
+    b: bigint & 255
+  };
+}
+
+function getSourceSummary(sourceId) {
+  let data = getSavings();
+
+  let income = data.find(t => t.id == sourceId);
+
+  if (!income) return null;
+
+  let outgoing = data.filter(t => t.sourceId == sourceId);
+
+  let totalOutgoing = outgoing.reduce(
+    (sum, t) => sum + Math.abs(t.amount),
+    0
+  );
+
+  return {
+    name: income.note,
+    totalIncome: income.amount,
+    totalOutgoing,
+    remaining: income.amount - totalOutgoing,
+    entries: outgoing
+  };
+}
+
+function renderSourceDetails(sourceId) {
+  let summary = getSourceSummary(sourceId);
+
+  if (!summary) return;
+
+  let container = document.getElementById("sourceDetails");
+  if (!container) return;
+
+  // 🧠 Base UI
+  container.innerHTML = `
+    <h3>${summary.name}</h3>
+    <p>💰 Income: ₹${summary.totalIncome}</p>
+    <p>📉 Used: ₹${summary.totalOutgoing}</p>
+    <p>🟢 Remaining: ₹${summary.remaining}</p>
+
+    <hr style="margin:10px 0; border:none; border-top:1px solid #eee;" />
+
+    <h4 style="margin:6px 0;">📋 Entries</h4>
+  `;
+
+  // ❌ No entries
+  if (summary.entries.length === 0) {
+    let empty = document.createElement("p");
+    empty.style.color = "#888";
+    empty.innerText = "No entries yet 📭";
+    container.appendChild(empty);
+    return;
+  }
+
+  // 🔥 Entries
+  summary.entries.forEach(t => {
+    let div = document.createElement("div");
+    div.className = "expense-item";
+
+    let label =
+      t.type === "withdraw_budget"
+        ? "📦 Move to Budget"
+        : "🔁 Transfer";
+
+    div.innerHTML = `
+      <div>
+        <strong>${label}</strong><br>
+        <small>${new Date(t.date).toLocaleString()}</small>
+      </div>
+      <div style="color:red; font-weight:600;">
+        ₹${Math.abs(t.amount)}
+      </div>
+    `;
+
+    container.appendChild(div);
+  });
+}
+document.addEventListener("DOMContentLoaded", function () {
+  loadSavings();
+  setTodayDate();
+
+  let theme = localStorage.getItem("theme") || "#4caf50";
+  document.documentElement.style.setProperty("--theme", theme);
+
+  showSavingsScreen("home");
+
+  const sType = document.getElementById("sType");
+  const sourceSelect = document.getElementById("sourceSelect");
+
+  if (sType && sourceSelect) {
+    sType.addEventListener("change", function () {
+      const val = this.value;
+
+      if (val === "income") {
+        sourceSelect.style.display = "none";
+        showToast("Adding to savings 💰");
+      } else {
+        sourceSelect.style.display = "block";
+        loadSourceOptions();
+
+        if (val === "withdraw_budget") {
+          showToast("Moving to budget 📦");
+        } else {
+          showToast("Transfer mode 🔁");
+        }
+      }
+    });
+  }
+});
+
+function renderIncomeList() {
+  let data = getSavings();
+
+  let incomes = data.filter(t => t.type === "income");
+
+  let container = document.getElementById("incomeList");
+  if (!container) return;
+
+  container.innerHTML = "";
+
+  incomes.slice().reverse().forEach(i => {
+    let div = document.createElement("div");
+    div.className = "expense-item";
+
+    let date = new Date(i.date);
+    let monthYear = date.toLocaleString("en-IN", {
+      month: "short",
+      year: "numeric"
+    });
+
+    div.innerHTML = `
+      <div>
+        <strong>${i.note || monthYear + " Salary"}</strong><br>
+        <small>${monthYear}</small>
+      </div>
+      <div style="color:green; font-weight:600;">
+        ₹${i.amount} →
+      </div>
+    `;
+
+    // 🔥 CLICK TO DETAILS
+    div.style.cursor = "pointer";
+    div.onclick = () => {
+      showSavingsScreen("details");
+      renderSourceDetails(i.id);
+    };
+
+    container.appendChild(div);
+  });
+}
+
+function setTodayDate() {
+  let today = new Date();
+
+  let formatted = today.toISOString().split("T")[0];
+
+  let dateInput = document.getElementById("sDate");
+  if (dateInput) {
+    dateInput.value = formatted;
+  }
+}

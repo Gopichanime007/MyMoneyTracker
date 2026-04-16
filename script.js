@@ -2510,30 +2510,35 @@ async function sharePDF() {
    📊 UI
 ========================= */
 function updateUI() {
-  // =========================
-  // 📊 BASIC CALCULATIONS
-  // =========================
   const today = new Date().toISOString().split("T")[0];
   const currentMonth = new Date().toISOString().slice(0, 7);
 
+  // =========================
+  // 💰 BUDGET (ONLY SOURCE)
+  // =========================
   const totalBudget = getTotalBudget(currentMonth);
 
+  // =========================
+  // 📉 SPENT
+  // =========================
   const spent = expenses
     .filter(e => e.amount < 0)
     .reduce((sum, e) => sum + Math.abs(e.amount), 0);
 
-  const income = expenses
-    .filter(e => e.amount > 0)
-    .reduce((sum, e) => sum + e.amount, 0);
-
+  // =========================
+  // 💼 REMAINING
+  // =========================
   const remaining = totalBudget - spent;
 
+  // =========================
+  // 📅 TODAY SPENT
+  // =========================
   const todaySpent = expenses
     .filter(e => e.date.startsWith(today) && e.amount < 0)
     .reduce((sum, e) => sum + Math.abs(e.amount), 0);
 
   // =========================
-  // 📅 DAILY LIMIT
+  // 📊 DAILY LIMIT
   // =========================
   let [year, month] = currentMonth.split("-");
   let daysInMonth = new Date(year, month, 0).getDate();
@@ -2558,6 +2563,7 @@ function updateUI() {
   // =========================
   updateProgressBar(spent, totalBudget);
 }
+
 
 function updateProgressBar(total, budget) {
   total = Number(total) || 0;
@@ -3133,4 +3139,73 @@ function initDateValidation() {
   endInput.addEventListener("input", checkDates);
 
   checkDates(); // initial state
+}
+
+function exportData() {
+  let data = {
+    expenses: JSON.parse(localStorage.getItem("expenses") || "[]"),
+    categories: JSON.parse(localStorage.getItem("categories") || "[]"),
+    budget: Number(localStorage.getItem("budget") || 0),
+    dailyBudget: Number(localStorage.getItem("dailyBudget") || 0),
+    savingsTransactions: JSON.parse(localStorage.getItem("savingsTransactions") || "[]"),
+    transfers: JSON.parse(localStorage.getItem("transfers") || "[]"),
+    budgetAllocations: JSON.parse(localStorage.getItem("budgetAllocations") || "{}"),
+    theme: localStorage.getItem("theme")
+  };
+
+  let json = JSON.stringify(data, null, 2);
+
+  let blob = new Blob([json], { type: "application/json" });
+  let url = URL.createObjectURL(blob);
+
+  let a = document.createElement("a");
+  a.href = url;
+  a.download = "money-backup.json";
+  a.click();
+}
+
+function openImportModal() {
+  document.getElementById("importModal").style.display = "flex";
+}
+
+function closeImportModal() {
+  document.getElementById("importModal").style.display = "none";
+}
+
+
+function handleFileImport(event) {
+  let file = event.target.files[0];
+
+  if (!file) return;
+
+  let reader = new FileReader();
+
+  reader.onload = function (e) {
+    document.getElementById("importText").value = e.target.result;
+  };
+
+  reader.readAsText(file);
+}
+
+function exportData() {
+  let data = {
+    expenses: JSON.parse(localStorage.getItem("expenses") || "[]"),
+    categories: JSON.parse(localStorage.getItem("categories") || "[]"),
+    budget: Number(localStorage.getItem("budget") || 0),
+    dailyBudget: Number(localStorage.getItem("dailyBudget") || 0),
+    savingsTransactions: JSON.parse(localStorage.getItem("savingsTransactions") || "[]"),
+    transfers: JSON.parse(localStorage.getItem("transfers") || "[]"),
+    budgetAllocations: JSON.parse(localStorage.getItem("budgetAllocations") || "{}"),
+    theme: localStorage.getItem("theme")
+  };
+
+  let json = JSON.stringify(data, null, 2);
+
+  let blob = new Blob([json], { type: "application/json" });
+  let url = URL.createObjectURL(blob);
+
+  let a = document.createElement("a");
+  a.href = url;
+  a.download = "money-backup.json";
+  a.click();
 }

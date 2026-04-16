@@ -7,6 +7,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <!-- <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script> -->
   <link rel="stylesheet" href="savings.css" />
 </head>
 
@@ -25,6 +26,7 @@
       <button data-screen="add" onclick="showSavingsScreen('add')">➕</button>
       <button data-screen="history" onclick="showSavingsScreen('history')">📜</button>
       <button data-screen="graph" onclick="showSavingsScreen('graph')">📊</button>
+      <button data-screen="income" onclick="showSavingsScreen('income')">🏦</button>
       <button data-screen="settings" onclick="showSavingsScreen('settings')">⚙️</button>
       <button onclick="goToTransfers()">🔁</button>
     </nav>
@@ -54,15 +56,23 @@
         <h3>Add Entry</h3>
 
         <select id="sType">
-          <option value="income">Income</option>
-          <option value="expense">Withdraw</option>
+          <option value="income">Add Savings</option>
+          <option value="withdraw_budget">Move to Budget</option>
           <option value="transfer">Transfer</option>
         </select>
 
         <input type="number" id="sAmount" placeholder="Amount">
-        <input type="text" id="sPerson" placeholder="Person (optional)">
+        <select id="sEntity">
+          <option value="Self">Self</option>
+          <option value="Family">Family</option>
+          <option value="Friend">Friend</option>
+          <option value="Company">Company</option>
+          <option value="Charity">Charity</option>
+          <option value="Other">Other</option>
+        </select>
         <input type="text" id="sNote" placeholder="Purpose / Note">
         <input type="date" id="sDate">
+        <select id="sourceSelect" style="display:none;"></select>
 
         <select id="sPayment">
           <option>Cash</option>
@@ -88,6 +98,10 @@
           <option value="month">This Month</option>
           <option value="period">Custom Period</option>
         </select>
+
+        <button class="primary" onclick="exportSavingsPDF()">
+          📄 Download Report
+        </button>
 
         <div id="savingsHistory"></div>
       </div>
@@ -115,6 +129,24 @@
           </div>
         </div>
 
+      </div>
+    </section>
+    <section id="details" class="screen">
+      <div class="card">
+        <div class="card-header">
+          <h3>📊 Source Details</h3>
+          <button class="secondary" onclick="showSavingsScreen('history')">
+            ⬅
+          </button>
+        </div>
+
+        <div id="sourceDetails"></div>
+      </div>
+    </section>
+    <section id="income" class="screen">
+      <div class="card">
+        <h3>💰 Income Sources</h3>
+        <div id="incomeList"></div>
       </div>
     </section>
     <!-- ================= SETTINGS ================= -->
@@ -145,7 +177,7 @@
       </div>
     </div>
   </div>
-
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
   <script src="savings.js"></script>
 
   <script>

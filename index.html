@@ -226,7 +226,11 @@
             <button type="button" onclick="closeCategoryModal()">Close</button>
           </div>
         </div>
+        <h4>Backup & Restore</h4>
 
+        <button class="primary" onclick="exportData()">📤 Export Data</button>
+
+        <button class="secondary" onclick="openImportModal()">📥 Import Data</button>
       </div>
     </section>
 
@@ -246,6 +250,21 @@
         <button class="primary" onclick="applyPeriod()">Apply</button>
       </div>
 
+    </div>
+  </div>
+
+  <div id="importModal" class="modal">
+    <div class="modal-content">
+      <h3>Import Data</h3>
+
+      <textarea id="importText" placeholder="Paste JSON here" style="height:120px;"></textarea>
+
+      <input type="file" accept=".json" onchange="handleFileImport(event)">
+
+      <div class="modal-actions">
+        <button class="secondary" onclick="closeImportModal()">Cancel</button>
+        <button class="primary" onclick="importData()">Import</button>
+      </div>
     </div>
   </div>
 
