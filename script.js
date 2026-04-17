@@ -1861,18 +1861,25 @@ async function exportDataAsPDF() {
     budgets: JSON.parse(localStorage.getItem("budgets") || "[]")
   };
 
-  let json = JSON.stringify(data, null, 2);
-
-  // =========================
-  // 📄 CREATE PDF
-  // =========================
   const { jsPDF } = window.jspdf;
   let doc = new jsPDF();
 
-  let lines = doc.splitTextToSize(json, 180); // wrap text
+  let json = JSON.stringify(data, null, 2);
+
+  // 🔥 LIMIT SIZE (IMPORTANT FOR MOBILE)
+  if (json.length > 20000) {
+    showToast("⚠️ Data too large, exporting summary only");
+
+    json = JSON.stringify({
+      expenses: data.expenses.length,
+      savings: data.savingsTransactions.length,
+      budgets: data.budgets.length
+    }, null, 2);
+  }
+
+  let lines = doc.splitTextToSize(json, 180);
 
   let y = 10;
-
   doc.setFontSize(8);
 
   lines.forEach(line => {
@@ -1880,17 +1887,14 @@ async function exportDataAsPDF() {
       doc.addPage();
       y = 10;
     }
-
     doc.text(line, 10, y);
     y += 4;
   });
 
-  // =========================
-  // 📱 MOBILE SHARE (BEST)
-  // =========================
   let blob = doc.output("blob");
 
-  if (navigator.canShare && navigator.canShare({ files: [] })) {
+  // ✅ CORRECT SHARE CHECK
+  if (navigator.share) {
     try {
       let file = new File([blob], "money-backup.pdf", {
         type: "application/pdf"
@@ -1902,16 +1906,15 @@ async function exportDataAsPDF() {
         files: [file]
       });
 
-      showToast("📤 Shared as PDF");
+      showToast("📤 Shared successfully");
       return;
+
     } catch (e) {
-      console.log("Share failed");
+      showToast("⚠️ Share cancelled");
     }
   }
 
-  // =========================
-  // 💻 DOWNLOAD
-  // =========================
+  // ✅ ALWAYS FALLBACK DOWNLOAD
   doc.save("money-backup.pdf");
   showToast("📥 PDF downloaded");
 }
