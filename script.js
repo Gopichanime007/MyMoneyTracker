@@ -1854,7 +1854,7 @@ function initDateValidation() {
   checkDates(); // initial state
 }
 
-async function exportData() {
+async function exportDataAsPDF() {
   let data = {
     expenses: JSON.parse(localStorage.getItem("expenses") || "[]"),
     savingsTransactions: JSON.parse(localStorage.getItem("savingsTransactions") || "[]"),
@@ -1862,63 +1862,58 @@ async function exportData() {
   };
 
   let json = JSON.stringify(data, null, 2);
-  let blob = new Blob([json], { type: "application/json" });
+
+  // =========================
+  // 📄 CREATE PDF
+  // =========================
+  const { jsPDF } = window.jspdf;
+  let doc = new jsPDF();
+
+  let lines = doc.splitTextToSize(json, 180); // wrap text
+
+  let y = 10;
+
+  doc.setFontSize(8);
+
+  lines.forEach(line => {
+    if (y > 280) {
+      doc.addPage();
+      y = 10;
+    }
+
+    doc.text(line, 10, y);
+    y += 4;
+  });
 
   // =========================
   // 📱 MOBILE SHARE (BEST)
   // =========================
+  let blob = doc.output("blob");
+
   if (navigator.canShare && navigator.canShare({ files: [] })) {
     try {
-      let file = new File([blob], "money-backup.json", {
-        type: "application/json"
+      let file = new File([blob], "money-backup.pdf", {
+        type: "application/pdf"
       });
 
       await navigator.share({
         title: "Money Backup",
-        text: "Here is my backup file",
+        text: "Backup file",
         files: [file]
       });
 
-      showToast("📤 Shared successfully");
+      showToast("📤 Shared as PDF");
       return;
-
-    } catch (err) {
-      console.log("Share cancelled or failed");
+    } catch (e) {
+      console.log("Share failed");
     }
   }
 
   // =========================
-  // 💻 DOWNLOAD (ANCHOR FIX)
+  // 💻 DOWNLOAD
   // =========================
-  try {
-    let url = URL.createObjectURL(blob);
-
-    let a = document.createElement("a");
-    a.href = url;
-    a.download = "money-backup.json";
-    document.body.appendChild(a);
-
-    a.click();
-
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-
-    showToast("📥 Download started");
-    return;
-
-  } catch (err) {
-    console.log("Download failed");
-  }
-
-  // =========================
-  // 🧾 FINAL FALLBACK (COPY)
-  // =========================
-  try {
-    await navigator.clipboard.writeText(json);
-    showToast("📋 Copied backup to clipboard");
-  } catch {
-    alert("Copy this data manually:\n\n" + json);
-  }
+  doc.save("money-backup.pdf");
+  showToast("📥 PDF downloaded");
 }
 
 function openImportModal() {
