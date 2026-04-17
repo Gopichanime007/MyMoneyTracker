@@ -1857,19 +1857,25 @@ function initDateValidation() {
 async function exportData() {
   let data = {
     expenses: JSON.parse(localStorage.getItem("expenses") || "[]"),
-    savingsTransactions: JSON.parse(localStorage.getItem("savingsTransactions") || "[]")
+    savingsTransactions: JSON.parse(localStorage.getItem("savingsTransactions") || "[]"),
+    budgets: JSON.parse(localStorage.getItem("budgets") || "[]")
   };
 
   let json = JSON.stringify(data, null, 2);
   let blob = new Blob([json], { type: "application/json" });
 
-  // ✅ TRY SHARE (MOBILE)
-  if (navigator.share) {
+  // =========================
+  // 📱 MOBILE SHARE (BEST)
+  // =========================
+  if (navigator.canShare && navigator.canShare({ files: [] })) {
     try {
-      let file = new File([blob], "money-backup.json");
+      let file = new File([blob], "money-backup.json", {
+        type: "application/json"
+      });
 
       await navigator.share({
-        title: "Backup",
+        title: "Money Backup",
+        text: "Here is my backup file",
         files: [file]
       });
 
@@ -1877,15 +1883,42 @@ async function exportData() {
       return;
 
     } catch (err) {
-      console.log("Share cancelled");
+      console.log("Share cancelled or failed");
     }
   }
 
-  // 💻 FALLBACK
-  let url = URL.createObjectURL(blob);
-  window.open(url, "_blank");
+  // =========================
+  // 💻 DOWNLOAD (ANCHOR FIX)
+  // =========================
+  try {
+    let url = URL.createObjectURL(blob);
 
-  showToast("📥 Opened backup file");
+    let a = document.createElement("a");
+    a.href = url;
+    a.download = "money-backup.json";
+    document.body.appendChild(a);
+
+    a.click();
+
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+
+    showToast("📥 Download started");
+    return;
+
+  } catch (err) {
+    console.log("Download failed");
+  }
+
+  // =========================
+  // 🧾 FINAL FALLBACK (COPY)
+  // =========================
+  try {
+    await navigator.clipboard.writeText(json);
+    showToast("📋 Copied backup to clipboard");
+  } catch {
+    alert("Copy this data manually:\n\n" + json);
+  }
 }
 
 function openImportModal() {
