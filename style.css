@@ -335,12 +335,6 @@ button {
 /* =========================
    🧭 NAV (CLEAN PREMIUM)
 ========================= */
-.nav {
-  display: flex;
-  justify-content: center;
-  gap: 10px;
-  margin-bottom: 12px;
-}
 
 .nav button {
   width: 48px;
@@ -566,4 +560,24 @@ button {
     max-width: 180px;
     max-height: 180px;
   }
+}
+
+.category-item.warning {
+  border-left: 4px solid orange;
+}
+
+.category-item.danger {
+  border-left: 4px solid red;
+  background: rgba(255, 0, 0, 0.05);
+}
+
+.expense-item {
+  padding: 12px 0;
+  border-bottom: 1px solid #eee;
+  transition: 0.2s;
+}
+
+.expense-item:hover {
+  background: rgba(0, 0, 0, 0.02);
+  border-radius: 8px;
 }

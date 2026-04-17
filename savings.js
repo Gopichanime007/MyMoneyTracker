@@ -98,7 +98,10 @@ function addSavings() {
     return;
   }
 
-  let finalDate = date ? new Date(date).toISOString() : new Date().toISOString();
+  let finalDate = date
+    ? new Date(date).toISOString()
+    : new Date().toISOString();
+
   let data = getSavings();
 
   // =========================
@@ -118,25 +121,21 @@ function addSavings() {
 
     showToast("Income added 💰", "success");
 
-    // 🔄 RESET HERE ALSO
-    document.getElementById("sAmount").value = "";
-    document.getElementById("sNote").value = "";
-    setTodayDate();
-
+    resetSavingsForm();
     return;
   }
 
   // =========================
   // 📦 VALIDATE SOURCE
   // =========================
-  let sourceId = document.getElementById("sourceSelect").value;
+  let sourceId = Number(document.getElementById("sourceSelect").value);
 
   if (!sourceId) {
     showToast("Select source ❗", "warning");
     return;
   }
 
-  let source = data.find(t => t.id == sourceId);
+  let source = data.find(t => t.id === sourceId);
 
   if (!source) {
     showToast("Invalid source ❌", "error");
@@ -174,7 +173,10 @@ function addSavings() {
       date: finalDate
     });
 
-    localStorage.setItem("budgetAllocations", JSON.stringify(budgetAllocations));
+    localStorage.setItem(
+      "budgetAllocations",
+      JSON.stringify(budgetAllocations)
+    );
   }
 
   saveSavings(data);
@@ -183,21 +185,9 @@ function addSavings() {
   showToast("Saved successfully ✅", "success");
 
   // =========================
-  // 🔄 RESET FORM AFTER SAVE
+  // 🔄 RESET FORM
   // =========================
-  document.getElementById("sAmount").value = "";
-  document.getElementById("sNote").value = "";
-  document.getElementById("sourceSelect").value = "";
-
-  // Optional resets
-  document.getElementById("sType").value = "income";
-  document.getElementById("sPayment").value = "Cash";
-
-  // Hide source again
-  document.getElementById("sourceSelect").style.display = "none";
-
-  // Reset date
-  setTodayDate();
+  resetSavingsForm();
 }
 
 // =========================
@@ -229,7 +219,18 @@ function loadSourceOptions() {
 
     let name = s.note || `${monthYear} Salary`;
 
-    option.textContent = `${name} (₹${s.amount})`;
+    // 🔥 CALCULATE USED
+    let used = data
+      .filter(t => Number(t.sourceId) === s.id)
+      .reduce((sum, t) => sum + Math.abs(t.amount), 0);
+
+    // 🔥 REMAINING
+    let remaining = s.amount - used;
+
+    if (remaining <= 0) return;
+
+    // 🔥 SHOW REMAINING
+    option.textContent = `${name} (₹${remaining} left)`;
 
     select.appendChild(option);
   });
@@ -379,11 +380,11 @@ function renderSavingsHistory(data) {
         <small>${label} • ${new Date(t.date).toLocaleString()}</small>
       </div>
       <div style="color:${color}; font-weight:600;">
-        ₹${t.amount}
+        ₹${Math.abs(t.amount)}   <!-- ✅ FIX -->
       </div>
     `;
 
-    // ✅ CLICK ONLY FOR INCOME
+    // 👉 CLICK ONLY FOR INCOME
     if (t.type === "income") {
       div.style.cursor = "pointer";
 
@@ -574,11 +575,12 @@ function hexToRgb(hex) {
 function getSourceSummary(sourceId) {
   let data = getSavings();
 
-  let income = data.find(t => t.id == sourceId);
+  let id = Number(sourceId);
 
+  let income = data.find(t => t.id === id);
   if (!income) return null;
 
-  let outgoing = data.filter(t => t.sourceId == sourceId);
+  let outgoing = data.filter(t => Number(t.sourceId) === id);
 
   let totalOutgoing = outgoing.reduce(
     (sum, t) => sum + Math.abs(t.amount),
@@ -586,7 +588,7 @@ function getSourceSummary(sourceId) {
   );
 
   return {
-    name: income.note,
+    name: income.note || "Income",
     totalIncome: income.amount,
     totalOutgoing,
     remaining: income.amount - totalOutgoing,
@@ -596,35 +598,28 @@ function getSourceSummary(sourceId) {
 
 function renderSourceDetails(sourceId) {
   let summary = getSourceSummary(sourceId);
-
   if (!summary) return;
 
   let container = document.getElementById("sourceDetails");
   if (!container) return;
 
-  // 🧠 Base UI
   container.innerHTML = `
     <h3>${summary.name}</h3>
     <p>💰 Income: ₹${summary.totalIncome}</p>
     <p>📉 Used: ₹${summary.totalOutgoing}</p>
     <p>🟢 Remaining: ₹${summary.remaining}</p>
 
-    <hr style="margin:10px 0; border:none; border-top:1px solid #eee;" />
+    <hr style="margin:10px 0;" />
 
-    <h4 style="margin:6px 0;">📋 Entries</h4>
+    <h4>📋 Entries</h4>
   `;
 
-  // ❌ No entries
-  if (summary.entries.length === 0) {
-    let empty = document.createElement("p");
-    empty.style.color = "#888";
-    empty.innerText = "No entries yet 📭";
-    container.appendChild(empty);
+  if (!summary.entries.length) {
+    container.innerHTML += `<p style="color:#888;">No entries yet 📭</p>`;
     return;
   }
 
-  // 🔥 Entries
-  summary.entries.forEach(t => {
+  summary.entries.slice().reverse().forEach(t => {
     let div = document.createElement("div");
     div.className = "expense-item";
 
@@ -690,6 +685,14 @@ function renderIncomeList() {
   container.innerHTML = "";
 
   incomes.slice().reverse().forEach(i => {
+
+    // 🔥 CALCULATE USED
+    let used = data
+      .filter(t => Number(t.sourceId) === i.id)
+      .reduce((sum, t) => sum + Math.abs(t.amount), 0);
+
+    let remaining = i.amount - used;
+
     let div = document.createElement("div");
     div.className = "expense-item";
 
@@ -699,17 +702,28 @@ function renderIncomeList() {
       year: "numeric"
     });
 
+    let name = i.note || `${monthYear} Salary`;
+
+    // 🔥 DISPLAY TEXT
+    let displayText = "";
+
+    if (remaining <= 0) {
+      displayText = "❌ All used";
+    } else {
+      displayText = `₹${remaining}`;
+    }
+
     div.innerHTML = `
       <div>
-        <strong>${i.note || monthYear + " Salary"}</strong><br>
+        <strong>${name}</strong><br>
         <small>${monthYear}</small>
       </div>
-      <div style="color:green; font-weight:600;">
-        ₹${i.amount} →
+      <div style="color:${remaining <= 0 ? "red" : "green"}; font-weight:600;">
+        ${displayText} →
       </div>
     `;
 
-    // 🔥 CLICK TO DETAILS
+    // 🔥 CLICK
     div.style.cursor = "pointer";
     div.onclick = () => {
       showSavingsScreen("details");
@@ -729,4 +743,128 @@ function setTodayDate() {
   if (dateInput) {
     dateInput.value = formatted;
   }
+}
+
+function getBudgets() {
+  return JSON.parse(localStorage.getItem("budgets")) || [];
+}
+
+function saveBudgets(budgets) {
+  localStorage.setItem("budgets", JSON.stringify(budgets));
+}
+
+function createOrUpdateBudget(budgetId, sourceId, amount) {
+  let budgets = getBudgets();
+
+  let existing = budgets.find(b => b.budgetId === budgetId);
+
+  if (existing) {
+    existing.allocated += amount;
+  } else {
+    budgets.push({
+      budgetId,
+      sourceId,
+      allocated: amount
+    });
+  }
+
+  saveBudgets(budgets);
+}
+
+function fixSavingsMissingSourceId() {
+  let data = JSON.parse(localStorage.getItem("savingsTransactions")) || [];
+
+  let incomes = data.filter(t => t.type === "income");
+
+  if (!incomes.length) {
+    console.log("❌ No income found to map");
+    return;
+  }
+
+  // 👉 pick latest income as fallback
+  let latestIncome = incomes[incomes.length - 1];
+
+  let fixed = [];
+
+  data.forEach(t => {
+    if (t.type !== "income" && !t.sourceId) {
+      t.sourceId = latestIncome.id; // 🔥 attach source
+      fixed.push(t);
+    }
+  });
+
+  localStorage.setItem("savingsTransactions", JSON.stringify(data));
+
+  console.log("✅ Fixed missing sourceId");
+  console.table(fixed);
+}
+function normalizeSavingsSourceId() {
+  let data = JSON.parse(localStorage.getItem("savingsTransactions")) || [];
+
+  let incomes = data.filter(t => t.type === "income");
+
+  if (!incomes.length) {
+    console.log("❌ No income found");
+    return;
+  }
+
+  // 👉 Use latest income as master source
+  let mainSource = incomes[incomes.length - 1];
+
+  let fixed = [];
+
+  data.forEach(t => {
+    if (t.type !== "income") {
+
+      // ❌ remove wrong string sourceIds
+      if (typeof t.sourceId !== "number") {
+        t.sourceId = mainSource.id;
+        fixed.push({
+          id: t.id,
+          fixedTo: mainSource.id,
+          type: t.type
+        });
+      }
+
+      // ❌ also fix missing
+      if (!t.sourceId) {
+        t.sourceId = mainSource.id;
+        fixed.push({
+          id: t.id,
+          fixedTo: mainSource.id,
+          type: t.type
+        });
+      }
+    }
+  });
+
+  localStorage.setItem("savingsTransactions", JSON.stringify(data));
+
+  console.log("✅ Savings fully normalized");
+  console.table(fixed);
+
+  console.log("📦 Final Data:");
+  console.log(JSON.stringify(data, null, 2));
+}
+function fixIncomeSourceId() {
+  let data = JSON.parse(localStorage.getItem("savingsTransactions")) || [];
+
+  data.forEach(t => {
+    if (t.type === "income") {
+      delete t.sourceId; // 🔥 REMOVE WRONG FIELD
+    }
+  });
+
+  localStorage.setItem("savingsTransactions", JSON.stringify(data));
+
+  console.log("✅ Income sourceId cleaned");
+}
+
+function resetSavingsForm() {
+  document.getElementById("sAmount").value = "";
+  document.getElementById("sNote").value = "";
+  document.getElementById("sourceSelect").value = "";
+  document.getElementById("sType").value = "income";
+
+  setTodayDate();
 }

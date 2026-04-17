@@ -34,6 +34,7 @@
       <button data-screen="history" onclick="showScreen('history')">📜</button>
       <button data-screen="budget" onclick="showScreen('budget')">💰</button>
       <button data-screen="graph" onclick="showScreen('graph')">📊</button>
+      <button data-screen="budgets" onclick="showScreen('budgets')">📦</button>
       <button data-screen="settings" onclick="showScreen('settings')">⚙️</button>
     </div>
     <!-- ================= HOME ================= -->
@@ -90,11 +91,11 @@
         <select id="category"></select>
         <input type="text" id="purpose" placeholder="Purpose (optional)">
         <input type="date" id="expenseDate">
-
+        <select id="budgetSelect"></select>
         <select id="paymentType">
-          <option value="Cash">Cash</option>
-          <option value="UPI">UPI</option>
           <option value="PhonePe">PhonePe</option>
+          <option value="UPI">UPI</option>
+          <option value="Cash">Cash</option>
           <option value="Google Pay">Google Pay</option>
           <option value="Bank Transfer">Bank Transfer</option>
         </select>
@@ -194,6 +195,18 @@
       </div>
     </section>
 
+    <section id="budgets" class="screen">
+      <div class="card">
+        <h3>📦 Budget Entries</h3>
+        <div id="budgetList"></div>
+      </div>
+    </section>
+    <section id="budgetDetails" class="screen">
+      <div class="card">
+        <div id="budgetDetailsContainer"></div>
+      </div>
+    </section>
+
     <!-- ================= SETTINGS ================= -->
     <section id="settings" class="screen">
       <div class="card">
@@ -226,10 +239,10 @@
             <button type="button" onclick="closeCategoryModal()">Close</button>
           </div>
         </div>
+
+        <!-- Backup -->
         <h4>Backup & Restore</h4>
-
         <button class="primary" onclick="exportData()">📤 Export Data</button>
-
         <button class="secondary" onclick="openImportModal()">📥 Import Data</button>
       </div>
     </section>
