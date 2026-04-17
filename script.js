@@ -1490,17 +1490,141 @@ function renderFullCategoryBreakdown(data) {
   renderCategoryBreakdown(map);
 }
 
+// function migrateOldData() {
+//   let updated = false;
+
+//   let expenses = JSON.parse(localStorage.getItem("expenses")) || [];
+//   let savingsTransactions =
+//     JSON.parse(localStorage.getItem("savingsTransactions")) || [];
+
+//   let budgets = JSON.parse(localStorage.getItem("budgets")) || [];
+
+//   // =========================
+//   // 🟢 STEP 1: FIX SAVINGS SOURCE
+//   // =========================
+//   savingsTransactions.forEach(t => {
+//     let d = new Date(t.date);
+//     let y = d.getFullYear();
+//     let m = String(d.getMonth() + 1).padStart(2, "0");
+
+//     if (!t.sourceId) {
+//       t.sourceId = `${t.type || "salary"}_${y}_${m}`;
+//       updated = true;
+//     }
+//   });
+
+//   // =========================
+//   // 🟡 STEP 2: ENSURE BUDGET → SOURCE LINK
+//   // =========================
+//   budgets.forEach(b => {
+//     if (!b.sourceId) {
+//       let [_, year, month] = b.budgetId.split("_");
+
+//       let relatedSaving = savingsTransactions.find(t => {
+//         let d = new Date(t.date);
+//         return (
+//           d.getFullYear() == year &&
+//           String(d.getMonth() + 1).padStart(2, "0") == month
+//         );
+//       });
+
+//       if (relatedSaving) {
+//         b.sourceId = relatedSaving.sourceId;
+//       } else {
+//         let sourceId = `salary_${year}_${month}`;
+
+//         savingsTransactions.push({
+//           id: Date.now(),
+//           amount: 0,
+//           type: "salary",
+//           sourceId,
+//           date: new Date().toISOString()
+//         });
+
+//         b.sourceId = sourceId;
+//       }
+
+//       updated = true;
+//     }
+
+//     // 🔥 Ensure budget allocation exists
+//     let exists = savingsTransactions.find(
+//       t => t.budgetId === b.budgetId && t.type === "budget_allocation"
+//     );
+
+//     if (!exists) {
+//       savingsTransactions.push({
+//         id: Date.now(),
+//         type: "budget_allocation",
+//         amount: -Math.abs(b.allocated || 0),
+//         sourceId: b.sourceId,
+//         budgetId: b.budgetId,
+//         date: new Date().toISOString()
+//       });
+
+//       updated = true;
+//     }
+//   });
+
+//   // =========================
+//   // 🔵 STEP 3: FIX EXPENSE (ONLY budgetId)
+//   // =========================
+//   expenses.forEach(e => {
+//     let d = new Date(e.date);
+//     let year = d.getFullYear();
+//     let month = String(d.getMonth() + 1).padStart(2, "0");
+
+//     if (!e.budgetId) {
+//       e.budgetId = `budget_${year}_${month}`;
+//       updated = true;
+//     }
+
+//     // ❌ REMOVE SOURCEID IF EXISTS
+//     if (e.sourceId) {
+//       delete e.sourceId;
+//       updated = true;
+//     }
+
+//     // FIX TYPE
+//     if (!e.type) {
+//       e.type = e.amount < 0 ? "expense" : "income";
+//       updated = true;
+//     }
+
+//     // FIX SIGN
+//     if (e.type === "expense") {
+//       e.amount = -Math.abs(e.amount);
+//     } else {
+//       e.amount = Math.abs(e.amount);
+//     }
+//   });
+
+//   // =========================
+//   // 💾 SAVE
+//   // =========================
+//   localStorage.setItem("expenses", JSON.stringify(expenses));
+//   localStorage.setItem("savingsTransactions", JSON.stringify(savingsTransactions));
+//   localStorage.setItem("budgets", JSON.stringify(budgets));
+
+//   // =========================
+//   // 📱 FEEDBACK
+//   // =========================
+//   if (updated) {
+//     showToast("✅ Clean architecture applied");
+//   } else {
+//     showToast("ℹ️ Already clean");
+//   }
+// }
 function migrateOldData() {
   let updated = false;
 
   let expenses = JSON.parse(localStorage.getItem("expenses")) || [];
   let savingsTransactions =
     JSON.parse(localStorage.getItem("savingsTransactions")) || [];
-
   let budgets = JSON.parse(localStorage.getItem("budgets")) || [];
 
   // =========================
-  // 🟢 STEP 1: FIX SAVINGS SOURCE
+  // 🟢 STEP 1: FIX SAVINGS SOURCE ID
   // =========================
   savingsTransactions.forEach(t => {
     let d = new Date(t.date);
@@ -1508,13 +1632,51 @@ function migrateOldData() {
     let m = String(d.getMonth() + 1).padStart(2, "0");
 
     if (!t.sourceId) {
-      t.sourceId = `${t.type || "salary"}_${y}_${m}`;
+      t.sourceId = `${t.type || "income"}_${y}_${m}`;
       updated = true;
     }
   });
 
   // =========================
-  // 🟡 STEP 2: ENSURE BUDGET → SOURCE LINK
+  // 🟡 STEP 2: CREATE BUDGETS IF MISSING
+  // =========================
+  let budgetMap = {};
+
+  savingsTransactions.forEach(t => {
+    let d = new Date(t.date);
+    let y = d.getFullYear();
+    let m = String(d.getMonth() + 1).padStart(2, "0");
+
+    let budgetId = `budget_${y}_${m}`;
+
+    if (!budgetMap[budgetId]) {
+      budgetMap[budgetId] = {
+        budgetId,
+        sourceId: t.sourceId,
+        allocated: 0
+      };
+    }
+
+    // Only count positive money (income)
+    if (t.amount > 0) {
+      budgetMap[budgetId].allocated += t.amount;
+    }
+  });
+
+  let newBudgets = Object.values(budgetMap);
+
+  // Merge with existing budgets
+  newBudgets.forEach(nb => {
+    let exists = budgets.find(b => b.budgetId === nb.budgetId);
+
+    if (!exists) {
+      budgets.push(nb);
+      updated = true;
+    }
+  });
+
+  // =========================
+  // 🔵 STEP 3: ENSURE BUDGET HAS SOURCE ID
   // =========================
   budgets.forEach(b => {
     if (!b.sourceId) {
@@ -1531,67 +1693,40 @@ function migrateOldData() {
       if (relatedSaving) {
         b.sourceId = relatedSaving.sourceId;
       } else {
-        let sourceId = `salary_${year}_${month}`;
-
-        savingsTransactions.push({
-          id: Date.now(),
-          amount: 0,
-          type: "salary",
-          sourceId,
-          date: new Date().toISOString()
-        });
-
-        b.sourceId = sourceId;
+        b.sourceId = `income_${year}_${month}`;
       }
-
-      updated = true;
-    }
-
-    // 🔥 Ensure budget allocation exists
-    let exists = savingsTransactions.find(
-      t => t.budgetId === b.budgetId && t.type === "budget_allocation"
-    );
-
-    if (!exists) {
-      savingsTransactions.push({
-        id: Date.now(),
-        type: "budget_allocation",
-        amount: -Math.abs(b.allocated || 0),
-        sourceId: b.sourceId,
-        budgetId: b.budgetId,
-        date: new Date().toISOString()
-      });
 
       updated = true;
     }
   });
 
   // =========================
-  // 🔵 STEP 3: FIX EXPENSE (ONLY budgetId)
+  // 🔴 STEP 4: FIX EXPENSES
   // =========================
   expenses.forEach(e => {
     let d = new Date(e.date);
-    let year = d.getFullYear();
-    let month = String(d.getMonth() + 1).padStart(2, "0");
+    let y = d.getFullYear();
+    let m = String(d.getMonth() + 1).padStart(2, "0");
 
+    // ✅ Assign budgetId if missing
     if (!e.budgetId) {
-      e.budgetId = `budget_${year}_${month}`;
+      e.budgetId = `budget_${y}_${m}`;
       updated = true;
     }
 
-    // ❌ REMOVE SOURCEID IF EXISTS
+    // ❌ REMOVE WRONG FIELD (IMPORTANT)
     if (e.sourceId) {
       delete e.sourceId;
       updated = true;
     }
 
-    // FIX TYPE
+    // ✅ FIX TYPE
     if (!e.type) {
       e.type = e.amount < 0 ? "expense" : "income";
       updated = true;
     }
 
-    // FIX SIGN
+    // ✅ FIX SIGN
     if (e.type === "expense") {
       e.amount = -Math.abs(e.amount);
     } else {
@@ -1600,22 +1735,29 @@ function migrateOldData() {
   });
 
   // =========================
-  // 💾 SAVE
+  // 🟣 STEP 5: CLEAN DUPLICATES (OPTIONAL SAFE)
+  // =========================
+  budgets = budgets.filter(
+    (b, i, arr) =>
+      i === arr.findIndex(x => x.budgetId === b.budgetId)
+  );
+
+  // =========================
+  // 💾 SAVE EVERYTHING
   // =========================
   localStorage.setItem("expenses", JSON.stringify(expenses));
   localStorage.setItem("savingsTransactions", JSON.stringify(savingsTransactions));
   localStorage.setItem("budgets", JSON.stringify(budgets));
 
   // =========================
-  // 📱 FEEDBACK
+  // 📱 USER FEEDBACK
   // =========================
   if (updated) {
-    showToast("✅ Clean architecture applied");
+    showToast("✅ Data migrated successfully");
   } else {
-    showToast("ℹ️ Already clean");
+    showToast("ℹ️ Already up-to-date");
   }
 }
-
 function runMigration() {
   migrateOldData();
   updateUI(); // 🔥 refresh UI after fix
