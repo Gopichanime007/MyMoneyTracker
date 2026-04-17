@@ -73,7 +73,9 @@
           </div>
           <p id="progressText"></p>
         </div>
-
+        <button class="primary" onclick="openQuotation()">
+          🧾 Create Quotation
+        </button>
       </div>
     </section>
 
@@ -242,8 +244,14 @@
 
         <!-- Backup -->
         <h4>Backup & Restore</h4>
-        <button class="primary" onclick="exportData()">📤 Export Data</button>
-        <button class="secondary" onclick="openImportModal()">📥 Import Data</button>
+        <div class="btn-group">
+          <button class="primary" onclick="exportData()">📤 Export Data</button>
+          <button class="secondary" onclick="openImportModal()">📥 Import Data</button>
+
+          <button class="secondary" onclick="runMigration()">
+            🔄 Fix Old Data
+          </button>
+        </div>
       </div>
     </section>
 

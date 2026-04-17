@@ -1508,24 +1508,25 @@ function migrateOldData() {
     let year = d.getFullYear();
     let month = String(d.getMonth() + 1).padStart(2, "0");
 
-    // 🔥 CONSISTENT FORMAT
+    // ✅ FIX budgetId
     if (!e.budgetId) {
       e.budgetId = `budget_${year}_${month}`;
+      updated = true;
     }
 
-    // 🔥 TYPE FIX
+    // ✅ FIX type
     if (!e.type) {
       e.type = e.amount < 0 ? "expense" : "income";
+      updated = true;
     }
 
-    // 🔥 SIGN FIX
+    // ✅ FIX sign
     if (e.type === "expense") {
       e.amount = -Math.abs(e.amount);
     } else {
       e.amount = Math.abs(e.amount);
     }
 
-    updated = true;
   });
 
   // =========================
@@ -1537,12 +1538,10 @@ function migrateOldData() {
     let year = d.getFullYear();
     let month = String(d.getMonth() + 1).padStart(2, "0");
 
-    // 🔥 CONSISTENT FORMAT
     if (!t.sourceId) {
       t.sourceId = `${t.type || "salary"}_${year}_${month}`;
+      updated = true;
     }
-
-    updated = true;
   });
 
   // =========================
@@ -1574,13 +1573,46 @@ function migrateOldData() {
   budgets = Object.values(map);
 
   // =========================
+  // 🔥 LINK SOURCE → EXPENSE
+  // =========================
+  expenses.forEach(e => {
+    if (!e.sourceId) {
+      let relatedBudget = budgets.find(b => b.budgetId === e.budgetId);
+
+      if (relatedBudget) {
+        e.sourceId = relatedBudget.sourceId;
+        updated = true;
+      }
+    }
+  });
+
+  // =========================
   // 💾 SAVE
   // =========================
   localStorage.setItem("expenses", JSON.stringify(expenses));
   localStorage.setItem("savingsTransactions", JSON.stringify(savingsTransactions));
   localStorage.setItem("budgets", JSON.stringify(budgets));
 
-  console.log("✅ Migration aligned with Source → Budget → Expense flow");
+  // =========================
+  // 🔧 FIX OLD BUDGET FORMAT
+  // =========================
+  if (typeof fixBudgetIdFormat === "function") {
+    fixBudgetIdFormat();
+  }
+
+  // =========================
+  // 📱 USER FEEDBACK (MOBILE FRIENDLY)
+  // =========================
+  if (updated) {
+    showToast("✅ Data migrated & fixed successfully");
+  } else {
+    showToast("ℹ️ No changes needed");
+  }
+}
+
+function runMigration() {
+  migrateOldData();
+  updateUI(); // 🔥 refresh UI after fix
 }
 /* =========================
    🔐 SECRET NAVIGATION (PRO)
@@ -2334,4 +2366,7 @@ function getTotalBudgetForMonth(monthKey) {
     (sum, a) => sum + a.amount,
     0
   );
-} 
+}
+function openQuotation() {
+  window.location.href = "quotation.html";
+}

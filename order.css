@@ -1,0 +1,92 @@
+/* =========================
+   🌍 GLOBAL
+========================= */
+body {
+  font-family: Arial;
+  background: #f4f6f9;
+  margin: 0;
+}
+
+.app {
+  max-width: 400px;
+  margin: auto;
+  padding: 10px;
+}
+
+/* =========================
+   🧱 CARD
+========================= */
+.card {
+  background: white;
+  padding: 12px;
+  border-radius: 12px;
+}
+
+/* =========================
+   ✏️ INPUT
+========================= */
+input,
+select {
+  width: 100%;
+  padding: 8px;
+  margin: 6px 0;
+}
+
+/* =========================
+   🔘 BUTTONS
+========================= */
+.primary {
+  background: #4caf50;
+  color: white;
+  padding: 10px;
+  border: none;
+  border-radius: 8px;
+  width: 100%;
+}
+
+.secondary {
+  background: #ddd;
+  padding: 10px;
+  border: none;
+  border-radius: 8px;
+  width: 100%;
+}
+
+/* =========================
+   📋 TABLE SCROLL
+========================= */
+.table-wrapper {
+  overflow-x: auto;
+}
+
+.table-scroll {
+  min-width: 600px;
+}
+
+.table-header,
+.table-row {
+  display: grid;
+  grid-template-columns: 150px 80px 60px 100px 80px 100px;
+  gap: 10px;
+  padding: 8px 0;
+}
+
+.table-header {
+  font-weight: bold;
+  border-bottom: 1px solid #ddd;
+}
+
+/* =========================
+   📊 SUMMARY
+========================= */
+.summary {
+  margin-top: 10px;
+}
+
+.summary p {
+  margin: 4px 0;
+}
+
+.summary h3 {
+  margin-top: 8px;
+}

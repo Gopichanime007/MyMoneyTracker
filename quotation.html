@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Quotation</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <link rel="stylesheet" href="quotation.css">
+</head>
+
+<body>
+
+<div class="app">
+
+  <header class="header">
+    <h2>🧾 Quotation</h2>
+  </header>
+
+  <div class="card">
+
+    <!-- ACTION BUTTONS -->
+    <div class="row">
+      <button class="primary" onclick="openItemModal()">➕ Add Item</button>
+      <button class="secondary" onclick="openChargeModal()">➕ Add Charge</button>
+    </div>
+
+    <!-- ITEMS -->
+    <h4>📋 Items</h4>
+
+    <div class="table-wrapper">
+      <div class="table-scroll">
+
+        <div class="table-header">
+          <span>Name</span>
+          <span>Price</span>
+          <span>Qty</span>
+          <span>Source</span>
+          <span>Link</span>
+          <span>Total</span>
+        </div>
+
+        <div id="quotationItems"></div>
+
+      </div>
+    </div>
+
+    <!-- CHARGES -->
+    <h4>➕ Charges</h4>
+    <div id="chargesList"></div>
+
+    <!-- TOTAL -->
+    <div class="summary">
+      <p>Subtotal: ₹<span id="qSubtotal">0</span></p>
+      <p>GST: ₹<span id="qGSTAmount">0</span></p>
+      <h3>Total: ₹<span id="qFinalTotal">0</span></h3>
+    </div>
+
+    <!-- ACTION -->
+    <button class="primary" onclick="convertToOrder()">🔄 Convert to Order</button>
+    <button class="secondary" onclick="clearQuotation()">🗑 Clear</button>
+
+  </div>
+
+</div>
+
+<!-- ================= ITEM MODAL ================= -->
+<div id="itemModal" class="modal">
+  <div class="modal-content">
+
+    <h3>Add Item</h3>
+
+    <input type="text" id="mName" placeholder="Product Name">
+    <input type="number" id="mPrice" placeholder="Price">
+    <input type="number" id="mQty" placeholder="Qty">
+
+    <select id="mSource">
+      <option value="">Source</option>
+      <option>Amazon</option>
+      <option>Flipkart</option>
+      <option>Swiggy</option>
+      <option>Local</option>
+    </select>
+
+    <input type="text" id="mLink" placeholder="Product Link">
+
+    <div class="modal-actions">
+      <button class="secondary" onclick="closeItemModal()">Cancel</button>
+      <button class="primary" onclick="addItemFromModal()">Add</button>
+    </div>
+
+  </div>
+</div>
+
+<!-- ================= CHARGE MODAL ================= -->
+<div id="chargeModal" class="modal">
+  <div class="modal-content">
+
+    <h3>Add Charge</h3>
+
+    <select id="cType">
+      <option value="delivery">Delivery</option>
+      <option value="gst">GST</option>
+      <option value="discount">Discount</option>
+      <option value="custom">Custom</option>
+    </select>
+
+    <input type="number" id="cValue" placeholder="Value">
+
+    <select id="cMode">
+      <option value="fixed">Fixed ₹</option>
+      <option value="percent">Percentage %</option>
+    </select>
+
+    <div class="modal-actions">
+      <button class="secondary" onclick="closeChargeModal()">Cancel</button>
+      <button class="primary" onclick="addCharge()">Add</button>
+    </div>
+
+  </div>
+</div>
+
+<script src="quotation.js"></script>
+</body>
+</html>
