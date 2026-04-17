@@ -31,7 +31,7 @@ window.onload = () => {
   }
 
   loadBudgetUI();
-  migrateOldData();
+  // migrateOldData();
   initSecretTap();
 };
 function getTotalBudget(monthKey) {
@@ -1497,92 +1497,105 @@ function migrateOldData() {
   let savingsTransactions =
     JSON.parse(localStorage.getItem("savingsTransactions")) || [];
 
-  let budgets = [];
+  let budgets = JSON.parse(localStorage.getItem("budgets")) || [];
 
   // =========================
-  // 🟢 FIX EXPENSES
+  // 🟢 STEP 1: FIX SAVINGS SOURCE
+  // =========================
+  savingsTransactions.forEach(t => {
+    let d = new Date(t.date);
+    let y = d.getFullYear();
+    let m = String(d.getMonth() + 1).padStart(2, "0");
+
+    if (!t.sourceId) {
+      t.sourceId = `${t.type || "salary"}_${y}_${m}`;
+      updated = true;
+    }
+  });
+
+  // =========================
+  // 🟡 STEP 2: ENSURE BUDGET → SOURCE LINK
+  // =========================
+  budgets.forEach(b => {
+    if (!b.sourceId) {
+      let [_, year, month] = b.budgetId.split("_");
+
+      let relatedSaving = savingsTransactions.find(t => {
+        let d = new Date(t.date);
+        return (
+          d.getFullYear() == year &&
+          String(d.getMonth() + 1).padStart(2, "0") == month
+        );
+      });
+
+      if (relatedSaving) {
+        b.sourceId = relatedSaving.sourceId;
+      } else {
+        let sourceId = `salary_${year}_${month}`;
+
+        savingsTransactions.push({
+          id: Date.now(),
+          amount: 0,
+          type: "salary",
+          sourceId,
+          date: new Date().toISOString()
+        });
+
+        b.sourceId = sourceId;
+      }
+
+      updated = true;
+    }
+
+    // 🔥 Ensure budget allocation exists
+    let exists = savingsTransactions.find(
+      t => t.budgetId === b.budgetId && t.type === "budget_allocation"
+    );
+
+    if (!exists) {
+      savingsTransactions.push({
+        id: Date.now(),
+        type: "budget_allocation",
+        amount: -Math.abs(b.allocated || 0),
+        sourceId: b.sourceId,
+        budgetId: b.budgetId,
+        date: new Date().toISOString()
+      });
+
+      updated = true;
+    }
+  });
+
+  // =========================
+  // 🔵 STEP 3: FIX EXPENSE (ONLY budgetId)
   // =========================
   expenses.forEach(e => {
     let d = new Date(e.date);
-
     let year = d.getFullYear();
     let month = String(d.getMonth() + 1).padStart(2, "0");
 
-    // ✅ FIX budgetId
     if (!e.budgetId) {
       e.budgetId = `budget_${year}_${month}`;
       updated = true;
     }
 
-    // ✅ FIX type
+    // ❌ REMOVE SOURCEID IF EXISTS
+    if (e.sourceId) {
+      delete e.sourceId;
+      updated = true;
+    }
+
+    // FIX TYPE
     if (!e.type) {
       e.type = e.amount < 0 ? "expense" : "income";
       updated = true;
     }
 
-    // ✅ FIX sign
+    // FIX SIGN
     if (e.type === "expense") {
       e.amount = -Math.abs(e.amount);
     } else {
       e.amount = Math.abs(e.amount);
-    }
-
-  });
-
-  // =========================
-  // 🟢 FIX SAVINGS
-  // =========================
-  savingsTransactions.forEach(t => {
-    let d = new Date(t.date);
-
-    let year = d.getFullYear();
-    let month = String(d.getMonth() + 1).padStart(2, "0");
-
-    if (!t.sourceId) {
-      t.sourceId = `${t.type || "salary"}_${year}_${month}`;
-      updated = true;
-    }
-  });
-
-  // =========================
-  // 🟡 BUILD BUDGETS FROM SAVINGS
-  // =========================
-  let map = {};
-
-  savingsTransactions.forEach(t => {
-    if (t.type === "budget_allocation") {
-      let d = new Date(t.date);
-
-      let year = d.getFullYear();
-      let month = String(d.getMonth() + 1).padStart(2, "0");
-
-      let budgetId = `budget_${year}_${month}`;
-
-      if (!map[budgetId]) {
-        map[budgetId] = {
-          budgetId,
-          sourceId: t.sourceId,
-          allocated: 0
-        };
-      }
-
-      map[budgetId].allocated += Math.abs(t.amount);
-    }
-  });
-
-  budgets = Object.values(map);
-
-  // =========================
-  // 🔥 LINK SOURCE → EXPENSE
-  // =========================
-  expenses.forEach(e => {
-    if (!e.sourceId) {
-      let relatedBudget = budgets.find(b => b.budgetId === e.budgetId);
-
-      if (relatedBudget) {
-        e.sourceId = relatedBudget.sourceId;
-        updated = true;
-      }
     }
   });
 
@@ -1594,19 +1607,12 @@ function migrateOldData() {
   localStorage.setItem("budgets", JSON.stringify(budgets));
 
   // =========================
-  // 🔧 FIX OLD BUDGET FORMAT
-  // =========================
-  if (typeof fixBudgetIdFormat === "function") {
-    fixBudgetIdFormat();
-  }
-
-  // =========================
-  // 📱 USER FEEDBACK (MOBILE FRIENDLY)
+  // 📱 FEEDBACK
   // =========================
   if (updated) {
-    showToast("✅ Data migrated & fixed successfully");
+    showToast("✅ Clean architecture applied");
   } else {
-    showToast("ℹ️ No changes needed");
+    showToast("ℹ️ Already clean");
   }
 }
 
@@ -1851,29 +1857,19 @@ function initDateValidation() {
 async function exportData() {
   let data = {
     expenses: JSON.parse(localStorage.getItem("expenses") || "[]"),
-    categories: JSON.parse(localStorage.getItem("categories") || "[]"),
-    budget: Number(localStorage.getItem("budget") || 0),
-    dailyBudget: Number(localStorage.getItem("dailyBudget") || 0),
-    savingsTransactions: JSON.parse(localStorage.getItem("savingsTransactions") || "[]"),
-    transfers: JSON.parse(localStorage.getItem("transfers") || "[]"),
-    budgetAllocations: JSON.parse(localStorage.getItem("budgetAllocations") || "{}"),
-    theme: localStorage.getItem("theme")
+    savingsTransactions: JSON.parse(localStorage.getItem("savingsTransactions") || "[]")
   };
 
   let json = JSON.stringify(data, null, 2);
-
   let blob = new Blob([json], { type: "application/json" });
 
-  // ✅ MOBILE FIRST (SHARE)
-  if (navigator.share && navigator.canShare) {
+  // ✅ TRY SHARE (MOBILE)
+  if (navigator.share) {
     try {
-      let file = new File([blob], "money-backup.json", {
-        type: "application/json"
-      });
+      let file = new File([blob], "money-backup.json");
 
       await navigator.share({
-        title: "Money Tracker Backup",
-        text: "Here is my backup file",
+        title: "Backup",
         files: [file]
       });
 
@@ -1885,17 +1881,11 @@ async function exportData() {
     }
   }
 
-  // 💻 FALLBACK (DESKTOP)
+  // 💻 FALLBACK
   let url = URL.createObjectURL(blob);
+  window.open(url, "_blank");
 
-  let a = document.createElement("a");
-  a.href = url;
-  a.download = "money-backup.json";
-  a.click();
-
-  URL.revokeObjectURL(url);
-
-  showToast("📥 Download started");
+  showToast("📥 Opened backup file");
 }
 
 function openImportModal() {
