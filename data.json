@@ -284,13 +284,18 @@
             "payment": "Bank",
             "date": "2026-04-06T00:00:00.000Z",
             "sourceId": "income_2026_04"
+        },
+        {
+            "id": 1776266534581,
+            "type": "budget_allocation",
+            "amount": -3000,
+            "person": "To Self",
+            "note": "Moved To Salary",
+            "payment": "PhonePe",
+            "sourceId": "income_2026_04",
+            "budgetId": "budget_2026_04",
+            "date": "2026-04-06T00:00:00.000Z"
         }
     ],
-    "budgets": [
-        {
-            "budgetId": "budget_2026_04",
-            "sourceId": "income_2026_04",
-            "allocated": 3000
-        }
-    ]
+    "budgets": []
 }

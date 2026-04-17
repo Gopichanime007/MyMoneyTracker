@@ -2579,14 +2579,10 @@ function importData() {
 
     let expenses = data.expenses || [];
     let savings = data.savingsTransactions || [];
-
-    let newSavings = [];
-    let newBudgets = [];
-
-    let monthMap = {};
+    let budgets = data.budgets || [];
 
     // =========================
-    // 🧠 STEP 1: GROUP DATA BY MONTH
+    // 🟢 STEP 1: CLEAN EXPENSES
     // =========================
     expenses.forEach(e => {
       if (!e.date) return;
@@ -2595,103 +2591,77 @@ function importData() {
       let y = d.getFullYear();
       let m = String(d.getMonth() + 1).padStart(2, "0");
 
-      let key = `${y}_${m}`;
+      let budgetId = `budget_${y}_${m}`;
 
-      if (!monthMap[key]) {
-        monthMap[key] = {
-          income: 0,
-          expenses: []
+      // ✅ Always link to budget
+      e.budgetId = budgetId;
+
+      // ❌ NEVER keep sourceId in expenses
+      if (e.sourceId) delete e.sourceId;
+
+      // ✅ Fix type
+      if (!e.type) {
+        e.type = e.amount < 0 ? "expense" : "income";
+      }
+
+      // ✅ Fix sign
+      if (e.type === "expense") {
+        e.amount = -Math.abs(e.amount);
+      } else {
+        e.amount = Math.abs(e.amount);
+      }
+    });
+
+    // =========================
+    // 🟡 STEP 2: VALIDATE SAVINGS (DO NOT CREATE NEW)
+    // =========================
+    let newSavings = savings.map(s => {
+      let d = new Date(s.date);
+      let y = d.getFullYear();
+      let m = String(d.getMonth() + 1).padStart(2, "0");
+
+      return {
+        ...s,
+        sourceId: s.sourceId || `income_${y}_${m}`
+      };
+    });
+
+    // =========================
+    // 🔵 STEP 3: ENSURE BUDGET EXISTS
+    // =========================
+    let budgetMap = {};
+
+    newSavings.forEach(s => {
+      let d = new Date(s.date);
+      let y = d.getFullYear();
+      let m = String(d.getMonth() + 1).padStart(2, "0");
+
+      let budgetId = `budget_${y}_${m}`;
+
+      if (!budgetMap[budgetId]) {
+        budgetMap[budgetId] = {
+          budgetId,
+          sourceId: s.sourceId,
+          allocated: 0
         };
       }
 
-      if (e.amount > 0) {
-        monthMap[key].income += e.amount;
-      } else {
-        monthMap[key].expenses.push(e);
+      // Only income adds to budget
+      if (s.type === "income") {
+        budgetMap[budgetId].allocated += Math.abs(s.amount);
       }
     });
 
-    // =========================
-    // 🟢 STEP 2: BUILD CLEAN STRUCTURE
-    // =========================
-    Object.keys(monthMap).forEach(key => {
-      let [year, month] = key.split("_");
-
-      let sourceId = `income_${year}_${month}`;
-      let budgetId = `budget_${year}_${month}`;
-
-      let totalIncome = monthMap[key].income;
-
-      // 🔥 Fallback: if no income → use expenses sum
-      if (totalIncome === 0) {
-        totalIncome = monthMap[key].expenses
-          .reduce((sum, e) => sum + Math.abs(e.amount), 0);
-      }
-
-      // 🔹 1. CREATE INCOME (ONLY IF EXISTS)
-      if (totalIncome > 0) {
-        newSavings.push({
-          id: Date.now() + Math.random(),
-          type: "income",
-          amount: totalIncome,
-          sourceId,
-          date: new Date(`${year}-${month}-01`).toISOString()
-        });
-      }
-
-      // 🔹 2. CREATE BUDGET
-      newBudgets.push({
-        budgetId,
-        sourceId,
-        allocated: totalIncome
-      });
-
-      // 🔹 3. CREATE BUDGET ALLOCATION ENTRY
-      if (totalIncome > 0) {
-        newSavings.push({
-          id: Date.now() + Math.random(),
-          type: "budget_allocation",
-          amount: -Math.abs(totalIncome),
-          sourceId,
-          budgetId,
-          date: new Date(`${year}-${month}-01`).toISOString()
-        });
-      }
-
-      // 🔹 4. LINK EXPENSES TO BUDGET
-      monthMap[key].expenses.forEach(e => {
-        e.budgetId = budgetId;
-
-        // ❌ remove wrong linkage
-        if (e.sourceId) delete e.sourceId;
-
-        // ✅ fix type
-        if (!e.type) {
-          e.type = e.amount < 0 ? "expense" : "income";
-        }
-
-        // ✅ fix sign
-        if (e.type === "expense") {
-          e.amount = -Math.abs(e.amount);
-        } else {
-          e.amount = Math.abs(e.amount);
-        }
-      });
-    });
+    let newBudgets = Object.values(budgetMap);
 
     // =========================
-    // 💾 SAVE CLEAN DATA
+    // 💾 SAVE (STRICT FLOW)
     // =========================
     localStorage.setItem("expenses", JSON.stringify(expenses));
     localStorage.setItem("savingsTransactions", JSON.stringify(newSavings));
     localStorage.setItem("budgets", JSON.stringify(newBudgets));
 
-    // =========================
-    // 🔄 FINAL SYNC (OPTIONAL SAFETY)
-    // =========================
-    migrateOldData();
-
-    showToast("✅ Data imported & structured successfully");
+    showToast("✅ Data imported (Clean Architecture Applied)");
 
     updateUI();
     location.reload();
