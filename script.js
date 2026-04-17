@@ -1848,7 +1848,7 @@ function initDateValidation() {
   checkDates(); // initial state
 }
 
-function exportData() {
+async function exportData() {
   let data = {
     expenses: JSON.parse(localStorage.getItem("expenses") || "[]"),
     categories: JSON.parse(localStorage.getItem("categories") || "[]"),
@@ -1863,6 +1863,29 @@ function exportData() {
   let json = JSON.stringify(data, null, 2);
 
   let blob = new Blob([json], { type: "application/json" });
+
+  // ✅ MOBILE FIRST (SHARE)
+  if (navigator.share && navigator.canShare) {
+    try {
+      let file = new File([blob], "money-backup.json", {
+        type: "application/json"
+      });
+
+      await navigator.share({
+        title: "Money Tracker Backup",
+        text: "Here is my backup file",
+        files: [file]
+      });
+
+      showToast("📤 Shared successfully");
+      return;
+
+    } catch (err) {
+      console.log("Share cancelled");
+    }
+  }
+
+  // 💻 FALLBACK (DESKTOP)
   let url = URL.createObjectURL(blob);
 
   let a = document.createElement("a");
@@ -1870,8 +1893,9 @@ function exportData() {
   a.download = "money-backup.json";
   a.click();
 
-  // 🔥 optional cleanup (good practice)
   URL.revokeObjectURL(url);
+
+  showToast("📥 Download started");
 }
 
 function openImportModal() {
