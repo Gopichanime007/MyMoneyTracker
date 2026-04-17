@@ -2565,3 +2565,139 @@ function getTotalBudgetForMonth(monthKey) {
 function openQuotation() {
   window.location.href = "quotation.html";
 }
+
+function importData() {
+  try {
+    let text = document.getElementById("importText").value;
+
+    if (!text) {
+      showToast("No data to import");
+      return;
+    }
+
+    let data = JSON.parse(text);
+
+    let expenses = data.expenses || [];
+    let savings = data.savingsTransactions || [];
+
+    let newSavings = [];
+    let newBudgets = [];
+
+    let monthMap = {};
+
+    // =========================
+    // 🧠 STEP 1: GROUP DATA BY MONTH
+    // =========================
+    expenses.forEach(e => {
+      if (!e.date) return;
+
+      let d = new Date(e.date);
+      let y = d.getFullYear();
+      let m = String(d.getMonth() + 1).padStart(2, "0");
+
+      let key = `${y}_${m}`;
+
+      if (!monthMap[key]) {
+        monthMap[key] = {
+          income: 0,
+          expenses: []
+        };
+      }
+
+      if (e.amount > 0) {
+        monthMap[key].income += e.amount;
+      } else {
+        monthMap[key].expenses.push(e);
+      }
+    });
+
+    // =========================
+    // 🟢 STEP 2: BUILD CLEAN STRUCTURE
+    // =========================
+    Object.keys(monthMap).forEach(key => {
+      let [year, month] = key.split("_");
+
+      let sourceId = `income_${year}_${month}`;
+      let budgetId = `budget_${year}_${month}`;
+
+      let totalIncome = monthMap[key].income;
+
+      // 🔥 Fallback: if no income → use expenses sum
+      if (totalIncome === 0) {
+        totalIncome = monthMap[key].expenses
+          .reduce((sum, e) => sum + Math.abs(e.amount), 0);
+      }
+
+      // 🔹 1. CREATE INCOME (ONLY IF EXISTS)
+      if (totalIncome > 0) {
+        newSavings.push({
+          id: Date.now() + Math.random(),
+          type: "income",
+          amount: totalIncome,
+          sourceId,
+          date: new Date(`${year}-${month}-01`).toISOString()
+        });
+      }
+
+      // 🔹 2. CREATE BUDGET
+      newBudgets.push({
+        budgetId,
+        sourceId,
+        allocated: totalIncome
+      });
+
+      // 🔹 3. CREATE BUDGET ALLOCATION ENTRY
+      if (totalIncome > 0) {
+        newSavings.push({
+          id: Date.now() + Math.random(),
+          type: "budget_allocation",
+          amount: -Math.abs(totalIncome),
+          sourceId,
+          budgetId,
+          date: new Date(`${year}-${month}-01`).toISOString()
+        });
+      }
+
+      // 🔹 4. LINK EXPENSES TO BUDGET
+      monthMap[key].expenses.forEach(e => {
+        e.budgetId = budgetId;
+
+        // ❌ remove wrong linkage
+        if (e.sourceId) delete e.sourceId;
+
+        // ✅ fix type
+        if (!e.type) {
+          e.type = e.amount < 0 ? "expense" : "income";
+        }
+
+        // ✅ fix sign
+        if (e.type === "expense") {
+          e.amount = -Math.abs(e.amount);
+        } else {
+          e.amount = Math.abs(e.amount);
+        }
+      });
+    });
+
+    // =========================
+    // 💾 SAVE CLEAN DATA
+    // =========================
+    localStorage.setItem("expenses", JSON.stringify(expenses));
+    localStorage.setItem("savingsTransactions", JSON.stringify(newSavings));
+    localStorage.setItem("budgets", JSON.stringify(newBudgets));
+
+    // =========================
+    // 🔄 FINAL SYNC (OPTIONAL SAFETY)
+    // =========================
+    migrateOldData();
+
+    showToast("✅ Data imported & structured successfully");
+
+    updateUI();
+    location.reload();
+
+  } catch (err) {
+    console.error(err);
+    showToast("❌ Import failed - Invalid JSON");
+  }
+}
