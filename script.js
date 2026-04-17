@@ -1638,7 +1638,7 @@ function migrateOldData() {
   });
 
   // =========================
-  // 🟡 STEP 2: CREATE BUDGETS IF MISSING
+  // 🟡 STEP 2: CREATE BUDGETS FROM SAVINGS
   // =========================
   let budgetMap = {};
 
@@ -1657,7 +1657,6 @@ function migrateOldData() {
       };
     }
 
-    // Only count positive money (income)
     if (t.amount > 0) {
       budgetMap[budgetId].allocated += t.amount;
     }
@@ -1665,10 +1664,8 @@ function migrateOldData() {
 
   let newBudgets = Object.values(budgetMap);
 
-  // Merge with existing budgets
   newBudgets.forEach(nb => {
     let exists = budgets.find(b => b.budgetId === nb.budgetId);
-
     if (!exists) {
       budgets.push(nb);
       updated = true;
@@ -1676,26 +1673,40 @@ function migrateOldData() {
   });
 
   // =========================
-  // 🔵 STEP 3: ENSURE BUDGET HAS SOURCE ID
+  // 🔥 STEP 2.5: FALLBACK FROM EXPENSES (FIXED POSITION)
+  // =========================
+  if (!budgets.length && expenses.length) {
+    let map = {};
+
+    expenses.forEach(e => {
+      let d = new Date(e.date);
+      let y = d.getFullYear();
+      let m = String(d.getMonth() + 1).padStart(2, "0");
+
+      let budgetId = `budget_${y}_${m}`;
+
+      if (!map[budgetId]) {
+        map[budgetId] = {
+          budgetId,
+          sourceId: `income_${y}_${m}`,
+          allocated: 0
+        };
+      }
+
+      map[budgetId].allocated += Math.abs(e.amount);
+    });
+
+    budgets = Object.values(map);
+    updated = true;
+  }
+
+  // =========================
+  // 🔵 STEP 3: ENSURE SOURCE ID
   // =========================
   budgets.forEach(b => {
     if (!b.sourceId) {
       let [_, year, month] = b.budgetId.split("_");
-
-      let relatedSaving = savingsTransactions.find(t => {
-        let d = new Date(t.date);
-        return (
-          d.getFullYear() == year &&
-          String(d.getMonth() + 1).padStart(2, "0") == month
-        );
-      });
-
-      if (relatedSaving) {
-        b.sourceId = relatedSaving.sourceId;
-      } else {
-        b.sourceId = `income_${year}_${month}`;
-      }
-
+      b.sourceId = `income_${year}_${month}`;
       updated = true;
     }
   });
@@ -1708,25 +1719,21 @@ function migrateOldData() {
     let y = d.getFullYear();
     let m = String(d.getMonth() + 1).padStart(2, "0");
 
-    // ✅ Assign budgetId if missing
     if (!e.budgetId) {
       e.budgetId = `budget_${y}_${m}`;
       updated = true;
     }
 
-    // ❌ REMOVE WRONG FIELD (IMPORTANT)
     if (e.sourceId) {
       delete e.sourceId;
       updated = true;
     }
 
-    // ✅ FIX TYPE
     if (!e.type) {
       e.type = e.amount < 0 ? "expense" : "income";
       updated = true;
     }
 
-    // ✅ FIX SIGN
     if (e.type === "expense") {
       e.amount = -Math.abs(e.amount);
     } else {
@@ -1735,7 +1742,7 @@ function migrateOldData() {
   });
 
   // =========================
-  // 🟣 STEP 5: CLEAN DUPLICATES (OPTIONAL SAFE)
+  // 🟣 CLEAN DUPLICATES
   // =========================
   budgets = budgets.filter(
     (b, i, arr) =>
@@ -1743,24 +1750,25 @@ function migrateOldData() {
   );
 
   // =========================
-  // 💾 SAVE EVERYTHING
+  // 💾 SAVE (NOW CORRECT)
   // =========================
   localStorage.setItem("expenses", JSON.stringify(expenses));
   localStorage.setItem("savingsTransactions", JSON.stringify(savingsTransactions));
   localStorage.setItem("budgets", JSON.stringify(budgets));
 
   // =========================
-  // 📱 USER FEEDBACK
+  // 📱 FEEDBACK
   // =========================
   if (updated) {
-    showToast("✅ Data migrated successfully");
+    showToast("✅ Migration fixed & budgets created");
   } else {
     showToast("ℹ️ Already up-to-date");
   }
 }
 function runMigration() {
   migrateOldData();
-  updateUI(); // 🔥 refresh UI after fix
+  updateUI();
+  location.reload();// 🔥 refresh UI after fix
 }
 /* =========================
    🔐 SECRET NAVIGATION (PRO)
