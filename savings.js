@@ -370,11 +370,20 @@ function getAvailableSources() {
 // Loads income sources into dropdown with remaining balance
 function loadSourceOptions() {
     let select = document.getElementById("sourceSelect");
-
     if (!select) return;
 
     let data = getSavings();
     let sources = data.filter(t => t.type === "income");
+
+    select.innerHTML = "";
+
+    if (!sources.length) {
+        let option = document.createElement("option");
+        option.value = "";
+        option.textContent = "No sources available";
+        select.appendChild(option);
+        return;
+    }
 
     select.innerHTML = "<option value=''>Select Source</option>";
 
