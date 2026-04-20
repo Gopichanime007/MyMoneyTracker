@@ -197,9 +197,6 @@ function addSavings() {
         let budgetId = generateBudgetId(period, budgetDate);
 
         // ✅ create/update budget
-        createOrUpdateBudget(budgetId, sourceId, amount, "Savings Transfer");
-
-        // ✅ also track in savings
         let entry = createSavingsEntry({
             type: "budget_allocation",
             amount: -Math.abs(amount),
@@ -208,6 +205,9 @@ function addSavings() {
             note,
             date
         });
+
+        // 🔥 Correct call
+        createOrUpdateBudget(budgetId, entry);
 
         data.push(entry);
     }
@@ -904,4 +904,46 @@ function generateBudgetId(period, date) {
     }
 
     return null;
+}
+
+
+function createOrUpdateBudget(budgetId, entry) {
+    let budgets = JSON.parse(localStorage.getItem("budgets")) || [];
+    let savings = JSON.parse(localStorage.getItem("savingsTransactions")) || [];
+
+    // 🔥 filter all entries for this budget
+    let related = savings.filter(t =>
+        t.type === "budget_allocation" &&
+        t.monthKey === entry.monthKey
+    );
+
+    let total = related.reduce((sum, t) => sum + Math.abs(t.amount), 0);
+
+    let existing = budgets.find(b => b.budgetId === budgetId);
+
+    if (existing) {
+        existing.totalAllocated = total; // 🔥 FIX (not +=)
+        existing.updatedAt = new Date().toISOString();
+    } else {
+        budgets.push({
+            id: Date.now(),
+            type: "budget",
+
+            budgetId,
+            sourceId: entry.sourceId,
+
+            totalAllocated: total,
+
+            entity: entry.entity,
+            note: entry.note,
+
+            date: entry.date,
+            monthKey: entry.monthKey,
+
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString()
+        });
+    }
+
+    localStorage.setItem("budgets", JSON.stringify(budgets));
 }
