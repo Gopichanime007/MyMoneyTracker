@@ -814,11 +814,36 @@ function applyPeriodFromModal() {
 
     loadGraph("custom", filtered, { start: from, end: to });
 }
+// function loadBudgetOptions() {
+//     let select = document.getElementById("budgetSelect");
+//     if (!select) return;
+
+//     let budgets = getBudgets();
+
+//     select.innerHTML = "";
+
+//     if (!budgets.length) {
+//         let opt = document.createElement("option");
+//         opt.value = "";
+//         opt.textContent = "No budgets available";
+//         select.appendChild(opt);
+//         return;
+//     }
+
+//     budgets.forEach(b => {
+//         let opt = document.createElement("option");
+//         opt.value = b.budgetId;
+//         opt.textContent = formatBudgetName(b.budgetId);
+//         select.appendChild(opt);
+//     });
+// }
+
 function loadBudgetOptions() {
     let select = document.getElementById("budgetSelect");
     if (!select) return;
 
     let budgets = getBudgets();
+    let expenses = getExpenses();
 
     select.innerHTML = "";
 
@@ -831,9 +856,23 @@ function loadBudgetOptions() {
     }
 
     budgets.forEach(b => {
+
+        // ✅ calculate spent correctly
+        let spent = expenses
+            .filter(e => e.budgetId === b.budgetId && e.amount < 0)
+            .reduce((sum, e) => sum + Math.abs(e.amount), 0);
+
+        let total = b.totalAllocated || 0;
+        let remaining = total - spent;
+
         let opt = document.createElement("option");
+
+        // ✅ FIXED FIELD
         opt.value = b.budgetId;
-        opt.textContent = formatBudgetName(b.budgetId);
+
+        // ✅ CLEAN UI TEXT
+        opt.textContent = `${formatBudgetName(b.budgetId)} — ₹${remaining} left`;
+
         select.appendChild(opt);
     });
 }
