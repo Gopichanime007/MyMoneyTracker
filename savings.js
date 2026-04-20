@@ -7,6 +7,7 @@ window.onload = function () {
     setTodayDate();
     loadSourceOptions();
     handleSavingsTypeChange(); // 👈 IMPORTANT
+    loadBudgetYears();
 
     let theme = localStorage.getItem("theme") || "#4caf50";
     document.documentElement.style.setProperty("--theme", theme);
@@ -635,21 +636,39 @@ function closeSavingsModal() {
 
 // Controls UI fields based on selected type (income / transfer / budget)
 function handleSavingsTypeChange() {
-
     let type = document.getElementById("sType").value;
-    let config = document.getElementById("budgetConfig");
-    let source = document.getElementById("sourceSelect");
 
-    if (type === "withdraw_budget") {
-        config.style.display = "block";
-        source.style.display = "none";
-    } else if (type === "transfer") {
-        config.style.display = "none";
+    let source = document.getElementById("sourceWrapper");
+    let budget = document.getElementById("budgetConfig");
+
+    if (type === "transfer") {
         source.style.display = "block";
+        budget.style.display = "none";
+
+    } else if (type === "withdraw_budget") {
+        source.style.display = "block";   // 🔥 CHANGE HERE
+        budget.style.display = "block";
+
     } else {
-        config.style.display = "none";
         source.style.display = "none";
+        budget.style.display = "none";
     }
+}
+
+function loadBudgetYears() {
+    let yearSelect = document.getElementById("budgetYear");
+    if (!yearSelect) return;
+
+    let currentYear = new Date().getFullYear();
+
+    for (let i = currentYear - 2; i <= currentYear + 5; i++) {
+        let opt = document.createElement("option");
+        opt.value = i;
+        opt.textContent = i;
+        yearSelect.appendChild(opt);
+    }
+
+    yearSelect.value = currentYear;
 }
 
 function applySavingsDateFilter() {

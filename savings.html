@@ -55,13 +55,16 @@
       <div class="card">
         <h3>Add Entry</h3>
 
+        <!-- TYPE -->
         <select id="sType" onchange="handleSavingsTypeChange()">
           <option value="income">Add Savings</option>
           <option value="withdraw_budget">Move to Budget</option>
           <option value="transfer">Transfer</option>
         </select>
 
+        <!-- BASIC INFO -->
         <input type="number" id="sAmount" placeholder="Amount">
+
         <select id="sEntity">
           <option value="Self">Self</option>
           <option value="Family">Family</option>
@@ -70,21 +73,42 @@
           <option value="Charity">Charity</option>
           <option value="Other">Other</option>
         </select>
+
         <input type="text" id="sNote" placeholder="Purpose / Note">
+
+        <!-- MAIN DATE -->
+        <label>Date</label>
         <input type="date" id="sDate">
-        <select id="sourceSelect" style="display:none;"></select>
+
+        <!-- SOURCE -->
+        <div id="sourceWrapper" style="display:none;">
+          <label>Source</label>
+          <select id="sourceSelect"></select>
+        </div>
+
+        <!-- ================= BUDGET CONFIG ================= -->
         <div id="budgetConfig" style="display:none; margin-top:10px;">
 
+          <label>Budget Period</label>
           <select id="budgetPeriod" onchange="handleBudgetPeriodChange()">
             <option value="day">Daily</option>
             <option value="week">Weekly</option>
             <option value="month" selected>Monthly</option>
           </select>
 
+          <!-- ✅ SINGLE SOURCE OF TRUTH -->
+          <label>Budget Month</label>
           <input type="date" id="budgetDate">
+
+          <!-- optional helper -->
+          <small style="color:#666;">
+            Select month (day will be ignored)
+          </small>
 
         </div>
 
+        <!-- PAYMENT -->
+        <label>Payment Method</label>
         <select id="sPayment">
           <option>Cash</option>
           <option>UPI</option>
@@ -93,10 +117,11 @@
           <option>Bank</option>
         </select>
 
+        <!-- ACTION -->
         <button class="primary" onclick="addSavings()">Save</button>
+
       </div>
     </section>
-
     <!-- ================= HISTORY ================= -->
     <section id="history" class="screen">
       <div class="card">
