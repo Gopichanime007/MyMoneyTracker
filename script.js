@@ -36,16 +36,30 @@ function saveSavings(data) {
 function addExpense(obj) {
     let expenses = getExpenses();
 
+    // ✅ FIX TYPE SAFELY
+    let type = obj.type || (obj.amount < 0 ? "expense" : "income");
+
+    // ✅ USER CONTROLLED CATEGORY (NO AUTO MAGIC)
+    let category = obj.category || "Others";
+
     expenses.push({
         id: Date.now(),
-        type: obj.type || (obj.amount < 0 ? "expense" : "income"),
+
+        type: type,
         amount: obj.amount,
-        category: obj.category || "Others",
+
+        category: category,   // ✅ correct
+
         purpose: obj.purpose || "",
         budgetId: obj.budgetId || null,
         entity: obj.entity || "Cash",
-        date: obj.date ? new Date(obj.date).toISOString() : new Date().toISOString(),
+
+        date: obj.date
+            ? new Date(obj.date).toISOString()
+            : new Date().toISOString(),
+
         monthKey: (obj.date || new Date().toISOString()).slice(0, 7),
+
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString()
     });
@@ -76,9 +90,9 @@ function getBudgetBalance(budgetId) {
 
     let budgets = getBudgets();
 
-    let budget = budgets.find(b => b.budgetId === budgetId);
-
-    let allocated = budget ? (budget.totalAllocated || 0) : 0;
+    let allocated = budgets
+        .filter(b => b.budgetId === budgetId)
+        .reduce((sum, b) => sum + (b.totalAllocated || 0), 0);
 
     return allocated - spent;
 }
@@ -187,7 +201,7 @@ function handleAddExpense() {
         return;
     }
 
-    if (!budgetId) {
+    if (type === "expense" && !budgetId) {
         showToast("Select budget");
         return;
     }
@@ -269,6 +283,8 @@ window.onload = () => {
     renderCategoryList();
     setDefaultDate();
     bindRemainingCard();
+    renderBudgetEntries();
+    renderCategoryBreakdown();
 };
 
 function showScreen(id) {
@@ -302,7 +318,7 @@ function initCategories() {
     let categories = getCategories();
 
     if (!categories.length) {
-        categories = ["Food", "Travel", "Bills", "Entertainment", "Others"];
+        categories = ["Food", "Travel", "Bills", "Entertainment", "Loan", "Recovery", "Others"];
         saveCategories(categories);
     }
 
@@ -839,15 +855,20 @@ function applyPeriodFromModal() {
 // }
 
 function loadBudgetOptions() {
+
     let select = document.getElementById("budgetSelect");
     if (!select) return;
 
     let budgets = getBudgets();
     let expenses = getExpenses();
 
+    let currentMonth = new Date().toISOString().slice(0, 7);
+
     select.innerHTML = "";
 
-    if (!budgets.length) {
+    let filtered = budgets.filter(b => b.monthKey === currentMonth);
+
+    if (!filtered.length) {
         let opt = document.createElement("option");
         opt.value = "";
         opt.textContent = "No budgets available";
@@ -855,23 +876,19 @@ function loadBudgetOptions() {
         return;
     }
 
-    budgets.forEach(b => {
+    filtered.forEach(b => {
 
-        // ✅ calculate spent correctly
         let spent = expenses
             .filter(e => e.budgetId === b.budgetId && e.amount < 0)
             .reduce((sum, e) => sum + Math.abs(e.amount), 0);
 
-        let total = b.totalAllocated || 0;
-        let remaining = total - spent;
+        let remaining = (b.totalAllocated || 0) - spent;
 
         let opt = document.createElement("option");
 
-        // ✅ FIXED FIELD
         opt.value = b.budgetId;
 
-        // ✅ CLEAN UI TEXT
-        opt.textContent = `${formatBudgetName(b.budgetId)} — ₹${remaining} left`;
+        opt.textContent = `${formatBudgetName(b.budgetId)} (${b.entity}) — ₹${remaining} left`;
 
         select.appendChild(opt);
     });
@@ -1040,35 +1057,137 @@ function bindRemainingCard() {
 // 📊 LOAD DASHBOARD SUMMARY
 // =========================
 // Calculates Budget, Spent, Remaining, Today
+// function loadDashboard() {
+
+//     let savings = getSavings();   // always latest
+//     let budgets = JSON.parse(localStorage.getItem("budgets")) || [];
+//     let expenses = JSON.parse(localStorage.getItem("expenses")) || [];
+
+//     // 💰 TOTAL SAVINGS
+//     let totalSavings = savings.reduce((sum, t) => sum + t.amount, 0);
+
+//     // 📦 TOTAL BUDGET
+//     let currentMonth = new Date().toISOString().slice(0, 7);
+
+//     let totalBudget = budgets
+//         .filter(b => b.monthKey === currentMonth)
+//         .reduce((sum, b) => sum + (b.totalAllocated || 0), 0);
+
+//     // 💰 INCOME
+//     let totalIncome = expenses
+//         .filter(e =>
+//             e.amount > 0 &&
+//             e.monthKey === currentMonth   // 🔥 IMPORTANT
+//         )
+//         .reduce((sum, e) => sum + e.amount, 0);
+
+//     // 💸 EXPENSE
+//     let totalSpent = expenses
+//         .filter(e =>
+//             e.amount < 0 &&
+//             e.monthKey === currentMonth   // 🔥 IMPORTANT
+//         )
+//         .reduce((sum, e) => sum + Math.abs(e.amount), 0);
+
+//     // 📊 NET
+//     let net = totalIncome - totalSpent;
+
+//     // 🟢 REMAINING (based on budget)
+//     let remaining = totalBudget - totalSpent;
+
+//     // 📅 TODAY SPENT
+//     let today = new Date().toDateString();
+
+//     let todaySpent = expenses
+//         .filter(e =>
+//             new Date(e.date).toDateString() === today &&
+//             e.amount < 0
+//         )
+//         .reduce((sum, e) => sum + Math.abs(e.amount), 0);
+
+//     // =========================
+//     // 🖥️ UPDATE UI
+//     // =========================
+//     document.getElementById("budgetValue").innerText = totalBudget;
+//     document.getElementById("spent").innerText = totalSpent;
+//     document.getElementById("remaining").innerText = remaining;
+//     document.getElementById("todaySpent").innerText = todaySpent;
+//     document.getElementById("incomeValue").innerText = totalIncome;
+//     document.getElementById("netValue").innerText = net;
+// }
+// function loadDashboard() {
+
+//     let savings = getSavings();
+//     let budgets = getBudgets();
+//     let expenses = getExpenses();
+
+//     let currentMonth = new Date().toISOString().slice(0, 7);
+
+//     // 💰 TOTAL SAVINGS
+//     let totalSavings = savings.reduce((sum, t) => sum + t.amount, 0);
+
+//     // 📦 TOTAL BUDGET (ONLY CURRENT MONTH)
+//     let totalBudget = budgets
+//         .filter(b => b.monthKey === currentMonth)
+//         .reduce((sum, b) => sum + (b.totalAllocated || 0), 0);
+
+//     // 💰 INCOME (ONLY CURRENT MONTH)
+//     let totalIncome = expenses
+//         .filter(e => e.amount > 0 && e.monthKey === currentMonth)
+//         .reduce((sum, e) => sum + e.amount, 0);
+
+//     // 💸 EXPENSE (ONLY CURRENT MONTH)
+//     let totalSpent = expenses
+//         .filter(e => e.amount < 0 && e.monthKey === currentMonth)
+//         .reduce((sum, e) => sum + Math.abs(e.amount), 0);
+
+//     // 📊 NET
+//     let net = totalIncome - totalSpent;
+
+//     // 🟢 REMAINING
+//     let remaining = totalBudget - totalSpent;
+
+//     // 📅 TODAY SPENT
+//     let today = new Date().toDateString();
+
+//     let todaySpent = expenses
+//         .filter(e =>
+//             new Date(e.date).toDateString() === today &&
+//             e.amount < 0
+//         )
+//         .reduce((sum, e) => sum + Math.abs(e.amount), 0);
+
+//     // UI
+//     document.getElementById("budgetValue").innerText = totalBudget;
+//     document.getElementById("spent").innerText = totalSpent;
+//     document.getElementById("remaining").innerText = remaining;
+//     document.getElementById("todaySpent").innerText = todaySpent;
+//     document.getElementById("incomeValue").innerText = totalIncome;
+//     document.getElementById("netValue").innerText = net;
+// }
 function loadDashboard() {
 
-    let savings = JSON.parse(localStorage.getItem("savingsTransactions")) || [];
-    let budgets = JSON.parse(localStorage.getItem("budgets")) || [];
-    let expenses = JSON.parse(localStorage.getItem("expenses")) || [];
+    let savings = getSavings();
+    let budgets = getBudgets();
+    let expenses = getExpenses();
 
-    // 💰 TOTAL SAVINGS
-    let totalSavings = savings.reduce((sum, t) => sum + t.amount, 0);
+    let currentMonth = new Date().toISOString().slice(0, 7);
 
-    // 📦 TOTAL BUDGET
-    let totalBudget = budgets.reduce((sum, b) => sum + (b.totalAllocated || 0), 0);
+    let totalBudget = budgets
+        .filter(b => b.monthKey === currentMonth)
+        .reduce((sum, b) => sum + (b.totalAllocated || 0), 0);
 
-    // 💰 INCOME
     let totalIncome = expenses
-        .filter(e => e.amount > 0)
+        .filter(e => e.amount > 0 && e.monthKey === currentMonth)
         .reduce((sum, e) => sum + e.amount, 0);
 
-    // 💸 EXPENSE
     let totalSpent = expenses
-        .filter(e => e.amount < 0)
+        .filter(e => e.amount < 0 && e.monthKey === currentMonth)
         .reduce((sum, e) => sum + Math.abs(e.amount), 0);
 
-    // 📊 NET
     let net = totalIncome - totalSpent;
-
-    // 🟢 REMAINING (based on budget)
     let remaining = totalBudget - totalSpent;
 
-    // 📅 TODAY SPENT
     let today = new Date().toDateString();
 
     let todaySpent = expenses
@@ -1078,9 +1197,6 @@ function loadDashboard() {
         )
         .reduce((sum, e) => sum + Math.abs(e.amount), 0);
 
-    // =========================
-    // 🖥️ UPDATE UI
-    // =========================
     document.getElementById("budgetValue").innerText = totalBudget;
     document.getElementById("spent").innerText = totalSpent;
     document.getElementById("remaining").innerText = remaining;
@@ -1088,7 +1204,6 @@ function loadDashboard() {
     document.getElementById("incomeValue").innerText = totalIncome;
     document.getElementById("netValue").innerText = net;
 }
-
 // =========================
 // 📦 LOAD BUDGET SCREEN
 // =========================
@@ -1099,7 +1214,9 @@ function loadBudgetScreen() {
     let currentMonth = new Date().toISOString().slice(0, 7);
 
     let budget = budgets.find(b => b.monthKey === currentMonth);
-    let total = budget ? (budget.totalAllocated || 0) : 0;
+    let total = budgets
+        .filter(b => b.monthKey === currentMonth)
+        .reduce((sum, b) => sum + (b.totalAllocated || 0), 0);
 
     let budgetEl = document.getElementById("currentBudget");
     if (budgetEl) budgetEl.innerText = "₹" + total;
@@ -1114,39 +1231,171 @@ function loadBudgetScreen() {
 // =========================
 // Displays all budget entries
 function renderBudgetEntries() {
+    let budgets = JSON.parse(localStorage.getItem("budgets")) || [];
+    let expenses = JSON.parse(localStorage.getItem("expenses")) || [];
+    let savings = JSON.parse(localStorage.getItem("savingsTransactions")) || [];
 
-    let container = document.getElementById("budgetList");
+    let container = document.getElementById("budgetEntries");
     if (!container) return;
-
-    let budgets = getBudgets();
 
     container.innerHTML = "";
 
     if (!budgets.length) {
-        container.innerHTML = "<p>No budgets yet 📭</p>";
+        container.innerHTML = "<p>No budget entries</p>";
         return;
     }
 
+    // 🔥 GROUP BY SOURCE + MONTH
+    let map = {};
+
     budgets.forEach(b => {
+        let key = b.sourceId + "_" + b.monthKey;
+
+        if (!map[key]) {
+            map[key] = {
+                sourceId: b.sourceId,
+                monthKey: b.monthKey,
+                totalAllocated: 0,
+                entity: b.entity
+            };
+        }
+
+        map[key].totalAllocated += b.totalAllocated || 0;
+    });
+
+    let list = Object.values(map).reverse();
+
+    list.forEach(g => {
+
+        let budgetId = `budget_${g.monthKey}_${g.sourceId}`;
+
+        let used = expenses
+            .filter(e =>
+                e.budgetId === budgetId &&
+                e.type === "expense"
+            )
+            .reduce((sum, e) => sum + Math.abs(e.amount), 0);
+
+        let remaining = g.totalAllocated - used;
+
+        let source = savings.find(s => s.id === g.sourceId);
+        let name = source ? (source.note || source.entity) : "Budget";
+
+        let monthYear = formatMonth(g.monthKey);
+
+        let statusText = remaining <= 0
+            ? "❌ Exhausted"
+            : `₹${remaining} left`;
+
+        let statusClass = remaining <= 0 ? "red" : "green";
 
         let div = document.createElement("div");
-        div.className = "expense-item";
+        div.className = "income-card";
 
         div.innerHTML = `
-            <div>
-                <strong>${formatBudgetName(b.budgetId)}</strong><br>
-                <small>${new Date(b.date).toLocaleDateString()}</small>
-            </div>
+    <div class="budget-card">
 
-            <div style="font-weight:600;">
-                ₹${b.totalAllocated}
+        <div class="budget-left">
+            <div class="budget-title">${name}</div>
+            <div class="budget-sub">${monthYear}</div>
+        </div>
+
+        <div class="budget-right">
+            <div class="budget-amount">₹${g.totalAllocated}</div>
+            <div class="budget-status ${remaining <= 0 ? "exhausted" : "active"}">
+                ${remaining <= 0 ? "Exhausted" : `₹${remaining} left`}
             </div>
-        `;
+        </div>
+
+    </div>
+`;
+
+        div.style.cursor = "pointer";
+        div.onclick = () => openBudgetDetails(g);
 
         container.appendChild(div);
     });
 }
 
+function openBudgetDetails(group) {
+
+    let expenses = JSON.parse(localStorage.getItem("expenses")) || [];
+    let savings = JSON.parse(localStorage.getItem("savingsTransactions")) || [];
+
+    let container = document.getElementById("budgetDetailsContainer");
+    if (!container) return;
+
+    let budgetId = `budget_${group.monthKey}_${group.sourceId}`;
+
+    let source = savings.find(s => s.id === group.sourceId);
+    let name = source ? (source.note || source.entity) : "Budget";
+
+    let related = expenses.filter(e => e.budgetId === budgetId);
+
+    let used = related
+        .filter(e => e.type === "expense")
+        .reduce((sum, e) => sum + Math.abs(e.amount), 0);
+
+    let remaining = group.totalAllocated - used;
+
+    let monthYear = formatMonth(group.monthKey);
+
+    // 🔥 BUILD ENTRIES HTML FIRST
+    let entriesHtml = "";
+
+    if (!related.length) {
+        entriesHtml = "<p>No entries</p>";
+    } else {
+        related.forEach(e => {
+            let color = e.amount < 0 ? "red" : "green";
+
+            entriesHtml += `
+                <div class="expense-item">
+                    <div>
+                        <strong>${e.purpose || e.category || "Entry"}</strong><br>
+                        <small>${new Date(e.date).toLocaleString()}</small>
+                    </div>
+
+                    <div style="color:${color}; font-weight:600;">
+                        ₹${Math.abs(e.amount)}
+                    </div>
+                </div>
+            `;
+        });
+    }
+
+    // 🔥 SWITCH SCREEN
+    showScreen("budgetDetails");
+
+    // ✅ SINGLE CLEAN UI (NO DUPLICATE)
+    container.innerHTML = `
+        <div class="card">
+
+            <div style="display:flex; justify-content:space-between; align-items:center;">
+                <h3>${name}</h3>
+                <button onclick="goBackToBudgets()" class="secondary">← Back</button>
+            </div>
+
+            <small>${monthYear}</small>
+
+            <p>Allocated: ₹${group.totalAllocated}</p>
+            <p>Used: ₹${used}</p>
+            <p>Remaining: ₹${remaining}</p>
+
+            <hr>
+
+            <h4>Entries</h4>
+
+            ${entriesHtml}
+
+        </div>
+    `;
+}
+
+function goBackToBudgets() {
+    showScreen("budgets");
+    renderBudgetEntries();
+}
 // =========================
 // 📅 CALCULATE DAILY LIMIT
 // =========================
@@ -1973,3 +2222,133 @@ function groupData(expenses, type, now, customRange = null) {
 
 //     return map;
 // }
+
+
+function getLoanSummary() {
+    let expenses = getExpenses();
+
+    let map = {};
+
+    expenses.forEach(e => {
+        if (!e.person) return;
+
+        if (!map[e.person]) {
+            map[e.person] = {
+                given: 0,
+                received: 0
+            };
+        }
+
+        if (e.category === "Loan" && e.amount < 0) {
+            map[e.person].given += Math.abs(e.amount);
+        }
+
+        if (e.category === "Recovery" && e.amount > 0) {
+            map[e.person].received += e.amount;
+        }
+    });
+
+    // calculate balance
+    Object.keys(map).forEach(p => {
+        map[p].balance = map[p].given - map[p].received;
+    });
+
+    return map;
+}
+function renderLoanSummary() {
+    let container = document.getElementById("loanSummary");
+    if (!container) return;
+
+    let data = getLoanSummary();
+
+    container.innerHTML = "";
+
+    let people = Object.keys(data);
+
+    if (!people.length) {
+        container.innerHTML = "<p>No loans yet</p>";
+        return;
+    }
+
+    people.forEach(p => {
+        let d = data[p];
+
+        let div = document.createElement("div");
+
+        div.innerHTML = `
+            <div style="margin-bottom:10px;">
+                <strong>${p}</strong><br>
+                Given: ₹${d.given} |
+                Received: ₹${d.received} <br>
+                <span style="color:${d.balance > 0 ? 'red' : 'green'}">
+                    ${d.balance > 0 ? "Pending" : "Cleared"}: ₹${d.balance}
+                </span>
+            </div>
+        `;
+
+        container.appendChild(div);
+    });
+}
+
+// function renderBudgetEntries() {
+//     let container = document.getElementById("budgetEntries");
+//     if (!container) return;
+
+//     let budgets = getBudgets();
+//     let expenses = getExpenses();
+
+//     container.innerHTML = "";
+
+//     if (!budgets.length) {
+//         container.innerHTML = "<p>No budget entries</p>";
+//         return;
+//     }
+
+//     budgets.forEach(b => {
+
+//         // 🔥 calculate spent
+//         let spent = expenses
+//             .filter(e => e.budgetId === b.budgetId && e.type === "expense")
+//             .reduce((sum, e) => sum + Math.abs(e.amount), 0);
+
+//         let remaining = (b.totalAllocated || 0) - spent;
+
+//         let div = document.createElement("div");
+//         div.className = "budget-card";
+
+//         div.innerHTML = `
+//             <div>
+//                 <strong>${formatBudgetName(b.budgetId)}</strong><br>
+//                 <small>${b.entity}</small>
+//             </div>
+
+//             <div style="margin-top:6px;">
+//                 Allocated: ₹${b.totalAllocated || 0}<br>
+//                 Spent: ₹${spent}<br>
+//                 <strong style="color:${remaining >= 0 ? 'green' : 'red'}">
+//                     Remaining: ₹${remaining}
+//                 </strong>
+//             </div>
+//         `;
+
+//         container.appendChild(div);
+//     });
+// }
+function openBudgetScreen() {
+    renderBudgetEntries();  // 🔥 MUST
+}
+
+// =========================
+// 🗓️ FORMAT HELPERS
+// =========================
+function formatMonth(monthKey) {
+    if (!monthKey) return "No Date";
+
+    let [year, month] = monthKey.split("-");
+    let date = new Date(year, month - 1);
+
+    return date.toLocaleString("default", {
+        month: "short",
+        year: "numeric"
+    });
+}

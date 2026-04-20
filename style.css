@@ -174,12 +174,13 @@ body {
 .today {
   background: linear-gradient(135deg, #ffa726, #ef6c00);
 }
+
 .income {
-    background: linear-gradient(135deg, #00c853, #64dd17);
+  background: linear-gradient(135deg, #00c853, #64dd17);
 }
 
 .net {
-    background: linear-gradient(135deg, #6a1b9a, #ab47bc);
+  background: linear-gradient(135deg, #6a1b9a, #ab47bc);
 }
 
 /* =========================
@@ -608,4 +609,58 @@ button {
 
 .clickable-card:active {
   transform: scale(0.95);
+}
+
+
+/* 🔥 Budget Card Layout */
+.budget-card {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 14px;
+  border: 1px solid rgba(0, 0, 0, 0.05);
+  border-radius: 18px;
+}
+
+/* LEFT */
+.budget-title {
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.budget-sub {
+  font-size: 12px;
+  color: #888;
+  margin-top: 2px;
+}
+
+/* RIGHT */
+.budget-right {
+  text-align: right;
+}
+
+.budget-amount {
+  font-size: 16px;
+  font-weight: 600;
+}
+
+/* STATUS BADGE */
+.budget-status {
+  font-size: 12px;
+  margin-top: 4px;
+  padding: 4px 8px;
+  border-radius: 8px;
+  display: inline-block;
+}
+
+/* ACTIVE */
+.budget-status.active {
+  background: #e6f7ec;
+  color: #1b8a3e;
+}
+
+/* EXHAUSTED */
+.budget-status.exhausted {
+  background: #fdecea;
+  color: #d93025;
 }

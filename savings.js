@@ -207,9 +207,9 @@ function addSavings() {
         });
 
         // 🔥 Correct call
-        createOrUpdateBudget(budgetId, entry);
+        data.push(entry);   // 🔥 FIRST push
 
-        data.push(entry);
+        createOrUpdateBudget(budgetId, entry);   // 🔥 THEN calculate
     }
     console.log("Selected Date:", selectedDate);
     console.log("ISO Date:", selectedDate.toISOString());
@@ -253,7 +253,24 @@ function createOrUpdateBudgetFromSavings(entry) {
 
     localStorage.setItem("budgets", JSON.stringify(budgets));
 }
+// =========================
+// 🗓️ FORMAT HELPERS
+// =========================
+function formatMonth(monthKey) {
+    if (!monthKey) return "No Date";
 
+    let [year, month] = monthKey.split("-");
+    let date = new Date(year, month - 1);
+
+    return date.toLocaleString("default", {
+        month: "short",
+        year: "numeric"
+    });
+}
+
+// =========================
+// 📊 LOAD UI
+// =========================
 // =========================
 // 📊 LOAD UI
 // =========================
@@ -900,7 +917,11 @@ function generateBudgetId(period, date) {
     if (period === "month") {
         let y = d.getFullYear();
         let m = String(d.getMonth() + 1).padStart(2, "0");
-        return "budget_" + y + "_" + m;
+
+        let sourceId = document.getElementById("sourceSelect")?.value || "0";
+
+        // ✅ FINAL STANDARD FORMAT
+        return `budget_${y}-${m}_${sourceId}`;
     }
 
     return null;
@@ -909,20 +930,14 @@ function generateBudgetId(period, date) {
 
 function createOrUpdateBudget(budgetId, entry) {
     let budgets = JSON.parse(localStorage.getItem("budgets")) || [];
-    let savings = JSON.parse(localStorage.getItem("savingsTransactions")) || [];
 
-    // 🔥 filter all entries for this budget
-    let related = savings.filter(t =>
-        t.type === "budget_allocation" &&
-        t.monthKey === entry.monthKey
+    let existing = budgets.find(b =>
+        b.budgetId === budgetId &&
+        b.entity === entry.entity   // 🔥 ADD THIS
     );
 
-    let total = related.reduce((sum, t) => sum + Math.abs(t.amount), 0);
-
-    let existing = budgets.find(b => b.budgetId === budgetId);
-
     if (existing) {
-        existing.totalAllocated = total; // 🔥 FIX (not +=)
+        existing.totalAllocated += Math.abs(entry.amount);
         existing.updatedAt = new Date().toISOString();
     } else {
         budgets.push({
@@ -932,11 +947,11 @@ function createOrUpdateBudget(budgetId, entry) {
             budgetId,
             sourceId: entry.sourceId,
 
-            totalAllocated: total,
+            totalAllocated: Math.abs(entry.amount),
 
-            entity: entry.entity,
+            entity: entry.entity,   // 🔥 IMPORTANT
+
             note: entry.note,
-
             date: entry.date,
             monthKey: entry.monthKey,
 
@@ -947,3 +962,4 @@ function createOrUpdateBudget(budgetId, entry) {
 
     localStorage.setItem("budgets", JSON.stringify(budgets));
 }
+
