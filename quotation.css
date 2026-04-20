@@ -1,9 +1,20 @@
+/* =========================
+   🌍 GLOBAL
+========================= */
 body {
-  font-family: Arial;
+  font-family: Arial, sans-serif;
   background: #f4f6f9;
   margin: 0;
 }
 
+* {
+  box-sizing: border-box;
+  /* 🔥 GLOBAL FIX */
+}
+
+/* =========================
+   📦 LAYOUT
+========================= */
 .app {
   max-width: 400px;
   margin: auto;
@@ -16,16 +27,42 @@ body {
   border-radius: 12px;
 }
 
+/* =========================
+   🔝 HEADER
+========================= */
+.header {
+  padding: 10px 0;
+}
+
+.header-container {
+  position: relative;
+  height: 50px;
+}
+
+/* center title properly */
+.header-container h2 {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  margin: 0;
+}
+
+/* fix back button */
+.back-btn {
+  position: absolute;
+  right: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+   width: auto !important;  
+  padding: 6px 10px;
+}
+
+/* =========================
+   🔘 BUTTONS
+========================= */
 .row {
   display: flex;
   gap: 8px;
-}
-
-input,
-select {
-  width: 100%;
-  padding: 8px;
-  margin: 6px 0;
 }
 
 .primary {
@@ -45,29 +82,92 @@ select {
   width: 100%;
 }
 
+/* =========================
+   📝 INPUTS
+========================= */
+input,
+select {
+  width: 100%;
+  padding: 8px;
+  margin: 6px 0;
+  border-radius: 6px;
+  border: 1px solid #ccc;
+}
+
+/* =========================
+   🔗 LINK ROW
+========================= */
+.link-row {
+  display: flex;
+  gap: 6px;
+}
+
+.link-row input {
+  flex: 1;
+}
+
+.link-row button {
+  width: auto;
+  padding: 8px 12px;
+}
+
+/* =========================
+   📋 TABLE
+========================= */
 .table-wrapper {
   overflow-x: auto;
 }
 
 .table-scroll {
-  min-width: 600px;
+  min-width: 650px;
 }
 
 .table-header,
 .table-row {
   display: grid;
-  grid-template-columns: 150px 80px 60px 100px 80px 100px;
+  grid-template-columns: 150px 80px 60px 100px 80px 100px 60px;
   gap: 10px;
   padding: 8px 0;
 }
 
 /* =========================
-   📅 MODAL FIX
+   💰 CHARGES
 ========================= */
+.charge-row {
+  display: grid;
+  grid-template-columns: 1fr 60px 80px 40px;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 0;
+}
 
+.charge-name {
+  font-weight: 600;
+}
+
+.charge-percent {
+  text-align: right;
+  color: #666;
+}
+
+.charge-amount {
+  text-align: right;
+  font-weight: 500;
+}
+
+.delete-btn {
+  width: auto;
+  padding: 4px 6px;
+  background: #eee;
+  border: none;
+  border-radius: 6px;
+}
+
+/* =========================
+   📅 MODAL
+========================= */
 .modal {
   display: none;
-  /* hidden by default */
   position: fixed;
   top: 0;
   left: 0;
@@ -90,11 +190,17 @@ select {
   width: 90%;
   max-width: 350px;
 
+  max-height: 90vh;
+  overflow-y: auto;
+
   box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
 
   animation: fadeIn 0.2s ease;
 }
 
+/* =========================
+   🎯 MODAL ACTIONS
+========================= */
 .modal-actions {
   display: flex;
   gap: 10px;
@@ -103,9 +209,13 @@ select {
 
 .modal-actions button {
   flex: 1;
+  width: auto;
+  /* 🔥 prevents overflow */
 }
 
-/* animation */
+/* =========================
+   ✨ ANIMATION
+========================= */
 @keyframes fadeIn {
   from {
     transform: scale(0.95);

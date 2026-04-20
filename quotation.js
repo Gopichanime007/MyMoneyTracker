@@ -27,6 +27,16 @@ function closeItemModal() {
 
 function openChargeModal() {
   document.getElementById("chargeModal").style.display = "flex";
+
+  let select = document.getElementById("cApplyTo");
+  select.innerHTML = `<option value="all">All Items</option>`;
+
+  quotationItems.forEach(i => {
+    let option = document.createElement("option");
+    option.value = i.id;
+    option.textContent = i.name;
+    select.appendChild(option);
+  });
 }
 
 function closeChargeModal() {
@@ -43,6 +53,24 @@ function addItemFromModal() {
   let qty = Number(document.getElementById("mQty").value);
   let source = document.getElementById("mSource").value;
   let link = document.getElementById("mLink").value;
+
+  if (!name && link) {
+    try {
+      let url = new URL(link);
+
+      if (url.pathname.includes("/dp/")) {
+        let parts = url.pathname.split("/");
+        name = parts[1]?.replace(/-/g, " ") || "Amazon Product";
+      } else if (url.searchParams.get("k")) {
+        name = url.searchParams.get("k").replace(/\+/g, " ");
+      } else {
+        name = url.hostname.replace("www.", "");
+      }
+
+    } catch {
+      name = "Online Product";
+    }
+  }
 
   if (!name || !price || !qty) {
     alert("Fill all required fields ❗");
@@ -64,6 +92,11 @@ function addItemFromModal() {
 
   clearItemModal();
   closeItemModal();
+  renderQuotation();
+}
+function deleteItem(id) {
+  quotationItems = quotationItems.filter(i => i.id !== id);
+  localStorage.setItem("quotationItems", JSON.stringify(quotationItems));
   renderQuotation();
 }
 
@@ -99,13 +132,18 @@ function renderQuotation() {
     div.className = "table-row";
 
     div.innerHTML = `
-      <span>${i.name}</span>
-      <span>₹${i.price}</span>
-      <span>${i.qty}</span>
-      <span>${i.source}</span>
-      <span>${i.link ? `<a href="${i.link}" target="_blank">🔗</a>` : "-"}</span>
-      <span>₹${i.total}</span>
-    `;
+  <span>${i.name}</span>
+  <span>₹${i.price}</span>
+  <span>${i.qty}</span>
+  <span>${i.source}</span>
+  <span>
+    ${i.link ? `<button onclick="window.open('${i.link}')">View</button>` : "-"}
+  </span>
+  <span>₹${i.total}</span>
+  <span>
+    <button onclick="deleteItem(${i.id})">❌</button>
+  </span>
+`;
 
     container.appendChild(div);
   });
@@ -122,6 +160,7 @@ function addCharge() {
   let type = document.getElementById("cType").value;
   let value = Number(document.getElementById("cValue").value);
   let mode = document.getElementById("cMode").value;
+  let appliesTo = document.getElementById("cApplyTo").value;
 
   if (!value) {
     alert("Enter valid charge ❗");
@@ -132,7 +171,8 @@ function addCharge() {
     id: Date.now(),
     type,
     value,
-    mode
+    mode,
+    appliesTo
   };
 
   quotationCharges.push(charge);
@@ -141,7 +181,6 @@ function addCharge() {
   closeChargeModal();
   renderQuotation();
 }
-
 
 // =========================
 // 📋 RENDER CHARGES
@@ -152,19 +191,56 @@ function renderCharges() {
 
   container.innerHTML = "";
 
+  let subtotal = quotationItems.reduce((sum, i) => sum + i.total, 0);
+
   quotationCharges.forEach(c => {
+
+    let baseAmount = 0;
+    let serial = "";
+
+    if (c.appliesTo === "all") {
+      baseAmount = subtotal;
+    } else {
+      let item = quotationItems.find(i => i.id == c.appliesTo);
+      baseAmount = item ? item.total : 0;
+
+      let index = quotationItems.findIndex(i => i.id == c.appliesTo);
+      serial = index !== -1 ? `(Item ${index + 1})` : "";
+    }
+
+    let amount = c.mode === "percent"
+      ? (baseAmount * c.value) / 100
+      : c.value;
+
     let div = document.createElement("div");
-    div.className = "expense-item";
 
     div.innerHTML = `
-      <div>${c.type.toUpperCase()}</div>
-      <div>${c.mode === "percent" ? c.value + "%" : "₹" + c.value}</div>
+      <div class="charge-row">
+        <span class="charge-name">
+          ${c.type.toUpperCase()} ${serial}
+        </span>
+
+        <span class="charge-percent">
+          ${c.mode === "percent" ? c.value + "%" : ""}
+        </span>
+
+        <span class="charge-amount">
+          ₹${Math.round(amount)}
+        </span>
+
+        <button onclick="deleteCharge(${c.id})" class="delete-btn">❌</button>
+      </div>
     `;
 
     container.appendChild(div);
   });
 }
 
+function deleteCharge(id) {
+  quotationCharges = quotationCharges.filter(c => c.id !== id);
+  localStorage.setItem("quotationCharges", JSON.stringify(quotationCharges));
+  renderQuotation();
+}
 
 // =========================
 // 🧮 CALCULATE TOTALS
@@ -177,22 +253,30 @@ function updateTotals() {
   let discount = 0;
 
   quotationCharges.forEach(c => {
-    if (c.type === "gst") {
-      gstAmount += (subtotal * c.value) / 100;
+
+    let baseAmount = 0;
+
+    if (c.appliesTo === "all") {
+      baseAmount = subtotal;
+    } else {
+      let item = quotationItems.find(i => i.id == c.appliesTo);
+      baseAmount = item ? item.total : 0;
     }
-    if (c.type === "delivery") {
-      delivery += c.value;
-    }
-    if (c.type === "discount") {
-      discount += c.value;
-    }
+
+    let amount = c.mode === "percent"
+      ? (baseAmount * c.value) / 100
+      : c.value;
+
+    if (c.type === "gst") gstAmount += amount;
+    if (c.type === "delivery") delivery += amount;
+    if (c.type === "discount") discount += amount;
   });
 
   let finalTotal = subtotal + gstAmount + delivery - discount;
 
-  document.getElementById("qSubtotal").innerText = subtotal;
-  document.getElementById("qGSTAmount").innerText = gstAmount;
-  document.getElementById("qFinalTotal").innerText = finalTotal;
+  document.getElementById("qSubtotal").innerText = Math.round(subtotal);
+  document.getElementById("qGSTAmount").innerText = Math.round(gstAmount);
+  document.getElementById("qFinalTotal").innerText = Math.round(finalTotal);
 }
 
 
@@ -239,3 +323,7 @@ function clearQuotation() {
 // 🚀 INIT
 // =========================
 renderQuotation();
+
+function goBack() {
+  window.location.href = "index.html";
+}

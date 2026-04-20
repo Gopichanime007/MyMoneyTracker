@@ -1,4 +1,4 @@
-:root {
+/* :root {
   --theme: #4caf50;
   --bg: #eef2f7;
   --text: #1f2937;
@@ -15,20 +15,19 @@ body {
   box-sizing: border-box;
 }
 
-/* APP */
 .app {
   max-width: 400px;
   margin: auto;
   padding: 12px;
 }
 
-/* HEADER */
+
 .header {
   text-align: center;
   margin-bottom: 10px;
 }
 
-/* NAV */
+
 .nav {
   display: flex;
   justify-content: center;
@@ -53,7 +52,7 @@ body {
   transform: scale(1.1);
 }
 
-/* CARD */
+
 .card {
   background: white;
   padding: 16px;
@@ -62,7 +61,7 @@ body {
   margin-bottom: 12px;
 }
 
-/* SUMMARY */
+
 .summary {
   display: flex;
   gap: 10px;
@@ -80,7 +79,7 @@ body {
   background: #ecfdf5;
 }
 
-/* INPUT */
+
 input,
 select {
   width: 100%;
@@ -90,7 +89,7 @@ select {
   border: 1px solid #ddd;
 }
 
-/* BUTTON */
+
 .primary {
   background: var(--theme);
   color: white;
@@ -100,7 +99,7 @@ select {
   width: 100%;
 }
 
-/* HISTORY */
+
 .expense-item {
   display: flex;
   justify-content: space-between;
@@ -108,7 +107,7 @@ select {
   border-bottom: 1px solid #eee;
 }
 
-/* SCREEN */
+
 .screen {
   display: none;
 }
@@ -117,7 +116,7 @@ select {
   display: block;
 }
 
-/* GRAPH */
+
 .chart-box {
   height: 260px;
   display: flex;
@@ -130,22 +129,13 @@ select {
   height: 200px;
 }
 
-/* HEADER INSIDE CARD */
+
 .card-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
 }
 
-/* BACK */
-/* .back-btn {
-  border: none;
-  background: #eee;
-  padding: 6px 10px;
-  border-radius: 8px;
-} */
-
-/* MODAL */
 .modal {
   position: fixed;
   inset: 0;
@@ -169,17 +159,13 @@ select {
   margin-top: 10px;
 }
 
-/* MOBILE */
+
 @media (max-width: 600px) {
   .chart-inner {
     width: 160px;
     height: 160px;
   }
 }
-
-/* =========================
-   🔥 PREMIUM TOAST
-========================= */
 
 .premium-toast {
   position: fixed;
@@ -212,13 +198,13 @@ select {
   backdrop-filter: blur(8px);
 }
 
-/* SHOW STATE */
+
 .premium-toast.show {
   transform: translateX(-50%) translateY(0);
   opacity: 1;
 }
 
-/* 📱 MOBILE OPTIMIZATION */
+
 @media (max-width: 600px) {
   .premium-toast {
     bottom: 16px;
@@ -227,7 +213,7 @@ select {
   }
 }
 
-/* 🔙 BACK BUTTON */
+
 .action-btn {
   width: 100%;
   margin-top: 12px;
@@ -247,4 +233,414 @@ select {
 
 .action-btn:active {
   transform: scale(0.96);
+} */
+
+:root {
+  --theme: #4caf50;
+  --bg: #eef2f7;
+  --text: #1f2937;
+  --muted: #6b7280;
 }
+
+/* RESET */
+body {
+  margin: 0;
+  font-family: 'Poppins', sans-serif;
+  background: linear-gradient(135deg, #f3f6fb, #e6ebf2);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+/* APP */
+.app {
+  max-width: 420px;
+  margin: auto;
+  padding: 14px;
+}
+
+/* HEADER */
+.header {
+  text-align: center;
+  margin-bottom: 14px;
+}
+
+/* NAV */
+/* =========================
+   🧭 NAV (LIFT / BULGE EFFECT)
+========================= */
+
+.nav {
+  display: flex;
+  justify-content: center;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.nav button {
+  width: 52px;
+  height: 52px;
+
+  border-radius: 16px;
+  border: none;
+
+  font-size: 20px;
+
+  background: #f3f4f6;
+  color: #555;
+
+  cursor: pointer;
+
+  transition: all 0.25s ease;
+
+  /* base shadow (very soft) */
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.05);
+}
+
+/* 🔥 HOVER = BULGE UP */
+.nav button:hover {
+  transform: translateY(-6px);
+  /* move up */
+
+  box-shadow:
+    0 10px 20px rgba(0, 0, 0, 0.12),
+    0 4px 10px rgba(0, 0, 0, 0.08);
+}
+
+/* 🔥 ACTIVE (CLICK PRESS EFFECT) */
+.nav button:active {
+  transform: translateY(-2px) scale(0.97);
+
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
+}
+
+/* ACTIVE SCREEN BUTTON */
+.nav button.active {
+  background: var(--theme);
+  color: white;
+
+  transform: translateY(-4px);
+  /* slightly lifted */
+
+  box-shadow:
+    0 8px 16px rgba(0, 0, 0, 0.12);
+}
+
+/* CARD */
+.card {
+  background: white;
+  padding: 18px;
+  border-radius: 20px;
+
+  box-shadow:
+    0 10px 30px rgba(0, 0, 0, 0.08),
+    0 2px 8px rgba(0, 0, 0, 0.05);
+
+  margin-bottom: 14px;
+}
+
+/* SUMMARY */
+.summary {
+  display: flex;
+  gap: 12px;
+  margin-top: 14px;
+}
+
+.box {
+  flex: 1;
+  background: #f3f4f6;
+  padding: 12px;
+  border-radius: 14px;
+
+  text-align: center;
+}
+
+.box.success {
+  background: #ecfdf5;
+}
+
+/* INPUT */
+input,
+select {
+  width: 100%;
+  padding: 12px;
+  margin: 8px 0;
+
+  border-radius: 12px;
+  border: 1px solid #ddd;
+
+  font-size: 14px;
+}
+
+/* =========================
+   🔘 PRIMARY BUTTON (CLEAN)
+========================= */
+
+.card .primary {
+  background: var(--theme);
+  /* single color */
+  color: white;
+
+  border: none;
+  padding: 14px;
+  border-radius: 14px;
+
+  width: 100%;
+  margin-top: 10px;
+
+  font-weight: 600;
+  font-size: 15px;
+
+  cursor: pointer;
+
+  /* soft depth */
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.08);
+
+  transition: all 0.2s ease;
+}
+
+/* 🔥 HOVER (LIFT EFFECT) */
+.card .primary:hover {
+  transform: translateY(-2px);
+
+  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.12);
+}
+
+/* 🔥 CLICK (PRESS EFFECT) */
+.card .primary:active {
+  transform: translateY(0) scale(0.97);
+
+  box-shadow: 0 3px 8px rgba(0, 0, 0, 0.1);
+}
+
+/* HISTORY */
+.expense-item {
+  display: flex;
+  justify-content: space-between;
+
+  padding: 12px 0;
+
+  border-bottom: 1px solid #eee;
+
+  font-size: 14px;
+}
+
+/* SCREEN */
+.screen {
+  display: none;
+}
+
+.screen.active {
+  display: block;
+}
+
+/* GRAPH */
+.chart-box {
+  height: 260px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.chart-inner {
+  width: 200px;
+  height: 200px;
+}
+
+/* CARD HEADER */
+.card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+/* =========================
+   🪟 MODAL (PREMIUM CLEAN)
+========================= */
+
+.modal {
+  position: fixed;
+  inset: 0;
+
+  display: none;
+  justify-content: center;
+  align-items: center;
+
+  background: rgba(0, 0, 0, 0.35);
+
+  backdrop-filter: blur(4px);
+  z-index: 1000;
+}
+
+/* MODAL BOX */
+.modal-content {
+  background: #ffffff;
+
+  padding: 22px;
+  border-radius: 20px;
+
+  width: 90%;
+  max-width: 340px;
+
+  box-shadow:
+    0 20px 50px rgba(0, 0, 0, 0.15),
+    0 6px 18px rgba(0, 0, 0, 0.08);
+
+  animation: modalFade 0.25s ease;
+}
+
+/* ENTRY ANIMATION */
+@keyframes modalFade {
+  from {
+    transform: translateY(20px);
+    opacity: 0;
+  }
+
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+/* TITLE SPACING */
+.modal-content h3 {
+  margin-bottom: 14px;
+}
+
+/* INPUTS INSIDE MODAL */
+.modal-content input {
+  width: 100%;
+  padding: 12px;
+
+  margin: 8px 0;
+
+  border-radius: 12px;
+  border: 1px solid #ddd;
+
+  font-size: 14px;
+}
+
+/* =========================
+   🔘 ACTION BUTTONS
+========================= */
+
+.modal-actions {
+  display: flex;
+  gap: 12px;
+  margin-top: 16px;
+}
+
+/* COMMON BUTTON STYLE */
+.modal-actions button {
+  flex: 1;
+
+  padding: 13px;
+  border-radius: 14px;
+
+  font-weight: 600;
+  font-size: 14px;
+
+  cursor: pointer;
+  border: none;
+
+  transition: all 0.2s ease;
+}
+
+/* CANCEL BUTTON */
+.modal-actions .secondary {
+  background: #f1f3f6;
+  color: #111;
+
+  box-shadow: inset 0 0 0 1px #e5e7eb;
+}
+
+/* APPLY BUTTON */
+.modal-actions .primary {
+  background: var(--theme);
+  color: white;
+
+  box-shadow: 0 6px 16px rgba(76, 175, 80, 0.3);
+}
+
+/* HOVER EFFECT */
+.modal-actions button:hover {
+  transform: translateY(-1px);
+}
+
+/* CLICK EFFECT */
+.modal-actions button:active {
+  transform: scale(0.96);
+}
+
+/* TOAST (MATCH NEW JS) */
+.simple-toast {
+  position: fixed;
+  bottom: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+
+  padding: 12px 18px;
+  border-radius: 12px;
+
+  color: white;
+  font-size: 13px;
+
+  z-index: 9999;
+
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.2);
+}
+
+/* MOBILE */
+@media (max-width: 600px) {
+  .chart-inner {
+    width: 160px;
+    height: 160px;
+  }
+}
+
+.expense-item button:hover {
+  transform: scale(1.2);
+}
+
+.income-card {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px;
+  margin-bottom: 10px;
+  background: #fff;
+  border-radius: 12px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+
+.income-left strong {
+  font-size: 14px;
+}
+
+.income-left small {
+  display: block;
+  color: #777;
+  font-size: 11px;
+}
+
+.income-right {
+  text-align: right;
+}
+
+.amount {
+  display: block;
+  font-weight: bold;
+}
+
+.remaining {
+  font-size: 12px;
+}
+
+.green {
+  color: #4caf50;
+}
+
+.red {
+  color: #e53935;
+} 

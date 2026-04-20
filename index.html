@@ -64,6 +64,16 @@
             <h2>₹<span id="todaySpent">0</span></h2>
           </div>
 
+          <div class="dash-card income">
+            <span>Income</span>
+            <h2>₹<span id="incomeValue">0</span></h2>
+          </div>
+
+          <div class="dash-card net">
+            <span>Net</span>
+            <h2>₹<span id="netValue">0</span></h2>
+          </div>
+
         </div>
 
         <!-- Progress -->
@@ -190,7 +200,7 @@
 
         <div class="card" style="margin-top:10px;">
           <h4>Category Breakdown</h4>
-          <div id="categoryListGraph"></div>
+          <div id="categoryBreakdown"></div>
         </div>
 
         <div id="graphDate" style="text-align:center; font-size:12px; color:#777;"></div>
@@ -268,7 +278,7 @@
 
       <div class="modal-actions">
         <button class="secondary" onclick="closePeriod()">Cancel</button>
-        <button class="primary" onclick="applyPeriod()">Apply</button>
+        <button class="primary" onclick="applyPeriodFromModal()">Apply</button>
       </div>
 
     </div>

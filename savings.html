@@ -55,7 +55,7 @@
       <div class="card">
         <h3>Add Entry</h3>
 
-        <select id="sType">
+        <select id="sType" onchange="handleSavingsTypeChange()">
           <option value="income">Add Savings</option>
           <option value="withdraw_budget">Move to Budget</option>
           <option value="transfer">Transfer</option>
@@ -73,6 +73,17 @@
         <input type="text" id="sNote" placeholder="Purpose / Note">
         <input type="date" id="sDate">
         <select id="sourceSelect" style="display:none;"></select>
+        <div id="budgetConfig" style="display:none; margin-top:10px;">
+
+          <select id="budgetPeriod" onchange="handleBudgetPeriodChange()">
+            <option value="day">Daily</option>
+            <option value="week">Weekly</option>
+            <option value="month" selected>Monthly</option>
+          </select>
+
+          <input type="date" id="budgetDate">
+
+        </div>
 
         <select id="sPayment">
           <option>Cash</option>

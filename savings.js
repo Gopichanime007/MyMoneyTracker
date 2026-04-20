@@ -1,870 +1,879 @@
-let filteredSavingsData = [];
-
+// =========================
+// 🚀 INIT
+// =========================
+// Initializes page: loads data, sets date, loads sources, applies theme
 window.onload = function () {
-  loadSavings();
+    loadSavings();
+    setTodayDate();
+    loadSourceOptions();
+    handleSavingsTypeChange(); // 👈 IMPORTANT
 
-  let theme = localStorage.getItem("theme") || "#4caf50";
-  document.documentElement.style.setProperty("--theme", theme);
-
-  showSavingsScreen("home");
-
-  // ✅ MOVE HERE
-  document.getElementById("sType").addEventListener("change", function () {
-    let val = this.value;
-
-    if (val === "income") {
-      showToast("Adding to savings 💰");
-    } else if (val === "withdraw_budget") {
-      showToast("Moving to budget 📦");
-    } else if (val === "transfer") {
-      showToast("Transfer mode 🔁");
-    }
-  });
+    let theme = localStorage.getItem("theme") || "#4caf50";
+    document.documentElement.style.setProperty("--theme", theme);
 };
 
+/* =========================
+   🧠 MASTER LEDGER (SAVINGS)
+========================= */
+//Show Toast
+let activeToast = null;
 
-let toastQueue = [];
-let isToastShowing = false;
-
+// Shows a single temporary toast message (replaces previous one to avoid spam)
 function showToast(message, type = "info") {
-  toastQueue.push({ message, type });
-
-  if (!isToastShowing) {
-    processToastQueue();
-  }
-}
-
-function processToastQueue() {
-  if (toastQueue.length === 0) {
-    isToastShowing = false;
-    return;
-  }
-
-  isToastShowing = true;
-
-  let { message, type } = toastQueue.shift();
-
-  let toast = document.createElement("div");
-  toast.className = "premium-toast";
-  toast.innerText = message;
-
-  let theme = getComputedStyle(document.documentElement)
-    .getPropertyValue("--theme").trim();
-
-  let bg = "#333";
-
-  if (type === "success") bg = theme;
-  else if (type === "error") bg = "#e53935";
-  else if (type === "warning") bg = "#fb8c00";
-
-  toast.style.background = bg;
-
-  document.body.appendChild(toast);
-
-  setTimeout(() => toast.classList.add("show"), 50);
-
-  setTimeout(() => {
-    toast.classList.remove("show");
-
-    setTimeout(() => {
-      toast.remove();
-      processToastQueue();
-    }, 300);
-  }, 2200);
-}
-
-/* =========================
-   💰 STORAGE
-========================= */
-function getSavings() {
-  return JSON.parse(localStorage.getItem("savingsTransactions")) || [];
-}
-
-function saveSavings(data) {
-  localStorage.setItem("savingsTransactions", JSON.stringify(data));
-}
-
-/* =========================
-   ➕ ADD
-========================= */
-function addSavings() {
-  let type = document.getElementById("sType").value;
-  let amount = Number(document.getElementById("sAmount").value);
-  let note = document.getElementById("sNote").value;
-  let date = document.getElementById("sDate").value;
-
-  if (!amount || amount <= 0) {
-    showToast("Enter valid amount ❗", "warning");
-    return;
-  }
-
-  let finalDate = date
-    ? new Date(date).toISOString()
-    : new Date().toISOString();
-
-  let data = getSavings();
-
-  // =========================
-  // 💰 INCOME
-  // =========================
-  if (type === "income") {
-    data.push({
-      id: Date.now(),
-      type: "income",
-      amount: Math.abs(amount),
-      note: note || "Income",
-      date: finalDate
-    });
-
-    saveSavings(data);
-    loadSavings();
-
-    showToast("Income added 💰", "success");
-
-    resetSavingsForm();
-    return;
-  }
-
-  // =========================
-  // 📦 VALIDATE SOURCE
-  // =========================
-  let sourceId = Number(document.getElementById("sourceSelect").value);
-
-  if (!sourceId) {
-    showToast("Select source ❗", "warning");
-    return;
-  }
-
-  let source = data.find(t => t.id === sourceId);
-
-  if (!source) {
-    showToast("Invalid source ❌", "error");
-    return;
-  }
-
-  // =========================
-  // ➖ OUTGOING ENTRY
-  // =========================
-  data.push({
-    id: Date.now(),
-    type,
-    amount: -Math.abs(amount),
-    sourceId: source.id,
-    sourceName: source.note,
-    note,
-    date: finalDate
-  });
-
-  // =========================
-  // 📦 MOVE TO BUDGET
-  // =========================
-  if (type === "withdraw_budget") {
-    let monthKey = finalDate.slice(0, 7);
-
-    let budgetAllocations =
-      JSON.parse(localStorage.getItem("budgetAllocations")) || {};
-
-    if (!budgetAllocations[monthKey]) {
-      budgetAllocations[monthKey] = [];
-    }
-
-    budgetAllocations[monthKey].push({
-      amount: Math.abs(amount),
-      date: finalDate
-    });
-
-    localStorage.setItem(
-      "budgetAllocations",
-      JSON.stringify(budgetAllocations)
-    );
-  }
-
-  saveSavings(data);
-  loadSavings();
-
-  showToast("Saved successfully ✅", "success");
-
-  // =========================
-  // 🔄 RESET FORM
-  // =========================
-  resetSavingsForm();
-}
-
-// =========================
-// 🔗 SOURCE HELPERS
-// =========================
-function getAvailableSources() {
-  let data = getSavings();
-
-  return data.filter(t => t.type === "income");
-}
-
-function loadSourceOptions() {
-  let select = document.getElementById("sourceSelect");
-  let data = getSavings();
-
-  let sources = data.filter(t => t.type === "income");
-
-  select.innerHTML = "<option value=''>Select Source</option>";
-
-  sources.forEach(s => {
-    let option = document.createElement("option");
-    option.value = s.id;
-
-    let date = new Date(s.date);
-    let monthYear = date.toLocaleString("en-IN", {
-      month: "short",
-      year: "numeric"
-    });
-
-    let name = s.note || `${monthYear} Salary`;
-
-    // 🔥 CALCULATE USED
-    let used = data
-      .filter(t => Number(t.sourceId) === s.id)
-      .reduce((sum, t) => sum + Math.abs(t.amount), 0);
-
-    // 🔥 REMAINING
-    let remaining = s.amount - used;
-
-    if (remaining <= 0) return;
-
-    // 🔥 SHOW REMAINING
-    option.textContent = `${name} (₹${remaining} left)`;
-
-    select.appendChild(option);
-  });
-}
-
-/* =========================
-   📊 LOAD UI
-========================= */
-function loadSavings() {
-  let data = getSavings();
-
-  // 💰 TOTAL BALANCE
-  let total = data.reduce((sum, t) => sum + t.amount, 0);
-
-  // 📦 ALLOCATED (only budget movements)
-  let allocated = data
-    .filter(t => t.type === "withdraw_budget")
-    .reduce((sum, t) => sum + Math.abs(t.amount), 0);
-
-  // 💵 AVAILABLE (real remaining savings)
-  let available = total;
-
-  document.getElementById("savingsBalance").innerText = "₹" + total;
-
-  let allocatedEl = document.getElementById("allocatedToBudget");
-  if (allocatedEl) allocatedEl.innerText = "₹" + allocated;
-
-  let availableEl = document.getElementById("availableBalance");
-  if (availableEl) availableEl.innerText = "₹" + available;
-
-  renderSavingsHistory(data);
-}
-/* =========================
-   🧭 NAVIGATION
-========================= */
-// function showSavingsScreen(id) {
-//   // hide all screens
-//   document.querySelectorAll(".screen").forEach(s =>
-//     s.classList.remove("active")
-//   );
-
-//   // show selected
-//   document.getElementById(id).classList.add("active");
-
-//   // 🔥 FIX ACTIVE TAB
-//   document.querySelectorAll(".nav button").forEach(btn => {
-//     btn.classList.remove("active");
-
-//     if (btn.dataset.screen === id) {
-//       btn.classList.add("active");
-//     }
-//   });
-// }
-
-function handleSavingsFilter(type) {
-  if (type === "period") {
-    document.getElementById("savingsDateModal").style.display = "flex";
-    return;
-  }
-
-  let data = getSavings();
-  let now = new Date();
-
-  if (type === "all") {
-    filteredSavingsData = data;
-  }
-  else if (type === "today") {
-    filteredSavingsData = data.filter(t =>
-      new Date(t.date).toDateString() === now.toDateString()
-    );
-  }
-  else if (type === "week") {
-    let weekStart = new Date();
-    weekStart.setDate(now.getDate() - 7);
-
-    filteredSavingsData = data.filter(t =>
-      new Date(t.date) >= weekStart
-    );
-  }
-  else if (type === "month") {
-    filteredSavingsData = data.filter(t => {
-      let d = new Date(t.date);
-      return d.getMonth() === now.getMonth() &&
-        d.getFullYear() === now.getFullYear();
-    });
-  }
-
-  // 🔥 UPDATE BOTH
-  renderSavingsHistory(filteredSavingsData);
-  loadSavingsGraph(filteredSavingsData);
-}
-
-function applySavingsDateFilter() {
-  let from = document.getElementById("sFromDate").value;
-  let to = document.getElementById("sToDate").value;
-
-  if (!from || !to) {
-    showToast("Select both dates", "warning");
-    return;
-  }
-
-  let fromDate = new Date(from);
-  let toDate = new Date(to);
-  toDate.setHours(23, 59, 59, 999);
-
-  let data = getSavings();
-
-  let filtered = data.filter(t => {
-    let d = new Date(t.date);
-    return d >= fromDate && d <= toDate;
-  });
-
-  filteredSavingsData = filtered;
-
-  renderSavingsHistory(filteredSavingsData);
-  loadSavingsGraph(filteredSavingsData);
-
-  closeSavingsModal();
-}
-
-function closeSavingsModal() {
-  document.getElementById("savingsDateModal").style.display = "none";
-}
-
-function renderSavingsHistory(data) {
-  let container = document.getElementById("savingsHistory");
-  if (!container) return;
-
-  container.innerHTML = "";
-
-  data.slice().reverse().forEach(t => {
-    let div = document.createElement("div");
-    div.className = "expense-item";
-
-    let labelMap = {
-      income: "💰 Income",
-      withdraw_budget: "📦 Budget",
-      transfer: "🔁 Transfer"
+    if (activeToast) activeToast.remove();
+
+    let toast = document.createElement("div");
+    toast.className = "simple-toast";
+    toast.innerText = message;
+
+    const colors = {
+        success: "#4caf50",
+        error: "#e53935",
+        warning: "#fb8c00",
+        info: "#333"
     };
 
-    let label = labelMap[t.type] || t.type;
-    let color = t.amount < 0 ? "red" : "green";
+    toast.style.background = colors[type] || "#333";
 
-    div.innerHTML = `
-      <div>
-        <strong>${t.note || t.sourceName || "Self"}</strong><br>
-        <small>${label} • ${new Date(t.date).toLocaleString()}</small>
-      </div>
-      <div style="color:${color}; font-weight:600;">
-        ₹${Math.abs(t.amount)}   <!-- ✅ FIX -->
-      </div>
-    `;
+    document.body.appendChild(toast);
+    activeToast = toast;
 
-    // 👉 CLICK ONLY FOR INCOME
-    if (t.type === "income") {
-      div.style.cursor = "pointer";
+    setTimeout(() => {
+        toast.remove();
+        activeToast = null;
+    }, 1500);
+}
+// =========================
+// 📦 STORAGE
+// =========================
 
-      div.onclick = () => {
-        showSavingsScreen("details");
-        renderSourceDetails(t.id);
-      };
+// Fetch all savings transactions from localStorage
+function getSavings() {
+    return JSON.parse(localStorage.getItem("savingsTransactions")) || [];
+}
+// Save updated savings transactions into localStorage
+function saveSavings(data) {
+    localStorage.setItem("savingsTransactions", JSON.stringify(data));
+}
+
+// =========================
+// 🏗️ ENTRY FACTORY
+// =========================
+// Creates a standardized savings entry object (used for all transaction types)
+function createSavingsEntry({
+    type,
+    amount,
+    sourceId = null,
+    entity = "Cash",
+    person = null,
+    note = "",
+    date = new Date().toISOString()
+}) {
+    return {
+        id: Date.now(),
+
+        type, // income | transfer | budget_allocation
+
+        amount,
+
+        sourceId,
+
+        entity,
+
+        person,
+
+        note,
+
+        date,
+
+        monthKey: date.slice(0, 7),
+
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+    };
+}
+
+// =========================
+// ➕ ADD ENTRY
+// =========================
+// Handles adding income, transfer, or budget allocation into savings ledger
+function addSavings() {
+    let type = document.getElementById("sType").value;
+    let amount = Number(document.getElementById("sAmount").value);
+    let note = document.getElementById("sNote").value;
+    let dateInput = document.getElementById("sDate").value;
+    let entity = document.getElementById("sPayment").value;
+
+    let period = document.getElementById("budgetPeriod")?.value;
+    let budgetDate = document.getElementById("budgetDate")?.value;
+
+    if (!amount || amount <= 0) {
+        showToast("Enter valid amount ❗", "warning");
+        return;
     }
 
-    container.appendChild(div);
-  });
-}
+    let selectedDate;
 
-function loadSavingsGraph(customData) {
-  let data = customData || getSavings();
+    if (!dateInput) {
+        // ✅ No date → current time
+        selectedDate = new Date();
+    } else {
+        let inputDate = new Date(dateInput);
+        let today = new Date();
 
-  let income = 0;
-  let expense = 0;
-
-  data.forEach(t => {
-    if (t.amount > 0) income += t.amount;
-    else expense += Math.abs(t.amount);
-  });
-
-  let ctx = document.getElementById("savingsChart");
-  if (!ctx) return;
-
-  if (window.sChart) window.sChart.destroy();
-
-  const theme = getComputedStyle(document.documentElement)
-    .getPropertyValue("--theme").trim();
-
-  window.sChart = new Chart(ctx, {
-    type: "doughnut",
-    data: {
-      labels: ["Income", "Expense"],
-      datasets: [{
-        data: [income, expense],
-        backgroundColor: [
-          theme,          // 👈 Income uses theme
-          "#ff5252"       // Expense stays red
-        ]
-      }]
-    },
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      cutout: "60%"
+        if (inputDate.toDateString() === today.toDateString()) {
+            // ✅ TODAY → current time
+            selectedDate = new Date();
+        } else {
+            // ✅ PAST → END OF DAY (EOD)
+            selectedDate = new Date(inputDate);
+            selectedDate.setHours(23, 59, 59, 999);
+        }
     }
-  });
+
+    let date = selectedDate.toISOString();
+
+    let data = getSavings();
+
+    // =========================
+    // 💰 INCOME
+    // =========================
+    if (type === "income") {
+        let entry = createSavingsEntry({
+            type: "income",
+            amount: Math.abs(amount),
+            entity,
+            note,
+            date
+        });
+
+        data.push(entry);
+    }
+
+    // =========================
+    // 🔁 TRANSFER
+    // =========================
+    else if (type === "transfer") {
+
+        let person = document.getElementById("sEntity").value;
+        let sourceId = Number(document.getElementById("sourceSelect").value);
+
+        if (!sourceId) {
+            showToast("Select source ❗", "warning");
+            return;
+        }
+
+        let entry = createSavingsEntry({
+            type: "transfer",
+            amount: -Math.abs(amount),
+            sourceId, // ✅ FIX
+            person,
+            entity,
+            note,
+            date
+        });
+
+        data.push(entry);
+    }
+
+    // =========================
+    // 📦 BUDGET ALLOCATION
+    // =========================
+    else if (type === "withdraw_budget") {
+
+        let sourceId = Number(document.getElementById("sourceSelect").value);
+
+        if (!budgetDate) {
+            showToast("Select budget date ❗", "warning");
+            return;
+        }
+
+        if (!sourceId) {
+            showToast("Select source ❗", "warning");
+            return;
+        }
+
+        let budgetId = generateBudgetId(period, budgetDate);
+
+        // ✅ create/update budget
+        createOrUpdateBudget(budgetId, sourceId, amount, "Savings Transfer");
+
+        // ✅ also track in savings
+        let entry = createSavingsEntry({
+            type: "budget_allocation",
+            amount: -Math.abs(amount),
+            sourceId,
+            entity,
+            note,
+            date
+        });
+
+        data.push(entry);
+    }
+    console.log("Selected Date:", selectedDate);
+    console.log("ISO Date:", selectedDate.toISOString());
+    saveSavings(data);
+    loadSavings();
+    loadSourceOptions();
+
+    showToast("Saved successfully ✅", "success");
+
+    resetSavingsForm();
 }
-function goToTransfers() {
-  window.location.href = "transfer.html";
+
+// =========================
+// 📦 BUDGET CREATION (FROM SAVINGS)
+// =========================
+// Creates or updates monthly budget based on savings allocation
+function createOrUpdateBudgetFromSavings(entry) {
+    let budgets = JSON.parse(localStorage.getItem("budgets")) || [];
+
+    let budgetId = "budget_" + entry.monthKey;
+
+    let existing = budgets.find(b => b.budgetId === budgetId);
+
+    if (existing) {
+        existing.totalAllocated += Math.abs(entry.amount);
+        existing.updatedAt = new Date().toISOString();
+    } else {
+        budgets.push({
+            id: Date.now(),
+            type: "budget",
+            totalAllocated: Math.abs(entry.amount),
+            sourceId: entry.sourceId,
+            budgetId,
+            entity: entry.entity,
+            note: entry.note,
+            date: entry.date,
+            monthKey: entry.monthKey,
+            createdAt: new Date().toISOString()
+        });
+    }
+
+    localStorage.setItem("budgets", JSON.stringify(budgets));
 }
 
-// function showSavingsScreen(id) {
-//   // hide all screens
-//   document.querySelectorAll(".screen").forEach(s =>
-//     s.classList.remove("active")
-//   );
+// =========================
+// 📊 LOAD UI
+// =========================
 
-//   // show selected
-//   document.getElementById(id).classList.add("active");
+// Calculates totals and updates savings dashboard UI
+function loadSavings() {
+    let data = getSavings();
 
-//   // active tab
-//   document.querySelectorAll(".nav button").forEach(btn => {
-//     btn.classList.remove("active");
+    let total = data.reduce((sum, t) => sum + t.amount, 0);
 
-//     if (btn.dataset.screen === id) {
-//       btn.classList.add("active");
-//     }
-//   });
+    let allocated = data
+        .filter(t => t.type === "budget_allocation")
+        .reduce((sum, t) => sum + Math.abs(t.amount), 0);
 
-//   // 🔥 THIS WAS MISSING
-//   if (id === "graph") {
-//     loadSavingsGraph(
-//       filteredSavingsData.length ? filteredSavingsData : getSavings()
-//     );
-//   }
-//   showToast("Opened " + id + " screen", "info");
+    let available = total;
+
+    document.getElementById("savingsBalance").innerText = "₹" + total;
+
+    let allocatedEl = document.getElementById("allocatedToBudget");
+    if (allocatedEl) allocatedEl.innerText = "₹" + allocated;
+
+    let availableEl = document.getElementById("availableBalance");
+    if (availableEl) availableEl.innerText = "₹" + available;
+
+    renderSavingsHistory(data);
+}
+
+// =========================
+// 📜 HISTORY
+// =========================
+// Renders all savings transactions into UI list (latest first)
+// function renderSavingsHistory(data) {
+//     let container = document.getElementById("savingsHistory");
+//     if (!container) return;
+
+//     container.innerHTML = "";
+
+//     data.slice().reverse().forEach(t => {
+//         let div = document.createElement("div");
+//         div.className = "expense-item";
+
+//         let labelMap = {
+//             income: "💰 Income",
+//             transfer: "🔁 Transfer",
+//             budget_allocation: "📦 Budget"
+//         };
+
+//         let label = labelMap[t.type] || t.type;
+//         let color = t.amount < 0 ? "red" : "green";
+
+//         div.innerHTML = `
+//       <div>
+//         <strong>${t.note || t.person || "Entry"}</strong><br>
+//         <small>${label} • ${new Date(t.date).toLocaleString()}</small>
+//       </div>
+//       <div style="color:${color}; font-weight:600;">
+//         ₹${Math.abs(t.amount)}
+//       </div>
+//     `;
+
+//         container.appendChild(div);
+//     });
 // }
+function renderSavingsHistory(data) {
+    let container = document.getElementById("savingsHistory");
+    if (!container) return;
 
+    container.innerHTML = "";
+
+    data.slice().reverse().forEach((t, index) => {
+
+        let realIndex = data.length - 1 - index; // 🔥 FIX INDEX
+
+        let div = document.createElement("div");
+        div.className = "expense-item";
+
+        let labelMap = {
+            income: "💰 Income",
+            transfer: "🔁 Transfer",
+            budget_allocation: "📦 Budget"
+        };
+
+        let label = labelMap[t.type] || t.type;
+        let color = t.amount < 0 ? "red" : "green";
+
+        div.innerHTML = `
+        <div>
+            <strong>${t.note || t.person || "Entry"}</strong><br>
+            <small>${label} • ${new Date(t.date).toLocaleString()}</small>
+        </div>
+
+        <div style="display:flex; align-items:center; gap:10px;">
+            <span style="color:${color}; font-weight:600;">
+                ₹${Math.abs(t.amount)}
+            </span>
+
+            <button onclick="deleteSavings(${realIndex})" 
+                    style="background:none; border:none; cursor:pointer; font-size:16px;">
+                🗑
+            </button>
+        </div>
+        `;
+
+        container.appendChild(div);
+    });
+}
+// =========================
+// 🔗 SOURCES
+// =========================
+// Returns all income entries (used as available sources)
+function getAvailableSources() {
+    return getSavings().filter(t => t.type === "income");
+}
+// Loads income sources into dropdown with remaining balance
+function loadSourceOptions() {
+    let select = document.getElementById("sourceSelect");
+
+    if (!select) return;
+
+    let data = getSavings();
+    let sources = data.filter(t => t.type === "income");
+
+    select.innerHTML = "<option value=''>Select Source</option>";
+
+    sources.forEach(s => {
+        let used = data
+            .filter(t => Number(t.sourceId) === s.id)
+            .reduce((sum, t) => sum + Math.abs(t.amount), 0);
+
+        let remaining = s.amount - used;
+
+        if (remaining <= 0) return;
+
+        let option = document.createElement("option");
+        option.value = s.id;
+        option.textContent = `${s.note || "Income"} (₹${remaining} left)`;
+
+        select.appendChild(option);
+    });
+}
+
+// =========================
+// 🔄 RESET FORM
+// =========================
+function resetSavingsForm() {
+    document.getElementById("sAmount").value = "";
+    document.getElementById("sNote").value = "";
+    document.getElementById("sourceSelect").value = "";
+    document.getElementById("sType").value = "income";
+
+    setTodayDate();
+}
+
+// =========================
+// 📅 DEFAULT DATE
+// =========================
+// Sets today's date as default in date input field
+function setTodayDate() {
+    let today = new Date().toISOString().split("T")[0];
+    let dateInput = document.getElementById("sDate");
+
+    if (dateInput) {
+        dateInput.value = today;
+    }
+}
+
+
+
+//Filter
+let filteredSavingsData = [];
+// Filters savings data by time (today, week, month, all) and updates UI
+function handleSavingsFilter(type) {
+    let data = getSavings();
+    let now = new Date();
+
+    // 🆕 CUSTOM PERIOD
+    if (type === "period") {
+        let modal = document.getElementById("savingsDateModal");
+        if (modal) modal.style.display = "flex";
+        return;
+    }
+
+    if (type === "today") {
+        filteredSavingsData = data.filter(t =>
+            new Date(t.date).toDateString() === now.toDateString()
+        );
+    }
+    else if (type === "week") {
+        let start = new Date();
+        start.setDate(now.getDate() - 7);
+
+        filteredSavingsData = data.filter(t =>
+            new Date(t.date) >= start
+        );
+    }
+    else if (type === "month") {
+        filteredSavingsData = data.filter(t => {
+            let d = new Date(t.date);
+            return d.getMonth() === now.getMonth() &&
+                d.getFullYear() === now.getFullYear();
+        });
+    }
+    else {
+        filteredSavingsData = data;
+    }
+
+    renderSavingsHistory(filteredSavingsData);
+    loadSavingsGraph(filteredSavingsData);
+}
+
+// Generates income vs expense chart using filtered or full data
+function loadSavingsGraph(data) {
+    let d = data || getSavings();
+
+    let income = 0;
+    let expense = 0;
+
+    d.forEach(t => {
+        if (t.amount > 0) income += t.amount;
+        else expense += Math.abs(t.amount);
+    });
+
+    let ctx = document.getElementById("savingsChart");
+    if (!ctx) return;
+
+    if (window.sChart) window.sChart.destroy();
+
+    window.sChart = new Chart(ctx, {
+        type: "doughnut",
+        data: {
+            labels: ["Income", "Expense"],
+            datasets: [{
+                data: [income, expense],
+                backgroundColor: ["#4caf50", "#ff5252"]
+            }]
+        }
+    });
+}
+
+// Switches between different UI screens (home, graph, income, details)
 function showSavingsScreen(id) {
-  // store previous screen
-  let current = document.querySelector(".screen.active");
-  if (current) {
-    previousScreen = current.id;
-  }
-
-  // switch screen
-  document.querySelectorAll(".screen").forEach(s =>
-    s.classList.remove("active")
-  );
-
-  document.getElementById(id).classList.add("active");
-
-  // update nav
-  document.querySelectorAll(".nav button").forEach(btn => {
-    btn.classList.remove("active");
-
-    if (btn.dataset.screen === id) {
-      btn.classList.add("active");
-    }
-  });
-
-  // load special screens
-  if (id === "income") {
-    renderIncomeList();
-  }
-
-  if (id === "graph") {
-    loadSavingsGraph(
-      filteredSavingsData.length ? filteredSavingsData : getSavings()
+    // Switch screens
+    document.querySelectorAll(".screen").forEach(s =>
+        s.classList.remove("active")
     );
-  }
-}
 
-function goToDashboard() {
-  window.location.href = "index.html";
-}
+    document.getElementById(id).classList.add("active");
 
-window.addEventListener("click", function (e) {
-  let modal = document.getElementById("savingsDateModal");
-  if (e.target === modal) {
-    modal.style.display = "none";
-  }
-});
+    // 🔥 FIX: update nav active button
+    document.querySelectorAll(".nav button").forEach(btn => {
+        btn.classList.remove("active");
+    });
 
-function exportSavingsPDF() {
-  const { jsPDF } = window.jspdf;
-  const doc = new jsPDF();
+    let activeBtn = document.querySelector(`.nav button[data-screen="${id}"]`);
+    if (activeBtn) activeBtn.classList.add("active");
 
-  let data = getSavings();
-
-  if (!data.length) {
-    showToast("No data to export", "warning");
-    return;
-  }
-
-  let y = 12;
-
-  // HEADER
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(16);
-  doc.text("Savings Report", 14, 15);
-
-  doc.setFontSize(8);
-  doc.text(`Generated: ${new Date().toLocaleString()}`, 14, 20);
-
-  y = 28;
-
-  // TABLE
-  data.forEach((t, index) => {
-    let date = new Date(t.date).toLocaleDateString("en-IN");
-    let amount = t.amount;
-    let type = t.type;
-
-    if (y > 280) {
-      doc.addPage();
-      y = 20;
+    // Existing logic
+    if (id === "graph") {
+        loadSavingsGraph(filteredSavingsData.length ? filteredSavingsData : getSavings());
     }
 
-    doc.setTextColor(amount < 0 ? 200 : 0, amount < 0 ? 0 : 150, 0);
-
-    doc.text(`${date} | ${type} | ₹${Math.abs(amount)}`, 14, y);
-
-    doc.setTextColor(0);
-
-    y += 8;
-  });
-
-  doc.save("savings-report.pdf");
-
-  showToast("Savings report downloaded 📄", "success");
-}
-function hexToRgb(hex) {
-  hex = hex.replace("#", "");
-
-  let bigint = parseInt(hex, 16);
-
-  return {
-    r: (bigint >> 16) & 255,
-    g: (bigint >> 8) & 255,
-    b: bigint & 255
-  };
+    if (id === "income") {
+        renderIncomeList();
+    }
 }
 
+// Calculates total used and remaining amount for a selected income source
 function getSourceSummary(sourceId) {
-  let data = getSavings();
+    let data = getSavings();
 
-  let id = Number(sourceId);
+    let income = data.find(t => t.id === Number(sourceId));
+    if (!income) return null;
 
-  let income = data.find(t => t.id === id);
-  if (!income) return null;
+    let outgoing = data.filter(t => Number(t.sourceId) === income.id);
 
-  let outgoing = data.filter(t => Number(t.sourceId) === id);
+    let totalOutgoing = outgoing.reduce(
+        (sum, t) => sum + Math.abs(t.amount),
+        0
+    );
 
-  let totalOutgoing = outgoing.reduce(
-    (sum, t) => sum + Math.abs(t.amount),
-    0
-  );
-
-  return {
-    name: income.note || "Income",
-    totalIncome: income.amount,
-    totalOutgoing,
-    remaining: income.amount - totalOutgoing,
-    entries: outgoing
-  };
+    return {
+        name: income.note || "Income",
+        totalIncome: income.amount,
+        totalOutgoing,
+        remaining: income.amount - totalOutgoing,
+        entries: outgoing
+    };
 }
 
+// Displays detailed breakdown of a selected income source
 function renderSourceDetails(sourceId) {
-  let summary = getSourceSummary(sourceId);
-  if (!summary) return;
+    let summary = getSourceSummary(sourceId);
+    if (!summary) return;
 
-  let container = document.getElementById("sourceDetails");
-  if (!container) return;
+    let container = document.getElementById("sourceDetails");
+    if (!container) return;
 
-  container.innerHTML = `
+    container.innerHTML = `
     <h3>${summary.name}</h3>
     <p>💰 Income: ₹${summary.totalIncome}</p>
     <p>📉 Used: ₹${summary.totalOutgoing}</p>
     <p>🟢 Remaining: ₹${summary.remaining}</p>
-
-    <hr style="margin:10px 0;" />
-
-    <h4>📋 Entries</h4>
   `;
-
-  if (!summary.entries.length) {
-    container.innerHTML += `<p style="color:#888;">No entries yet 📭</p>`;
-    return;
-  }
-
-  summary.entries.slice().reverse().forEach(t => {
-    let div = document.createElement("div");
-    div.className = "expense-item";
-
-    let label =
-      t.type === "withdraw_budget"
-        ? "📦 Move to Budget"
-        : "🔁 Transfer";
-
-    div.innerHTML = `
-      <div>
-        <strong>${label}</strong><br>
-        <small>${new Date(t.date).toLocaleString()}</small>
-      </div>
-      <div style="color:red; font-weight:600;">
-        ₹${Math.abs(t.amount)}
-      </div>
-    `;
-
-    container.appendChild(div);
-  });
 }
-document.addEventListener("DOMContentLoaded", function () {
-  loadSavings();
-  setTodayDate();
 
-  let theme = localStorage.getItem("theme") || "#4caf50";
-  document.documentElement.style.setProperty("--theme", theme);
-
-  showSavingsScreen("home");
-
-  const sType = document.getElementById("sType");
-  const sourceSelect = document.getElementById("sourceSelect");
-
-  if (sType && sourceSelect) {
-    sType.addEventListener("change", function () {
-      const val = this.value;
-
-      if (val === "income") {
-        sourceSelect.style.display = "none";
-        showToast("Adding to savings 💰");
-      } else {
-        sourceSelect.style.display = "block";
-        loadSourceOptions();
-
-        if (val === "withdraw_budget") {
-          showToast("Moving to budget 📦");
-        } else {
-          showToast("Transfer mode 🔁");
-        }
-      }
-    });
-  }
-});
-
+// Renders all income entries and allows navigation to detailed view
 function renderIncomeList() {
-  let data = getSavings();
+    let data = getSavings();
+    let incomes = data.filter(t => t.type === "income");
 
-  let incomes = data.filter(t => t.type === "income");
+    let container = document.getElementById("incomeList");
+    if (!container) return;
 
-  let container = document.getElementById("incomeList");
-  if (!container) return;
+    container.innerHTML = "";
 
-  container.innerHTML = "";
+    incomes.slice().reverse().forEach(i => {
 
-  incomes.slice().reverse().forEach(i => {
+        // 🔥 CALCULATE USED
+        let used = data
+            .filter(t => Number(t.sourceId) === i.id)
+            .reduce((sum, t) => sum + Math.abs(t.amount), 0);
 
-    // 🔥 CALCULATE USED
-    let used = data
-      .filter(t => Number(t.sourceId) === i.id)
-      .reduce((sum, t) => sum + Math.abs(t.amount), 0);
+        let remaining = i.amount - used;
 
-    let remaining = i.amount - used;
+        let div = document.createElement("div");
+        div.className = "income-card";
 
-    let div = document.createElement("div");
-    div.className = "expense-item";
+        let date = new Date(i.date);
 
-    let date = new Date(i.date);
-    let monthYear = date.toLocaleString("en-IN", {
-      month: "short",
-      year: "numeric"
-    });
+        // 📅 Month + Year (from old version)
+        let monthYear = date.toLocaleString("en-IN", {
+            month: "short",
+            year: "numeric"
+        });
 
-    let name = i.note || `${monthYear} Salary`;
+        // 🏷 Name logic
+        let name = i.note || `${monthYear} Income`;
 
-    // 🔥 DISPLAY TEXT
-    let displayText = "";
+        // 🔥 Status text (merged logic)
+        let statusText = "";
+        let statusClass = "";
 
-    if (remaining <= 0) {
-      displayText = "❌ All used";
-    } else {
-      displayText = `₹${remaining}`;
-    }
+        if (remaining <= 0) {
+            statusText = "❌ All used";
+            statusClass = "red";
+        } else {
+            statusText = `₹${remaining} left`;
+            statusClass = "green";
+        }
 
-    div.innerHTML = `
-      <div>
-        <strong>${name}</strong><br>
+        div.innerHTML = `
+      <div class="income-left">
+        <strong>${name}</strong>
         <small>${monthYear}</small>
       </div>
-      <div style="color:${remaining <= 0 ? "red" : "green"}; font-weight:600;">
-        ${displayText} →
+
+      <div class="income-right">
+        <span class="amount">₹${i.amount}</span>
+        <span class="remaining ${statusClass}">
+          ${statusText}
+        </span>
       </div>
     `;
 
-    // 🔥 CLICK
-    div.style.cursor = "pointer";
-    div.onclick = () => {
-      showSavingsScreen("details");
-      renderSourceDetails(i.id);
-    };
+        // 🔥 CLICK → DETAILS
+        div.style.cursor = "pointer";
+        div.onclick = () => {
+            showSavingsScreen("details");
+            renderSourceDetails(i.id);
+        };
 
-    container.appendChild(div);
-  });
-}
-
-function setTodayDate() {
-  let today = new Date();
-
-  let formatted = today.toISOString().split("T")[0];
-
-  let dateInput = document.getElementById("sDate");
-  if (dateInput) {
-    dateInput.value = formatted;
-  }
-}
-
-function getBudgets() {
-  return JSON.parse(localStorage.getItem("budgets")) || [];
-}
-
-function saveBudgets(budgets) {
-  localStorage.setItem("budgets", JSON.stringify(budgets));
-}
-
-function createOrUpdateBudget(budgetId, sourceId, amount) {
-  let budgets = getBudgets();
-
-  let existing = budgets.find(b => b.budgetId === budgetId);
-
-  if (existing) {
-    existing.allocated += amount;
-  } else {
-    budgets.push({
-      budgetId,
-      sourceId,
-      allocated: amount
+        container.appendChild(div);
     });
-  }
-
-  saveBudgets(budgets);
+}
+// Closes the savings date filter modal
+function closeSavingsModal() {
+    let modal = document.getElementById("savingsDateModal");
+    if (modal) modal.style.display = "none";
 }
 
-function fixSavingsMissingSourceId() {
-  let data = JSON.parse(localStorage.getItem("savingsTransactions")) || [];
+// Controls UI fields based on selected type (income / transfer / budget)
+function handleSavingsTypeChange() {
 
-  let incomes = data.filter(t => t.type === "income");
+    let type = document.getElementById("sType").value;
+    let config = document.getElementById("budgetConfig");
+    let source = document.getElementById("sourceSelect");
 
-  if (!incomes.length) {
-    console.log("❌ No income found to map");
-    return;
-  }
-
-  // 👉 pick latest income as fallback
-  let latestIncome = incomes[incomes.length - 1];
-
-  let fixed = [];
-
-  data.forEach(t => {
-    if (t.type !== "income" && !t.sourceId) {
-      t.sourceId = latestIncome.id; // 🔥 attach source
-      fixed.push(t);
+    if (type === "withdraw_budget") {
+        config.style.display = "block";
+        source.style.display = "none";
+    } else if (type === "transfer") {
+        config.style.display = "none";
+        source.style.display = "block";
+    } else {
+        config.style.display = "none";
+        source.style.display = "none";
     }
-  });
-
-  localStorage.setItem("savingsTransactions", JSON.stringify(data));
-
-  console.log("✅ Fixed missing sourceId");
-  console.table(fixed);
 }
-function normalizeSavingsSourceId() {
-  let data = JSON.parse(localStorage.getItem("savingsTransactions")) || [];
 
-  let incomes = data.filter(t => t.type === "income");
+function applySavingsDateFilter() {
+    let from = document.getElementById("sFromDate").value;
+    let to = document.getElementById("sToDate").value;
 
-  if (!incomes.length) {
-    console.log("❌ No income found");
-    return;
-  }
-
-  // 👉 Use latest income as master source
-  let mainSource = incomes[incomes.length - 1];
-
-  let fixed = [];
-
-  data.forEach(t => {
-    if (t.type !== "income") {
-
-      // ❌ remove wrong string sourceIds
-      if (typeof t.sourceId !== "number") {
-        t.sourceId = mainSource.id;
-        fixed.push({
-          id: t.id,
-          fixedTo: mainSource.id,
-          type: t.type
-        });
-      }
-
-      // ❌ also fix missing
-      if (!t.sourceId) {
-        t.sourceId = mainSource.id;
-        fixed.push({
-          id: t.id,
-          fixedTo: mainSource.id,
-          type: t.type
-        });
-      }
+    if (!from || !to) {
+        showToast("Select both dates ❗", "warning");
+        return;
     }
-  });
 
-  localStorage.setItem("savingsTransactions", JSON.stringify(data));
+    let fromDate = new Date(from);
+    let toDate = new Date(to);
 
-  console.log("✅ Savings fully normalized");
-  console.table(fixed);
+    let data = getSavings();
 
-  console.log("📦 Final Data:");
-  console.log(JSON.stringify(data, null, 2));
+    filteredSavingsData = data.filter(t => {
+        let d = new Date(t.date);
+        return d >= fromDate && d <= toDate;
+    });
+
+    renderSavingsHistory(filteredSavingsData);
+    loadSavingsGraph(filteredSavingsData);
+
+    closeSavingsModal();
 }
-function fixIncomeSourceId() {
-  let data = JSON.parse(localStorage.getItem("savingsTransactions")) || [];
 
-  data.forEach(t => {
-    if (t.type === "income") {
-      delete t.sourceId; // 🔥 REMOVE WRONG FIELD
+function goToDashboard() {
+    window.location.href = "index.html";
+}
+// Navigate to transfers page (future)
+function goToTransfers() {
+    showToast("Transfers coming soon 🔁");
+}
+
+// =========================
+// 📄 EXPORT SAVINGS PDF
+// =========================
+// Generates a structured savings report with header, table, and totals
+function exportSavingsPDF() {
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF();
+
+    let data = getSavings();
+
+    if (!data.length) {
+        showToast("No data to export", "warning");
+        return;
     }
-  });
 
-  localStorage.setItem("savingsTransactions", JSON.stringify(data));
+    let y = 20;
 
-  console.log("✅ Income sourceId cleaned");
+    // =========================
+    // 🟢 HEADER
+    // =========================
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(16);
+    doc.text("Savings Report", 14, 15);
+
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(9);
+    doc.text(`Generated on: ${new Date().toLocaleString()}`, 14, 20);
+
+    y = 30;
+
+    // =========================
+    // 🟡 TABLE HEADER
+    // =========================
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(10);
+
+    doc.text("Date", 14, y);
+    doc.text("Type", 50, y);
+    doc.text("Entity", 80, y);
+    doc.text("Amount", 140, y);
+
+    y += 6;
+
+    doc.setDrawColor(200);
+    doc.line(14, y, 195, y);
+
+    y += 6;
+
+    // =========================
+    // 🔵 DATA ROWS
+    // =========================
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(9);
+
+    let totalIncome = 0;
+    let totalExpense = 0;
+
+    data.forEach((t) => {
+
+        let date = new Date(t.date).toLocaleDateString("en-IN");
+        let type = t.type || "-";
+        let entity = t.entity || "-";
+        let amount = t.amount || 0;
+
+        // Totals
+        if (amount > 0) totalIncome += amount;
+        else totalExpense += Math.abs(amount);
+
+        // Page break
+        if (y > 280) {
+            doc.addPage();
+            y = 20;
+        }
+
+        // Color (green for +, red for -)
+        if (amount < 0) {
+            doc.setTextColor(200, 0, 0);
+        } else {
+            doc.setTextColor(0, 150, 0);
+        }
+
+        doc.text(date, 14, y);
+        doc.text(type, 50, y);
+        doc.text(entity, 80, y);
+        doc.text(`₹${Math.abs(amount)}`, 140, y);
+
+        doc.setTextColor(0);
+
+        y += 7;
+    });
+
+    // =========================
+    // 🟣 SUMMARY
+    // =========================
+    y += 10;
+
+    doc.setDrawColor(180);
+    doc.line(14, y, 195, y);
+
+    y += 8;
+
+    doc.setFont("helvetica", "bold");
+
+    doc.setTextColor(0, 150, 0);
+    doc.text(`Total Income: ₹${totalIncome}`, 14, y);
+
+    y += 7;
+
+    doc.setTextColor(200, 0, 0);
+    doc.text(`Total Outgoing: ₹${totalExpense}`, 14, y);
+
+    y += 7;
+
+    doc.setTextColor(0);
+    doc.text(`Net Balance: ₹${totalIncome - totalExpense}`, 14, y);
+
+    // =========================
+    // 💾 SAVE
+    // =========================
+    doc.save("savings-report.pdf");
+
+    showToast("Savings report downloaded 📄", "success");
+}
+// Converts HEX color to RGB (used for dynamic theming if needed)
+function hexToRgb(hex) {
+    hex = hex.replace("#", "");
+
+    let bigint = parseInt(hex, 16);
+
+    return {
+        r: (bigint >> 16) & 255,
+        g: (bigint >> 8) & 255,
+        b: bigint & 255
+    };
 }
 
-function resetSavingsForm() {
-  document.getElementById("sAmount").value = "";
-  document.getElementById("sNote").value = "";
-  document.getElementById("sourceSelect").value = "";
-  document.getElementById("sType").value = "income";
+// =========================
+// ❌ DELETE SAVINGS ENTRY
+// =========================
+// Removes a savings transaction by index
+function deleteSavings(index) {
+    let data = getSavings();
 
-  setTodayDate();
+    data.splice(index, 1);
+
+    saveSavings(data);
+
+    loadSavings(); // refresh UI
+
+    showToast("Deleted successfully 🗑", "success");
+}
+
+
+function handleBudgetPeriodChange() {
+
+    let period = document.getElementById("budgetPeriod").value;
+    let input = document.getElementById("budgetDate");
+
+    if (period === "month") {
+        input.type = "month";
+    } else {
+        input.type = "date";
+    }
+
+    // ✅ auto set today if empty
+    if (!input.value) {
+        input.valueAsDate = new Date();
+    }
+}
+
+function generateBudgetId(period, date) {
+
+    let d = new Date(date);
+
+    if (period === "day") {
+        return "budget_day_" + d.toLocaleDateString("en-CA");
+    }
+
+    if (period === "week") {
+        let start = new Date(d);
+        start.setDate(d.getDate() - d.getDay());
+        return "budget_week_" + start.toLocaleDateString("en-CA");
+    }
+
+    if (period === "month") {
+        let y = d.getFullYear();
+        let m = String(d.getMonth() + 1).padStart(2, "0");
+        return "budget_" + y + "_" + m;
+    }
+
+    return null;
 }
