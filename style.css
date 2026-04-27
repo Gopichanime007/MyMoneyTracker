@@ -53,6 +53,29 @@ body {
   margin-bottom: 12px;
 }
 
+.nav button::before {
+  content: "";
+  position: absolute;
+  inset: -2px;
+  /* 🔥 border thickness */
+
+  border-radius: 16px;
+
+  background: linear-gradient(135deg,
+      rgba(91, 45, 168, 0.6),
+      rgba(30, 10, 60, 0.4));
+
+  filter: blur(6px);
+  /* 🔥 BLUR MAGIC */
+  opacity: 0.6;
+
+  z-index: -1;
+}
+
+.nav button.active::before {
+  opacity: 0;
+}
+
 .nav button {
   width: 48px;
   height: 48px;
@@ -95,14 +118,21 @@ body {
 /* 🔥 ACTIVE TAB */
 .nav button.active {
   background: var(--theme);
-  /* ✅ YOUR THEME */
-  color: #fff;
+  color: white;
 
   transform: scale(1.06);
 
   box-shadow:
     0 6px 14px rgba(0, 0, 0, 0.12),
     0 2px 6px rgba(0, 0, 0, 0.08);
+}
+
+.card .primary:hover {
+  filter: brightness(1.05);
+}
+
+.card .primary:active {
+  transform: scale(0.96);
 }
 
 /* 🔥 ACTIVE GLOW RING */
@@ -242,7 +272,8 @@ button {
 
 /* PRIMARY */
 .primary {
-  background: linear-gradient(135deg, #ff5252, #ff3b30);
+  background: linear-gradient(135deg, var(--theme), #66bb6a);
+  /* ✅ theme */
   color: white;
   border: none;
 
@@ -253,7 +284,7 @@ button {
   font-weight: 600;
   font-size: 14px;
 
-  box-shadow: 0 4px 12px rgba(255, 80, 80, 0.25);
+  box-shadow: 0 4px 12px rgba(76, 175, 80, 0.25);
 }
 
 .primary:active {
@@ -262,8 +293,8 @@ button {
 
 /* SECONDARY */
 .secondary {
-  background: #e5e7eb;
-  color: #111;
+  background: rgba(0, 0, 0, 0.05);
+  color: var(--text);
   border: none;
 
   border-radius: 12px;
@@ -317,6 +348,7 @@ button {
   justify-content: center;
 
   background: rgba(0, 0, 0, 0.35);
+  backdrop-filter: blur(8px);
 }
 
 .modal-content {
@@ -328,6 +360,7 @@ button {
   max-width: 300px;
 
   animation: fadeIn 0.2s ease;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.15);
 }
 
 .modal-actions {
@@ -586,7 +619,7 @@ button {
 }
 
 .expense-item:hover {
-  background: rgba(0, 0, 0, 0.02);
+  background: rgba(0, 0, 0, 0.15);
   border-radius: 8px;
 }
 
@@ -663,4 +696,71 @@ button {
 .budget-status.exhausted {
   background: #fdecea;
   color: #d93025;
+}
+
+/* Modal background blur */
+.modal {
+  backdrop-filter: blur(6px);
+}
+
+/* Modal box */
+.modal-content {
+  background: #fff;
+  border-radius: 20px;
+  padding: 20px;
+  width: 90%;
+  max-width: 350px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.15);
+}
+
+/* Category list container */
+#categoryList {
+  margin-top: 10px;
+}
+
+/* Each row */
+.cat-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 10px;
+  margin-bottom: 6px;
+  border-radius: 10px;
+  background: #f5f5f5;
+  transition: 0.2s;
+}
+
+.cat-row:hover {
+  background: #f8f8f8;
+}
+
+/* Category text */
+.cat-name {
+  font-size: 14px;
+  font-weight: 500;
+}
+
+/* Delete button */
+.cat-delete {
+  border: none;
+  background: linear-gradient(135deg, #ff5252, #d32f2f);
+  color: white;
+  font-size: 14px;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 2px 6px rgba(255, 82, 82, 0.3);
+}
+
+.cat-delete:hover {
+  background: #e53935;
+}
+
+/* Close button */
+.modal-content button {
+  margin-top: 12px;
 }

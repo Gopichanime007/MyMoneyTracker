@@ -643,4 +643,76 @@ select {
 
 .red {
   color: #e53935;
-} 
+}
+
+.chip {
+  display: flex;
+  justify-content: space-between;
+  /* 🔥 ALIGN LEFT + RIGHT */
+  align-items: center;
+
+  width: 100%;
+
+  padding: 10px 14px;
+  margin-bottom: 8px;
+
+  background: #f3f4f6;
+  border-radius: 14px;
+
+  font-size: 14px;
+
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.05);
+}
+
+.chip button {
+  background: none;
+  border: none;
+
+  color: #e53935;
+  font-size: 16px;
+  font-weight: bold;
+
+  cursor: pointer;
+}
+
+.chip-container {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.chip-text {
+  font-weight: 500;
+}
+
+.chip:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 12px rgba(0, 0, 0, 0.08);
+}
+
+.input-row .primary {
+  width: 48px;
+  height: 48px;
+  padding: 0;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.input-row {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.input-row input {
+  flex: 1;
+}
+
+:root {
+  --space-sm: 8px;
+  --space-md: 12px;
+  --space-lg: 18px;
+}

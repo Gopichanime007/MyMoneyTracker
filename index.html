@@ -233,6 +233,8 @@
           <option value="#2196f3">Blue</option>
           <option value="custom">Custom</option>
         </select>
+        <input type="text" id="hexInput" placeholder="#4caf50">
+        <button onclick="applyHex()">Apply</button>
 
         <input type="color" id="colorPicker" style="display:none;" onchange="applyCustomColor(this.value)">
 
@@ -258,9 +260,18 @@
           <button class="primary" onclick="exportDataAsPDF()">📤 Export Data</button>
           <button class="secondary" onclick="openImportModal()">📥 Import Data</button>
 
-          <button class="secondary" onclick="runMigration()">
-            🔄 Fix Old Data
-          </button>
+          <!-- <button class="secondary" onclick="runMigration()"> 🔄 Fix Old Data </button> -->
+          <button class="secondary" onclick="openConfirm()">🗑 Reset App</button>
+        </div>
+        <div id="confirmModal" class="modal" style="display:none;">
+          <div class="modal-content">
+            <h3>Clear all app data?</h3>
+
+            <div class="modal-actions">
+              <button class="secondary" onclick="closeConfirm()">Cancel</button>
+              <button class="primary" onclick="confirmReset()">OK</button>
+            </div>
+          </div>
         </div>
         <h4>💸 Loans / Recoveries</h4>
         <div id="loanSummary"></div>

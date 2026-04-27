@@ -8,6 +8,10 @@ window.onload = function () {
     loadSourceOptions();
     handleSavingsTypeChange(); // 👈 IMPORTANT
     loadBudgetYears();
+    loadCategoryOptions();
+    loadPersonOptions();
+    renderCategoryList();   // 🔥 ADD THIS
+    renderPersonList();
 
     let theme = localStorage.getItem("theme") || "#4caf50";
     document.documentElement.style.setProperty("--theme", theme);
@@ -66,6 +70,7 @@ function createSavingsEntry({
     amount,
     sourceId = null,
     entity = "Cash",
+    payment = null,   // ✅ ADD THIS
     person = null,
     note = "",
     date = new Date().toISOString()
@@ -80,6 +85,8 @@ function createSavingsEntry({
         sourceId,
 
         entity,
+
+        payment,
 
         person,
 
@@ -103,7 +110,8 @@ function addSavings() {
     let amount = Number(document.getElementById("sAmount").value);
     let note = document.getElementById("sNote").value;
     let dateInput = document.getElementById("sDate").value;
-    let entity = document.getElementById("sPayment").value;
+    let entity = document.getElementById("sEntity").value;
+    let payment = document.getElementById("sPayment").value;
 
     let period = document.getElementById("budgetPeriod")?.value;
     let budgetDate = document.getElementById("budgetDate")?.value;
@@ -144,6 +152,7 @@ function addSavings() {
             type: "income",
             amount: Math.abs(amount),
             entity,
+            payment,
             note,
             date
         });
@@ -156,7 +165,7 @@ function addSavings() {
     // =========================
     else if (type === "transfer") {
 
-        let person = document.getElementById("sEntity").value;
+        let person = document.getElementById("sPerson").value;
         let sourceId = Number(document.getElementById("sourceSelect").value);
 
         if (!sourceId) {
@@ -170,6 +179,7 @@ function addSavings() {
             sourceId, // ✅ FIX
             person,
             entity,
+            payment,
             note,
             date
         });
@@ -202,6 +212,7 @@ function addSavings() {
             amount: -Math.abs(amount),
             sourceId,
             entity,
+            payment,
             note,
             date
         });
@@ -358,9 +369,12 @@ function renderSavingsHistory(data) {
 
         div.innerHTML = `
         <div>
-            <strong>${t.note || t.person || "Entry"}</strong><br>
-            <small>${label} • ${new Date(t.date).toLocaleString()}</small>
-        </div>
+    <strong>${t.note || t.person || "Entry"}</strong><br>
+    <small>
+        ${label} • ${t.entity} • ${t.payment || "-"} • 
+        ${new Date(t.date).toLocaleString()}
+    </small>
+</div>
 
         <div style="display:flex; align-items:center; gap:10px;">
             <span style="color:${color}; font-weight:600;">
@@ -666,13 +680,22 @@ function handleSavingsTypeChange() {
 
     let source = document.getElementById("sourceWrapper");
     let budget = document.getElementById("budgetConfig");
+    let personField = document.getElementById("personWrapper");
 
+    // 👤 PERSON
+    if (type === "transfer") {
+        personField.style.display = "block";
+    } else {
+        personField.style.display = "none";
+    }
+
+    // 🔗 SOURCE + BUDGET
     if (type === "transfer") {
         source.style.display = "block";
         budget.style.display = "none";
 
     } else if (type === "withdraw_budget") {
-        source.style.display = "block";   // 🔥 CHANGE HERE
+        source.style.display = "block";
         budget.style.display = "block";
 
     } else {
@@ -769,6 +792,7 @@ function exportSavingsPDF() {
     doc.text("Date", 14, y);
     doc.text("Type", 50, y);
     doc.text("Entity", 80, y);
+    doc.text("Payment", 110, y);
     doc.text("Amount", 140, y);
 
     y += 6;
@@ -814,6 +838,7 @@ function exportSavingsPDF() {
         doc.text(date, 14, y);
         doc.text(type, 50, y);
         doc.text(entity, 80, y);
+        doc.text(t.payment || "-", 110, y);
         doc.text(`₹${Math.abs(amount)}`, 140, y);
 
         doc.setTextColor(0);
@@ -962,4 +987,227 @@ function createOrUpdateBudget(budgetId, entry) {
 
     localStorage.setItem("budgets", JSON.stringify(budgets));
 }
+
+function getCategories() {
+    return JSON.parse(localStorage.getItem("categories")) ||
+        ["Self", "Family", "Friend", "Company", "Charity", "Other"];
+}
+
+function saveCategories(list) {
+    localStorage.setItem("categories", JSON.stringify(list));
+}
+
+function getPersons() {
+    return JSON.parse(localStorage.getItem("persons")) || [];
+}
+
+function savePersons(list) {
+    localStorage.setItem("persons", JSON.stringify(list));
+}
+function loadCategoryOptions() {
+    let select = document.getElementById("sEntity");
+    if (!select) return;
+
+    let categories = getCategories();
+
+    select.innerHTML = "";
+
+    categories.forEach(c => {
+        let opt = document.createElement("option");
+        opt.value = c;
+        opt.textContent = c;
+        select.appendChild(opt);
+    });
+}
+
+
+function loadPersonOptions() {
+    let select = document.getElementById("sPerson");
+    if (!select) return;
+
+    let persons = getPersons();
+
+    select.innerHTML = "<option value=''>Select Person</option>";
+
+    persons.forEach(p => {
+        let opt = document.createElement("option");
+        opt.value = p;
+        opt.textContent = p;
+        select.appendChild(opt);
+    });
+
+    // 🔥 ADD NEW OPTION
+    let addNew = document.createElement("option");
+    addNew.value = "__add_new__";
+    addNew.textContent = "➕ Add New Person";
+    select.appendChild(addNew);
+}
+
+function addCategory() {
+    let input = document.getElementById("newCategory");
+    let value = input.value.trim();
+
+    if (!value) return;
+
+    let categories = getCategories();
+
+    if (!categories.includes(value)) {
+        categories.push(value);
+        saveCategories(categories);
+        loadCategoryOptions();
+    }
+
+    input.value = "";
+}
+
+function addPerson() {
+    let input = document.getElementById("newPerson");
+    let value = input.value.trim();
+
+    if (!value) return;
+
+    let persons = getPersons();
+
+    if (!persons.includes(value)) {
+        persons.push(value);
+        savePersons(persons);
+        loadPersonOptions();
+    }
+
+    input.value = "";
+    renderPersonList();
+}
+
+
+function deleteCategory(value) {
+    let categories = getCategories();
+
+    categories = categories.filter(c => c !== value);
+
+    saveCategories(categories);
+    loadCategoryOptions();
+    renderCategoryList(); // refresh UI
+}
+
+function deletePerson(value) {
+    let persons = getPersons();
+
+    persons = persons.filter(p => p !== value);
+
+    savePersons(persons);
+    loadPersonOptions();
+    renderPersonList(); // refresh UI
+}
+
+function renderCategoryList() {
+    let container = document.getElementById("categoryList");
+    let categories = getCategories();
+
+    container.innerHTML = "";
+
+    categories.forEach(c => {
+        let div = document.createElement("div");
+        div.className = "chip";
+
+        div.innerHTML = `
+  <span class="chip-text">${c}</span>
+  <button onclick="deleteCategory('${c}')">✖</button>
+`;
+
+        container.appendChild(div);
+    });
+}
+
+function renderPersonList() {
+    let container = document.getElementById("personList");
+    let persons = getPersons();
+
+    container.innerHTML = "";
+
+    persons.forEach(p => {
+        let div = document.createElement("div");
+        div.className = "chip";
+
+        div.innerHTML = `
+            <span>${p}</span>
+            <button onclick="deletePerson('${p}')">✖</button>
+        `;
+
+        container.appendChild(div);
+    });
+}
+function openCategoryModal() {
+    renderCategoryList();   // 🔥 ADD THIS
+    document.getElementById("categoryModal").style.display = "flex";
+}
+
+function closeCategoryModal() {
+    document.getElementById("categoryModal").style.display = "none";
+}
+
+function openPersonModal() {
+    renderPersonList();   // load latest data
+    document.getElementById("personModal").style.display = "flex";
+}
+
+function closePersonModal() {
+    document.getElementById("personModal").style.display = "none";
+}
+
+function openAddPersonModal() {
+    document.getElementById("addPersonModal").style.display = "flex";
+}
+
+function closeAddPersonModal() {
+    document.getElementById("addPersonModal").style.display = "none";
+}
+
+function confirmAddPerson() {
+    let input = document.getElementById("newPersonInput");
+    let name = input.value.trim();
+
+    if (!name) return;
+
+    let persons = getPersons();
+
+    if (!persons.includes(name)) {
+        persons.push(name);
+        savePersons(persons);
+    }
+
+    loadPersonOptions();
+
+    // auto select newly added person
+    document.getElementById("sPerson").value = name;
+
+    input.value = "";
+    closeAddPersonModal();
+}
+
+window.addEventListener("DOMContentLoaded", function () {
+    let personSelect = document.getElementById("sPerson");
+
+    if (!personSelect) return;
+
+    personSelect.addEventListener("change", function () {
+        if (this.value === "__add_new__") {
+
+            if (this.value === "__add_new__") {
+                openAddPersonModal();
+            }
+
+            if (!name) return;
+
+            let persons = getPersons();
+
+            if (!persons.includes(name)) {
+                persons.push(name);
+                savePersons(persons);
+            }
+
+            loadPersonOptions();
+            this.value = name; // auto select
+        }
+    });
+});
 

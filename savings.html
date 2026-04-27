@@ -65,14 +65,11 @@
         <!-- BASIC INFO -->
         <input type="number" id="sAmount" placeholder="Amount">
 
-        <select id="sEntity">
-          <option value="Self">Self</option>
-          <option value="Family">Family</option>
-          <option value="Friend">Friend</option>
-          <option value="Company">Company</option>
-          <option value="Charity">Charity</option>
-          <option value="Other">Other</option>
-        </select>
+        <select id="sEntity"></select>
+        <div id="personWrapper">
+          <label>Person</label>
+          <select id="sPerson"></select>
+        </div>
 
         <input type="text" id="sNote" placeholder="Purpose / Note">
 
@@ -190,6 +187,51 @@
       <div class="card">
         <h3>⚙️ Settings</h3>
 
+        <!-- ========================= -->
+        <!-- CATEGORY SECTION -->
+        <!-- ========================= -->
+        <div class="input-row">
+          <input type="text" id="newCategory" placeholder="Add Category">
+          <button class="primary" onclick="addCategory()">➕</button>
+        </div>
+
+        <h4 onclick="openCategoryModal()" style="cursor:pointer;">
+          Your Categories ⬇️
+        </h4>
+
+        <!-- CATEGORY MODAL -->
+        <div id="categoryModal" class="modal" onclick="closeCategoryModal()">
+          <div class="modal-content" onclick="event.stopPropagation()">
+            <h3>Your Categories</h3>
+            <div id="categoryList"></div>
+            <button class="primary" onclick="closeCategoryModal()">Close</button>
+          </div>
+        </div>
+
+        <!-- ========================= -->
+        <!-- PERSON SECTION -->
+        <!-- ========================= -->
+        <div class="input-row">
+          <input type="text" id="newPerson" placeholder="Add Person">
+          <button class="primary" onclick="addPerson()">➕</button>
+        </div>
+
+        <h4 onclick="openPersonModal()" style="cursor:pointer;">
+          Your Persons ⬇️
+        </h4>
+
+        <!-- PERSON MODAL -->
+        <div id="personModal" class="modal" onclick="closePersonModal()">
+          <div class="modal-content" onclick="event.stopPropagation()">
+            <h3>Your Persons</h3>
+            <div id="personList"></div>
+            <button class="primary" onclick="closePersonModal()">Close</button>
+          </div>
+        </div>
+
+        <!-- ========================= -->
+        <!-- NAVIGATION -->
+        <!-- ========================= -->
         <button class="primary" onclick="goToDashboard()">
           🏠 Go to Main Dashboard
         </button>
@@ -213,6 +255,22 @@
       </div>
     </div>
   </div>
+
+  <div id="addPersonModal" class="modal" onclick="closeAddPersonModal()">
+    <div class="modal-content" onclick="event.stopPropagation()">
+
+      <h3>Add New Person</h3>
+
+      <input type="text" id="newPersonInput" placeholder="Enter person name">
+
+      <div class="modal-actions">
+        <button class="secondary" onclick="closeAddPersonModal()">Cancel</button>
+        <button class="primary" onclick="confirmAddPerson()">Add</button>
+      </div>
+
+    </div>
+  </div>
+
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
   <script src="savings.js"></script>
 

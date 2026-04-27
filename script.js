@@ -396,9 +396,11 @@ function renderCategoryList() {
         let div = document.createElement("div");
 
         div.innerHTML = `
-      <span>${cat}</span>
-      <button onclick="deleteCategory(${i})">✕</button>
-    `;
+  <div class="cat-row">
+    <span class="cat-name">${cat}</span>
+    <button class="cat-delete" onclick="deleteCategory(${i})">✕</button>
+  </div>
+`;
 
         container.appendChild(div);
     });
@@ -888,7 +890,9 @@ function loadBudgetOptions() {
 
         opt.value = b.budgetId;
 
-        opt.textContent = `${formatBudgetName(b.budgetId)} (${b.entity}) — ₹${remaining} left`;
+        let label = formatMonth(b.monthKey);
+
+        opt.textContent = `${label} (${b.entity}) — ₹${remaining} left`;
 
         select.appendChild(opt);
     });
@@ -998,6 +1002,22 @@ function exportDataAsPDF() {
     a.click();
 }
 // Imports JSON backup into localStorage
+// function importData() {
+//     let text = document.getElementById("importText").value;
+
+//     if (!text) {
+//         showToast("Paste data");
+//         return;
+//     }
+
+//     let data = JSON.parse(text);
+
+//     if (data.expenses) saveExpenses(data.expenses);
+//     if (data.budgets) saveBudgets(data.budgets);
+//     if (data.savings) saveSavings(data.savings);
+
+//     showToast("Imported successfully");
+// }
 function importData() {
     let text = document.getElementById("importText").value;
 
@@ -1006,13 +1026,31 @@ function importData() {
         return;
     }
 
-    let data = JSON.parse(text);
+    try {
+        let data = JSON.parse(text);
 
-    if (data.expenses) saveExpenses(data.expenses);
-    if (data.budgets) saveBudgets(data.budgets);
-    if (data.savings) saveSavings(data.savings);
+        if (data.expenses) saveExpenses(data.expenses);
+        if (data.budgets) saveBudgets(data.budgets);
+        if (data.savings) saveSavings(data.savings);
 
-    showToast("Imported successfully");
+        showToast("Imported successfully");
+
+        // 🔄 Refresh UI
+        loadHistory();
+        loadBudgetOptions();
+        loadDashboard();
+        loadGraph();
+        renderBudgetEntries();   // 🔥 ADD THIS
+
+        // 🧹 Clear input
+        document.getElementById("importText").value = "";
+
+        // ❌ Close modal
+        closeImportModal();
+
+    } catch (err) {
+        showToast("Invalid JSON ❌");
+    }
 }
 // Fixes old data structure to new system
 function runMigration() {
@@ -2351,4 +2389,67 @@ function formatMonth(monthKey) {
         month: "short",
         year: "numeric"
     });
+}
+function openImportModal() {
+    let modal = document.getElementById("importModal");
+    if (modal) modal.style.display = "flex";
+}
+
+function closeImportModal() {
+    let modal = document.getElementById("importModal");
+    if (modal) modal.style.display = "none";
+}
+
+function handleFileImport(event) {
+    let file = event.target.files[0];
+    if (!file) return;
+
+    let reader = new FileReader();
+
+    reader.onload = function (e) {
+        let text = e.target.result;
+
+        document.getElementById("importText").value = text;
+    };
+
+    reader.readAsText(file);
+}
+
+
+function openConfirm() {
+    document.getElementById("confirmModal").style.display = "flex";
+}
+
+function closeConfirm() {
+    document.getElementById("confirmModal").style.display = "none";
+}
+
+function confirmReset() {
+    localStorage.clear();
+    location.reload();
+}
+
+function setColorByCode(hex) {
+    let picker = document.getElementById("colorPicker");
+
+    if (!hex.startsWith("#")) {
+        hex = "#" + hex;
+    }
+
+    picker.value = hex;
+
+    // Apply to your app
+    applyCustomColor(hex);
+}
+function applyHex() {
+    let hex = document.getElementById("hexInput").value;
+
+    if (!hex) return;
+
+    if (!hex.startsWith("#")) {
+        hex = "#" + hex;
+    }
+
+    document.getElementById("colorPicker").value = hex;
+    applyCustomColor(hex);
 }
