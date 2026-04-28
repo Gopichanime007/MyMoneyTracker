@@ -160,15 +160,17 @@ function loadHistory(list = getExpenses()) {
         div.className = "expense-item";
 
         div.innerHTML = `
-      <div>
-        <strong>${e.category}</strong> -
-        <span style="color:${e.amount < 0 ? 'red' : 'green'}">
-          ₹${e.amount}
-        </span><br>
-        <small>${new Date(e.date).toLocaleString()}</small>
-      </div>
-      <button onclick="deleteExpenseUI(${index})">🗑</button>
-    `;
+  <div>
+    <strong>${e.category || e.purpose || e.type || "Entry"}</strong> -
+    <span style="color:${e.amount < 0 ? 'red' : 'green'}">
+      ₹${e.amount}
+    </span><br>
+    <small>
+      ${e.paymentType || e.entity || "-"} • 
+      ${new Date(e.date).toLocaleString("en-IN")}
+    </small>
+  </div>
+`;
 
         container.appendChild(div);
     });
@@ -194,7 +196,7 @@ function handleAddExpense() {
     let purpose = document.getElementById("purpose")?.value;
     let date = document.getElementById("expenseDate")?.value;
     let type = document.getElementById("entryType")?.value;
-    let entity = document.getElementById("paymentType")?.value;
+    let paymentType = document.getElementById("paymentType")?.value;
     let budgetId = document.getElementById("budgetSelect")?.value;
 
     // ✅ VALIDATION
@@ -236,7 +238,7 @@ function handleAddExpense() {
         purpose,
         date: selectedDate.toISOString(), // ✅ FIXED
         type,
-        entity,
+        paymentType,
         budgetId
     });
 
@@ -667,7 +669,7 @@ function downloadPDF() {
         const category = e.category || "Others";
         const amount = Number(e.amount || 0);
         const purpose = e.purpose || "N/A";
-        const payment = e.entity || "-";
+        const payment = e.paymentType || e.entity || "-";
         const type = e.type ? e.type.toUpperCase() : (amount < 0 ? "EXPENSE" : "INCOME");
 
         const formatted = new Intl.NumberFormat("en-IN").format(Math.abs(amount));
