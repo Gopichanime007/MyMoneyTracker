@@ -179,7 +179,7 @@ function completePurchase() {
   showToast("Purchase completed ✅", "success");
 
   setTimeout(() => {
-    window.location.href = "index.html";
+    window.location.href = "../index.html";
   }, 1000);
 }
 
@@ -190,7 +190,7 @@ function completePurchase() {
 function cancelOrder() {
   if (!confirm("Cancel this order?")) return;
 
-  window.location.href = "quotation.html";
+  window.location.href = "pages/quotation.html";
 }
 
 

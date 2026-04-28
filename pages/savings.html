@@ -8,7 +8,7 @@
 
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <!-- <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script> -->
-  <link rel="stylesheet" href="savings.css" />
+  <link rel="stylesheet" href="../assets/styles/savings.css">
 </head>
 
 <body>
@@ -168,7 +168,7 @@
       <div class="card">
         <div class="card-header">
           <h3>📊 Source Details</h3>
-          <button class="secondary" onclick="showSavingsScreen('history')">
+          <button class="secondary" onclick="showSavingsScreen('income')">
             ⬅
           </button>
         </div>
@@ -272,11 +272,13 @@
   </div>
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-  <script src="savings.js"></script>
+  <script src="../assets/scripts/storage.js"></script>
+  <script src="../assets/scripts/script.js"></script>
+  <script src="../assets/scripts/savings.js"></script>
 
   <script>
     function goBack() {
-      window.location.href = "index.html";
+      window.location.href = "../index.html";
     }
   </script>
 

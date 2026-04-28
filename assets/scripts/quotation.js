@@ -19,6 +19,7 @@ function openProductLink() {
 // =========================
 function openItemModal() {
   document.getElementById("itemModal").style.display = "flex";
+  loadSources(); // 🔥 important
 }
 
 function closeItemModal() {
@@ -48,12 +49,44 @@ function closeChargeModal() {
 // ➕ ADD ITEM FROM MODAL
 // =========================
 function addItemFromModal() {
-  let name = document.getElementById("mName").value;
+
+  let sourceSelect = document.getElementById("mSource");
+  let newSourceInput = document.getElementById("newSourceInput");
+
+  let source = sourceSelect.value;
+
+  // =========================
+  // 🧠 HANDLE NEW SOURCE
+  // =========================
+  if (source === "__add_new__") {
+    let newSource = newSourceInput.value.trim();
+
+    if (!newSource) {
+      alert("Enter new source ❗");
+      return;
+    }
+
+    let sources = getSources();
+
+    if (!sources.includes(newSource)) {
+      sources.push(newSource);
+      saveSources(sources);
+    }
+
+    source = newSource; // ✅ override properly
+  }
+
+  // =========================
+  // 📦 GET VALUES
+  // =========================
+  let name = document.getElementById("mName").value.trim();
   let price = Number(document.getElementById("mPrice").value);
   let qty = Number(document.getElementById("mQty").value);
-  let source = document.getElementById("mSource").value;
-  let link = document.getElementById("mLink").value;
+  let link = document.getElementById("mLink").value.trim();
 
+  // =========================
+  // 🔗 AUTO NAME FROM LINK
+  // =========================
   if (!name && link) {
     try {
       let url = new URL(link);
@@ -72,17 +105,23 @@ function addItemFromModal() {
     }
   }
 
+  // =========================
+  // ✅ VALIDATION
+  // =========================
   if (!name || !price || !qty) {
     alert("Fill all required fields ❗");
     return;
   }
 
+  // =========================
+  // 🧾 CREATE ITEM
+  // =========================
   let item = {
     id: Date.now(),
     name,
     price,
     qty,
-    source,
+    source, // ✅ correct source (new or existing)
     link,
     total: price * qty
   };
@@ -90,6 +129,9 @@ function addItemFromModal() {
   quotationItems.push(item);
   localStorage.setItem("quotationItems", JSON.stringify(quotationItems));
 
+  // =========================
+  // 🧹 CLEANUP
+  // =========================
   clearItemModal();
   closeItemModal();
   renderQuotation();
@@ -325,7 +367,7 @@ function clearQuotation() {
 renderQuotation();
 
 function goBack() {
-  window.location.href = "index.html";
+  window.location.href = "../index.html";
 }
 // =====================================
 // Author: Gopichanime
@@ -340,4 +382,42 @@ function goBack() {
   \____| \___/|_|   |___\____|_| |_/_/   \_\_| \_|___|_|  |_|_____|
 
    Signed by: GOPICHANIME 🐉
-*/
+*/function getSources() {
+  return JSON.parse(localStorage.getItem("sources")) || [
+    "Amazon", "Flipkart", "Swiggy", "Local"
+  ];
+}
+
+function saveSources(list) {
+  localStorage.setItem("sources", JSON.stringify(list));
+}
+
+function loadSources() {
+  let select = document.getElementById("mSource");
+  let sources = getSources();
+
+  select.innerHTML = '<option value="">Source</option>';
+
+  sources.forEach(s => {
+    let opt = document.createElement("option");
+    opt.value = s;
+    opt.textContent = s;
+    select.appendChild(opt);
+  });
+
+  // 🔥 Add special option
+  let addOpt = document.createElement("option");
+  addOpt.value = "__add_new__";
+  addOpt.textContent = "➕ Add New Source";
+  select.appendChild(addOpt);
+}
+function handleSourceChange(val) {
+  let input = document.getElementById("newSourceInput");
+
+  if (val === "__add_new__") {
+    input.style.display = "block";
+    input.focus();
+  } else {
+    input.style.display = "none";
+  }
+}

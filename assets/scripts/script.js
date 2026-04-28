@@ -955,9 +955,6 @@ function saveBudget() {
     loadBudgetOptions();
 }
 // Placeholder for quotation feature (future)
-function openQuotation() {
-    showToast("Coming soon 🚀");
-}
 
 // Shares exported PDF (basic fallback)
 function sharePDF() {
@@ -1000,16 +997,23 @@ function exportDataAsPDF() {
     let data = {
         expenses: getExpenses(),
         budgets: getBudgets(),
-        savings: getSavings()
+        savings: getSavings(),
+        orders: JSON.parse(localStorage.getItem("orders")) || [] // ✅ ADDED
     };
 
-    let blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+    let blob = new Blob(
+        [JSON.stringify(data, null, 2)],
+        { type: "application/json" }
+    );
+
     let url = URL.createObjectURL(blob);
 
     let a = document.createElement("a");
     a.href = url;
-    a.download = "backup.json";
+    a.download = `money-tracker-backup-${new Date().toISOString().slice(0, 10)}.json`;
     a.click();
+
+    URL.revokeObjectURL(url); // ✅ cleanup
 }
 // Imports JSON backup into localStorage
 // function importData() {
@@ -1078,7 +1082,7 @@ function runMigration() {
     showToast("Migration done");
 }
 function openQuotation() {
-    window.location.href = "quotation.html";
+    window.location.href = "pages/quotation.html";
 }
 
 // =========================
@@ -1098,7 +1102,7 @@ function bindRemainingCard() {
     if (!card) return;
 
     card.addEventListener("click", () => {
-        window.location.href = "savings.html";
+        window.location.href = "pages/savings.html";
     });
 }
 // =========================

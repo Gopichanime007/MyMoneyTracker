@@ -10,7 +10,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600&display=swap" rel="stylesheet">
 
   <!-- Styles -->
-  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="assets/styles/style.css">
 
   <!-- Libraries -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
@@ -86,7 +86,7 @@
         <button class="primary" onclick="openQuotation()">
           🧾 Create Quotation
         </button>
-        <button class="secondary" onclick="window.location.href='orders.html'">
+        <button class="secondary" onclick="window.location.href='pages/orders.html'">
           📦 View Orders
         </button>
       </div>
@@ -253,7 +253,7 @@
           <div class="modal-content">
             <h3>Your Categories</h3>
             <div id="categoryList"></div>
-            <button type="button" onclick="closeCategoryModal()">Close</button>
+            <button type="button" class="secondary" onclick="closeCategoryModal()">Close</button>
           </div>
         </div>
 
@@ -278,6 +278,9 @@
         </div>
         <h4>💸 Loans / Recoveries</h4>
         <div id="loanSummary"></div>
+      </div>
+      <div class="app-signature">
+        Developed by <strong>Gopichaninme</strong>
       </div>
     </section>
 
@@ -316,7 +319,8 @@
   </div>
 
   <!-- SCRIPT -->
-  <script src="script.js"></script>
+  <script src="assets/scripts/storage.js"></script>
+  <script src="assets/scripts/script.js"></script>
   <script>
     document.addEventListener("DOMContentLoaded", () => {
       showScreen('home');

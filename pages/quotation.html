@@ -6,7 +6,7 @@
   <title>Quotation</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-  <link rel="stylesheet" href="quotation.css">
+  <link rel="stylesheet" href="../assets/styles/quotation.css">
 </head>
 
 <body>
@@ -74,26 +74,63 @@
 
       <h3>Add Item</h3>
 
-      <input type="text" id="mName" placeholder="Product Name">
-      <input type="number" id="mPrice" placeholder="Price">
-      <input type="number" id="mQty" placeholder="Qty">
-
-      <select id="mSource">
-        <option value="">Source</option>
-        <option>Amazon</option>
-        <option>Flipkart</option>
-        <option>Swiggy</option>
-        <option>Local</option>
-      </select>
-
-      <div class="link-row">
-        <input type="text" id="mLink" placeholder="Product Link">
-        <button onclick="openProductLink()">🔍</button>
+      <!-- PRODUCT -->
+      <div class="form-group">
+        <label>Product Name</label>
+        <input type="text" id="mName" placeholder="Enter product name">
       </div>
 
+      <!-- PRICE + QTY + UNIT -->
+      <div class="form-row">
+
+        <div class="form-field">
+          <label>Price</label>
+          <input type="number" id="mPrice" placeholder="₹ Price">
+        </div>
+
+        <div class="form-field">
+          <label>Qty</label>
+          <input type="number" id="mQty" step="0.01" placeholder="Qty">
+        </div>
+
+        <div class="form-field">
+          <label>Unit</label>
+          <select id="mUnit">
+            <option value="pcs">pcs</option>
+            <option value="kg">kg</option>
+            <option value="g">g</option>
+            <option value="ltr">ltr</option>
+            <option value="hrs">hrs</option>
+            <option value="pack">pack</option>
+          </select>
+        </div>
+
+      </div>
+
+      <!-- SOURCE -->
+      <div class="form-group">
+        <label>Source</label>
+        <select id="mSource" onchange="handleSourceChange(this.value)">
+          <option value="">Select source</option>
+        </select>
+
+        <input type="text" id="newSourceInput" placeholder="Enter new source" style="display:none; margin-top:8px;">
+      </div>
+
+      <!-- LINK -->
+      <div class="form-group">
+        <label>Product Link</label>
+
+        <div class="link-row">
+          <input type="text" id="mLink" placeholder="Paste product link">
+          <button class="secondary" onclick="openProductLink()">🔍</button>
+        </div>
+      </div>
+
+      <!-- ACTIONS -->
       <div class="modal-actions">
         <button class="secondary" onclick="closeItemModal()">Cancel</button>
-        <button class="primary" onclick="addItemFromModal()">Add</button>
+        <button class="primary" onclick="addItemFromModal()">Add Item</button>
       </div>
 
     </div>
@@ -131,7 +168,9 @@
     </div>
   </div>
 
-  <script src="quotation.js"></script>
+  <script src="../assets/scripts/storage.js"></script>
+  <script src="../assets/scripts/script.js"></script>
+  <script src="../assets/scripts/quotation.js"></script>
 </body>
 
 </html>

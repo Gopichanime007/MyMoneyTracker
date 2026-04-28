@@ -775,7 +775,7 @@ function applySavingsDateFilter() {
 }
 
 function goToDashboard() {
-    window.location.href = "index.html";
+    window.location.href = "../index.html";
 }
 // Navigate to transfers page (future)
 function goToTransfers() {
