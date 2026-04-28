@@ -160,16 +160,21 @@ function loadHistory(list = getExpenses()) {
         div.className = "expense-item";
 
         div.innerHTML = `
-  <div>
-    <strong>${e.category || e.purpose || e.type || "Entry"}</strong> -
-    <span style="color:${e.amount < 0 ? 'red' : 'green'}">
-      ₹${e.amount}
-    </span><br>
-    <small>
-      ${e.paymentType || e.entity || "-"} • 
-      ${new Date(e.date).toLocaleString("en-IN")}
-    </small>
-  </div>
+    <div class="expense-left">
+      <strong>${e.category || e.purpose || e.type || "Entry"}</strong> -
+      <span style="color:${e.amount < 0 ? 'red' : 'green'}">
+        ₹${e.amount}
+      </span><br>
+
+      <small>
+        ${e.paymentType || e.entity || e.sourceName || "-"} • 
+        ${new Date(e.date).toLocaleString("en-IN")}
+      </small>
+    </div>
+
+    <button class="delete-btn" onclick="deleteExpenseUI(${index})">
+      🗑
+    </button>
 `;
 
         container.appendChild(div);
