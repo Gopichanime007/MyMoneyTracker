@@ -65,6 +65,8 @@ function addExpense(obj) {
     });
 
     saveExpenses(expenses);
+    updateProgressBar();
+    loadBudgetOptions();
 }
 
 
@@ -247,7 +249,8 @@ function handleAddExpense() {
     loadHistory();
     loadBudgetOptions();
     loadDashboard();   // 🔥 important
-    loadGraph();       // 🔥 refresh graph
+    loadGraph();
+    updateProgressBar();       // 🔥 refresh graph
 }
 
 
@@ -1241,6 +1244,7 @@ function loadDashboard() {
     document.getElementById("todaySpent").innerText = todaySpent;
     document.getElementById("incomeValue").innerText = totalIncome;
     document.getElementById("netValue").innerText = net;
+    updateProgressBar();
 }
 // =========================
 // 📦 LOAD BUDGET SCREEN
@@ -1411,7 +1415,7 @@ function openBudgetDetails(group) {
 
             <div style="display:flex; justify-content:space-between; align-items:center;">
                 <h3>${name}</h3>
-                <button onclick="goBackToBudgets()" class="secondary">← Back</button>
+                <button class="back-btn" onclick="goBackToBudgets()" class="secondary">← Back</button>
             </div>
 
             <small>${monthYear}</small>
@@ -2452,4 +2456,53 @@ function applyHex() {
 
     document.getElementById("colorPicker").value = hex;
     applyCustomColor(hex);
+}
+function applyPeriodFromModal() {
+
+    let from = document.getElementById("startDate").value;
+    let to = document.getElementById("endDate").value;
+
+    if (!from || !to) {
+        showToast("Select both dates");
+        return;
+    }
+
+    let filtered = getExpenses().filter(e => {
+        let d = new Date(e.date);
+        return d >= new Date(from) && d <= new Date(to);
+    });
+
+    // 🔥 GRAPH
+    loadGraph("custom", filtered, { start: from, end: to });
+
+    // 🔥 ALSO UPDATE CATEGORY BREAKDOWN
+    renderCategoryBreakdown(groupByCategory(filtered));
+
+    // 🔥 CLOSE MODAL
+    closePeriod();
+}
+
+function updateProgressBar() {
+
+    let budgets = getBudgets();
+    let expenses = getExpenses();
+
+    let currentMonth = new Date().toISOString().slice(0, 7);
+
+    let totalBudget = budgets
+        .filter(b => b.monthKey === currentMonth)
+        .reduce((sum, b) => sum + (b.totalAllocated || 0), 0);
+
+    let totalSpent = expenses
+        .filter(e => e.amount < 0 && e.monthKey === currentMonth)
+        .reduce((sum, e) => sum + Math.abs(e.amount), 0);
+
+    let percent = totalBudget ? (totalSpent / totalBudget) * 100 : 0;
+
+    percent = Math.min(percent, 100); // limit max 100%
+
+    // UI update
+    document.getElementById("progressFill").style.width = percent + "%";
+    document.getElementById("progressText").innerText =
+        `${percent.toFixed(1)}% used`;
 }

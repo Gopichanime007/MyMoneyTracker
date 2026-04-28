@@ -591,12 +591,41 @@ function renderSourceDetails(sourceId) {
     let container = document.getElementById("sourceDetails");
     if (!container) return;
 
+    let entriesHTML = "";
+
+    if (summary.entries.length === 0) {
+        entriesHTML = `<p style="margin-top:10px;">No entries</p>`;
+    } else {
+        summary.entries.forEach(e => {
+            let color = e.amount < 0 ? "red" : "green";
+
+            entriesHTML += `
+                <div class="expense-item">
+                    <div>
+                        <strong>${e.note || e.person || "Entry"}</strong><br>
+                        <small>${new Date(e.date).toLocaleString()}</small>
+                    </div>
+                    <div style="color:${color}; font-weight:600;">
+                        ₹${Math.abs(e.amount)}
+                    </div>
+                </div>
+            `;
+        });
+    }
+
     container.innerHTML = `
-    <h3>${summary.name}</h3>
-    <p>💰 Income: ₹${summary.totalIncome}</p>
-    <p>📉 Used: ₹${summary.totalOutgoing}</p>
-    <p>🟢 Remaining: ₹${summary.remaining}</p>
-  `;
+        <h3>${summary.name}</h3>
+
+        <p>💰 Income: ₹${summary.totalIncome}</p>
+        <p>📉 Used: ₹${summary.totalOutgoing}</p>
+        <p>🟢 Remaining: ₹${summary.remaining}</p>
+
+        <hr style="margin: 14px 0;">
+
+        <h4>Entries</h4>
+
+        ${entriesHTML}
+    `;
 }
 
 // Renders all income entries and allows navigation to detailed view
@@ -757,6 +786,131 @@ function goToTransfers() {
 // 📄 EXPORT SAVINGS PDF
 // =========================
 // Generates a structured savings report with header, table, and totals
+// function exportSavingsPDF() {
+//     const { jsPDF } = window.jspdf;
+//     const doc = new jsPDF();
+
+//     let data = getSavings();
+
+//     if (!data.length) {
+//         showToast("No data to export", "warning");
+//         return;
+//     }
+
+//     let y = 20;
+
+//     // =========================
+//     // 🟢 HEADER
+//     // =========================
+//     doc.setFont("helvetica", "bold");
+//     doc.setFontSize(16);
+//     doc.text("Savings Report", 14, 15);
+
+//     doc.setFont("helvetica", "normal");
+//     doc.setFontSize(9);
+//     doc.text(`Generated on: ${new Date().toLocaleString()}`, 14, 20);
+
+//     y = 30;
+
+//     // =========================
+//     // 🟡 TABLE HEADER
+//     // =========================
+//     doc.setFont("helvetica", "bold");
+//     doc.setFontSize(10);
+
+//     let purpose = t.note || "-";
+//     let person = t.person || "-";
+
+//     doc.text(date, 14, y);
+//     doc.text(type, 40, y);
+//     doc.text(purpose, 65, y);
+//     doc.text(entity, 105, y);
+//     doc.text(t.payment || "-", 135, y);
+//     doc.text("Rs. " + Math.abs(amount).toLocaleString("en-IN"), 165, y);
+
+//     y += 6;
+
+//     doc.setDrawColor(200);
+//     doc.line(14, y, 195, y);
+
+//     y += 6;
+
+//     // =========================
+//     // 🔵 DATA ROWS
+//     // =========================
+//     doc.setFont("helvetica", "normal");
+//     doc.setFontSize(9);
+
+//     let totalIncome = 0;
+//     let totalExpense = 0;
+
+//     data.forEach((t) => {
+
+//         let date = new Date(t.date).toLocaleDateString("en-IN");
+//         let type = t.type || "-";
+//         let entity = t.entity || "-";
+//         let amount = t.amount || 0;
+
+//         // Totals
+//         if (amount > 0) totalIncome += amount;
+//         else totalExpense += Math.abs(amount);
+
+//         // Page break
+//         if (y > 280) {
+//             doc.addPage();
+//             y = 20;
+//         }
+
+//         // Color (green for +, red for -)
+//         if (amount < 0) {
+//             doc.setTextColor(200, 0, 0);
+//         } else {
+//             doc.setTextColor(0, 150, 0);
+//         }
+
+//         doc.text(date, 14, y);
+//         doc.text(type, 50, y);
+//         doc.text(entity, 80, y);
+//         doc.text(t.payment || "-", 110, y);
+//         doc.text("Rs. " + Math.abs(amount).toLocaleString("en-IN"), 140, y);
+
+//         doc.setTextColor(0);
+
+//         y += 7;
+//     });
+
+//     // =========================
+//     // 🟣 SUMMARY
+//     // =========================
+//     y += 10;
+
+//     doc.setDrawColor(180);
+//     doc.line(14, y, 195, y);
+
+//     y += 8;
+
+//     doc.setFont("helvetica", "bold");
+
+//     doc.setTextColor(0, 150, 0);
+//     doc.text(`Total Income: ₹${totalIncome}`, 14, y);
+
+//     y += 7;
+
+//     doc.setTextColor(200, 0, 0);
+//     doc.text(`Total Outgoing: ₹${totalExpense}`, 14, y);
+
+//     y += 7;
+
+//     doc.setTextColor(0);
+//     doc.text(`Net Balance: ₹${totalIncome - totalExpense}`, 14, y);
+
+//     // =========================
+//     // 💾 SAVE
+//     // =========================
+//     doc.save("savings-report.pdf");
+
+//     showToast("Savings report downloaded 📄", "success");
+// }
 function exportSavingsPDF() {
     const { jsPDF } = window.jspdf;
     const doc = new jsPDF();
@@ -790,10 +944,11 @@ function exportSavingsPDF() {
     doc.setFontSize(10);
 
     doc.text("Date", 14, y);
-    doc.text("Type", 50, y);
-    doc.text("Entity", 80, y);
-    doc.text("Payment", 110, y);
-    doc.text("Amount", 140, y);
+    doc.text("Type", 35, y);
+    doc.text("Purpose", 65, y);
+    doc.text("Entity", 105, y);
+    doc.text("Payment", 135, y);
+    doc.text("Amount", 165, y);
 
     y += 6;
 
@@ -816,6 +971,7 @@ function exportSavingsPDF() {
         let date = new Date(t.date).toLocaleDateString("en-IN");
         let type = t.type || "-";
         let entity = t.entity || "-";
+        let purpose = t.note || "-";
         let amount = t.amount || 0;
 
         // Totals
@@ -828,7 +984,7 @@ function exportSavingsPDF() {
             y = 20;
         }
 
-        // Color (green for +, red for -)
+        // Color
         if (amount < 0) {
             doc.setTextColor(200, 0, 0);
         } else {
@@ -836,10 +992,11 @@ function exportSavingsPDF() {
         }
 
         doc.text(date, 14, y);
-        doc.text(type, 50, y);
-        doc.text(entity, 80, y);
-        doc.text(t.payment || "-", 110, y);
-        doc.text(`₹${Math.abs(amount)}`, 140, y);
+        doc.text(type, 35, y);
+        doc.text(purpose.substring(0, 15), 65, y);
+        doc.text(entity, 105, y);
+        doc.text(t.payment || "-", 135, y);
+        doc.text("Rs. " + Math.abs(amount).toLocaleString("en-IN"), 165, y);
 
         doc.setTextColor(0);
 
@@ -859,17 +1016,17 @@ function exportSavingsPDF() {
     doc.setFont("helvetica", "bold");
 
     doc.setTextColor(0, 150, 0);
-    doc.text(`Total Income: ₹${totalIncome}`, 14, y);
+    doc.text(`Total Income: Rs. ${totalIncome.toLocaleString("en-IN")}`, 14, y);
 
     y += 7;
 
     doc.setTextColor(200, 0, 0);
-    doc.text(`Total Outgoing: ₹${totalExpense}`, 14, y);
+    doc.text(`Total Outgoing: Rs. ${totalExpense.toLocaleString("en-IN")}`, 14, y);
 
     y += 7;
 
     doc.setTextColor(0);
-    doc.text(`Net Balance: ₹${totalIncome - totalExpense}`, 14, y);
+    doc.text(`Net Balance: Rs. ${(totalIncome - totalExpense).toLocaleString("en-IN")}`, 14, y);
 
     // =========================
     // 💾 SAVE

@@ -191,7 +191,7 @@
             <option value="month">Month</option>
           </select>
 
-          <button type="button" class="icon-btn" onclick="openCustomModal()">📅</button>
+          <button type="button" class="icon-btn" onclick="openPeriod()">📅</button>
         </div>
 
         <div class="chart-container">
@@ -233,15 +233,15 @@
           <option value="#2196f3">Blue</option>
           <option value="custom">Custom</option>
         </select>
-        <input type="text" id="hexInput" placeholder="#4caf50">
-        <button onclick="applyHex()">Apply</button>
+        <input type="text" id="hexInput" placeholder="Apply custom theme using hex code (e.g. #4caf50)">
+        <button class="secondary" onclick="applyHex()">Apply</button>
 
         <input type="color" id="colorPicker" style="display:none;" onchange="applyCustomColor(this.value)">
 
         <!-- Category -->
         <h4>Add Category</h4>
         <input type="text" id="newCategory" placeholder="New category">
-        <button type="button" onclick="addCategory()">Add</button>
+        <button class="primary" onclick="addCategory()">Add</button>
 
         <h4 onclick="openCategoryModal()" style="cursor:pointer;">Your Categories ⬇️</h4>
 

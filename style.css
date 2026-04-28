@@ -1,92 +1,74 @@
 /* =========================
-   🌍 GLOBAL
+   🌍 ROOT & RESET
 ========================= */
+
 * {
   box-sizing: border-box;
 }
 
 :root {
   --theme: #4caf50;
+  --bg: #eef2f7;
   --text: #1f2937;
   --muted: #6b7280;
-  --bg: #eef2f7;
+  --border: #e5e7eb;
+  /* =========================
+   📏 SPACING SYSTEM
+========================= */
+  --space-xs: 6px;
+  --space-sm: 10px;
+  --space-md: 16px;
+  --space-lg: 22px;
+  --space-xl: 30px;
 }
 
+
 body {
-  font-family: 'Poppins', sans-serif;
-  background: linear-gradient(135deg, #f3f6fb, #e6ebf2);
   margin: 0;
+  font-family: 'Poppins', sans-serif;
+  background: white;
   color: var(--text);
 }
 
 /* =========================
    📱 APP
 ========================= */
+
 .app {
-  max-width: 400px;
+  max-width: 420px;
   margin: auto;
-  padding: 12px;
+  padding: var(--space-md);
 }
 
 /* =========================
    🔝 HEADER
 ========================= */
+
 .header {
   text-align: center;
-  margin-bottom: 10px;
-}
-
-.header h2 {
-  margin: 0;
-  font-weight: 600;
-  font-size: 20px;
+  margin-bottom: 14px;
 }
 
 /* =========================
-   🧭 NAV (PREMIUM CLEAN)
+   🧭 NAV (PREMIUM)
 ========================= */
 
 .nav {
   display: flex;
   justify-content: center;
   gap: 10px;
-  margin-bottom: 12px;
-}
-
-.nav button::before {
-  content: "";
-  position: absolute;
-  inset: -2px;
-  /* 🔥 border thickness */
-
-  border-radius: 16px;
-
-  background: linear-gradient(135deg,
-      rgba(91, 45, 168, 0.6),
-      rgba(30, 10, 60, 0.4));
-
-  filter: blur(6px);
-  /* 🔥 BLUR MAGIC */
-  opacity: 0.6;
-
-  z-index: -1;
-}
-
-.nav button.active::before {
-  opacity: 0;
+  margin-bottom: 16px;
 }
 
 .nav button {
-  width: 48px;
-  height: 48px;
+  width: 50px;
+  height: 50px;
 
   border-radius: 14px;
   border: none;
 
   font-size: 20px;
-
   background: #f1f3f6;
-  color: #555;
 
   display: flex;
   align-items: center;
@@ -94,78 +76,48 @@ body {
 
   cursor: pointer;
 
-  position: relative;
-  /* 🔥 needed for ::after */
-
-  transition:
-    background 0.25s ease,
-    transform 0.18s ease,
-    box-shadow 0.2s ease;
+  transition: all 0.2s ease;
 }
 
-/* 🔥 HOVER (SOFT, NOT JUMPY) */
 .nav button:hover {
-  background: var(--theme);
-  transform: translateY(-2px);
-  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.08);
+  transform: translateY(-3px);
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
 }
 
-/* 🔥 CLICK */
-.nav button:active {
-  transform: scale(0.92);
-}
-
-/* 🔥 ACTIVE TAB */
 .nav button.active {
   background: var(--theme);
   color: white;
-
-  transform: scale(1.06);
-
-  box-shadow:
-    0 6px 14px rgba(0, 0, 0, 0.12),
-    0 2px 6px rgba(0, 0, 0, 0.08);
-}
-
-.card .primary:hover {
-  filter: brightness(1.05);
-}
-
-.card .primary:active {
-  transform: scale(0.96);
-}
-
-/* 🔥 ACTIVE GLOW RING */
-.nav button.active::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  border-radius: 14px;
-
-  box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.05);
-  /* subtle ring */
+  transform: scale(1.08);
+  box-shadow: 0 6px 14px rgba(0, 0, 0, 0.15);
 }
 
 /* =========================
    🧱 CARD
 ========================= */
+
+/* CARD */
 .card {
-  background: rgba(255, 255, 255, 0.92);
+  background: rgba(255, 255, 255, 0.95);
   backdrop-filter: blur(8px);
 
-  padding: 14px;
+  padding: var(--space-lg);
   border-radius: 18px;
 
   box-shadow:
-    0 4px 14px rgba(0, 0, 0, 0.06),
-    inset 0 1px 0 rgba(255, 255, 255, 0.5);
+    0 6px 20px rgba(0, 0, 0, 0.08),
+    inset 0 1px 0 rgba(255, 255, 255, 0.6);
 
-  margin-bottom: 12px;
+  margin-bottom: var(--space-lg);
+}
+
+.card>*+* {
+  margin-top: var(--space-md);
 }
 
 /* =========================
    📊 DASHBOARD
 ========================= */
+
 .dashboard-grid {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
@@ -184,11 +136,12 @@ body {
 }
 
 .dash-card h2 {
-  margin: 3px 0 0;
+  margin: 4px 0 0;
   font-size: 18px;
 }
 
 /* COLORS */
+
 .budget {
   background: linear-gradient(135deg, #5c6bc0, #3949ab);
 }
@@ -216,9 +169,6 @@ body {
 /* =========================
    📊 PROGRESS
 ========================= */
-.progress-wrapper {
-  margin-top: 10px;
-}
 
 .progress-bar {
   height: 6px;
@@ -229,236 +179,85 @@ body {
 
 .progress-fill {
   height: 100%;
-  background: linear-gradient(90deg, var(--theme), #81c784);
-  width: 0%;
-  transition: 0.4s ease;
-}
-
-.progress-wrapper small {
-  font-size: 11px;
-  color: var(--muted);
+  background: var(--theme);
 }
 
 /* =========================
-   ✏️ INPUT
+   🔘 BUTTONS
 ========================= */
-input,
-select {
+
+.primary {
+  background: var(--theme);
+  color: white;
+  border: none;
+  border-radius: 14px;
+  padding: 12px;
   width: 100%;
-  padding: 8px;
-  margin: 6px 0;
+  font-weight: 600;
+  margin-top: var(--space-md);
+}
 
-  border-radius: 10px;
-  border: 1px solid #ddd;
+.secondary {
+  background: #f1f3f6;
+  border: none;
+  border-radius: 14px;
+  padding: 12px;
+  width: 100%;
+  margin-top: var(--space-md);
+}
 
-  font-size: 12px;
-  background: rgba(255, 255, 255, 0.95);
+/* =========================
+   ✏️ INPUTS
+========================= */
+
+input,
+select,
+textarea {
+  width: 100%;
+  padding: 12px;
+
+  border-radius: 12px;
+  border: 1px solid var(--border);
+
+  margin-top: var(--space-sm);
 }
 
 input:focus,
 select:focus {
   outline: none;
   border-color: var(--theme);
-  box-shadow: 0 0 0 2px rgba(76, 175, 80, 0.15);
-}
-
-/* =========================
-   🔘 BUTTONS
-========================= */
-button {
-  font-family: 'Poppins', sans-serif;
-  cursor: pointer;
-}
-
-/* PRIMARY */
-.primary {
-  background: linear-gradient(135deg, var(--theme), #66bb6a);
-  /* ✅ theme */
-  color: white;
-  border: none;
-
-  border-radius: 12px;
-  padding: 10px;
-  width: 100%;
-
-  font-weight: 600;
-  font-size: 14px;
-
-  box-shadow: 0 4px 12px rgba(76, 175, 80, 0.25);
-}
-
-.primary:active {
-  transform: scale(0.96);
-}
-
-/* SECONDARY */
-.secondary {
-  background: rgba(0, 0, 0, 0.05);
-  color: var(--text);
-  border: none;
-
-  border-radius: 12px;
-  padding: 10px;
-
-  font-weight: 600;
+  box-shadow: 0 0 0 2px rgba(76, 175, 80, 0.2);
 }
 
 /* =========================
    📜 HISTORY
 ========================= */
+
 .expense-item {
   display: flex;
   justify-content: space-between;
   align-items: center;
-
-  padding: 10px 0;
+  padding: 12px 0;
   border-bottom: 1px solid #eee;
-}
-
-.expense-item strong {
-  font-size: 13px;
-}
-
-.expense-item small {
-  font-size: 11px;
-  color: var(--muted);
-}
-
-/* =========================
-   🗑 DELETE BUTTON
-========================= */
-.delete-btn {
-  background: linear-gradient(135deg, #ff5252, #d32f2f);
-  color: white;
-  border: none;
-
-  border-radius: 8px;
-  padding: 6px 8px;
-}
-
-/* =========================
-   📅 MODAL
-========================= */
-.modal {
-  position: fixed;
-  inset: 0;
-
-  display: none;
-  align-items: center;
-  justify-content: center;
-
-  background: rgba(0, 0, 0, 0.35);
-  backdrop-filter: blur(8px);
-}
-
-.modal-content {
-  background: white;
-  padding: 18px;
-  border-radius: 16px;
-
-  width: 90%;
-  max-width: 300px;
-
-  animation: fadeIn 0.2s ease;
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.15);
-}
-
-.modal-actions {
-  display: flex;
-  gap: 10px;
-  margin-top: 12px;
-}
-
-.modal-actions button {
-  flex: 1;
-}
-
-/* =========================
-   🧭 NAV (CLEAN PREMIUM)
-========================= */
-
-.nav button {
-  width: 48px;
-  height: 48px;
-
-  border-radius: 14px;
-  border: none;
-
-  font-size: 20px;
-
-  background: #f1f3f6;
-
-  display: flex;
-  align-items: center;
-  justify-content: center;
-
-  cursor: pointer;
-  transition: all 0.2s ease;
-}
-
-/* 🔥 HOVER */
-.nav button:hover {
-  background: #e0e3e8;
-  transform: translateY(-3px);
-  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.08);
-}
-
-/* 🔥 CLICK */
-.nav button:active {
-  transform: scale(0.92);
-}
-
-/* 🔥 ACTIVE (CURRENT TAB) */
-.nav button.active {
-  background: var(--theme);
-  color: white;
-  transform: scale(1.08);
-  box-shadow: 0 6px 14px rgba(0, 0, 0, 0.15);
-}
-
-/* =========================
-   📊 GRAPH
-========================= */
-.chart-container {
-  width: 100%;
-  height: 240px;
-}
-
-/* =========================
-   📦 CATEGORY
-========================= */
-.category-item {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-
-  padding: 10px;
-  margin-bottom: 6px;
-
-  background: rgba(255, 255, 255, 0.9);
-  border-radius: 12px;
-
-  border: 1px solid #e5e7eb;
 }
 
 /* =========================
    🔘 ICON BUTTON
 ========================= */
-.icon-btn {
-  width: 40px;
-  height: 40px;
 
-  border-radius: 10px;
+.icon-btn {
+  width: 42px;
+  height: 42px;
+
+  border-radius: 12px;
   border: none;
 
-  background: linear-gradient(135deg, var(--theme), #66bb6a);
+  background: var(--theme);
   color: white;
 
   display: flex;
   align-items: center;
   justify-content: center;
-
-  box-shadow: 0 4px 10px rgba(76, 175, 80, 0.25);
 }
 
 .icon-btn svg {
@@ -467,8 +266,108 @@ button {
 }
 
 /* =========================
+   📊 GRAPH
+========================= */
+
+.chart-container {
+  width: 100%;
+  height: 300px;
+}
+
+/* =========================
+   📦 BUDGET CARDS
+========================= */
+
+.income-card {
+  margin-top: 10px;
+}
+
+.budget-card {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+
+  padding: 14px;
+  border-radius: 16px;
+
+  background: white;
+  border: 1px solid var(--border);
+
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.05);
+}
+
+.budget-title {
+  font-weight: 600;
+}
+
+.budget-sub {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.budget-right {
+  text-align: right;
+}
+
+.budget-status.active {
+  color: green;
+}
+
+.budget-status.exhausted {
+  color: red;
+}
+
+/* =========================
+   🪟 MODAL
+========================= */
+
+.modal {
+  position: fixed;
+  inset: 0;
+
+  display: none;
+  justify-content: center;
+  align-items: center;
+
+  background: rgba(0, 0, 0, 0.4);
+  backdrop-filter: blur(6px);
+}
+
+.modal-content {
+  background: white;
+  padding: 18px;
+  border-radius: 18px;
+  width: 90%;
+  max-width: 320px;
+}
+
+/* =========================
+   📦 CATEGORY LIST
+========================= */
+
+.cat-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px;
+  margin-bottom: 6px;
+  border-radius: 10px;
+  background: #f5f5f5;
+}
+
+.cat-delete {
+  background: red;
+  color: white;
+  border: none;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+}
+
+/* =========================
    🧭 SCREEN
 ========================= */
+
 .screen {
   display: none;
 }
@@ -478,289 +377,219 @@ button {
 }
 
 /* =========================
-   ✨ ANIMATION
-========================= */
-@keyframes fadeIn {
-  from {
-    transform: scale(0.95);
-    opacity: 0;
-  }
-
-  to {
-    transform: scale(1);
-    opacity: 1;
-  }
-}
-
-/* =========================
-   🔥 MODAL FINAL POLISH
+   🔙 BACK BUTTON FIX
 ========================= */
 
-.modal-content h3 {
-  font-size: 17px;
-  margin-bottom: 10px;
-}
-
-.modal-content input {
-  margin-bottom: 8px;
-  font-size: 13px;
-}
-
-/* ACTION BUTTONS */
-.modal-actions {
-  display: flex;
-  gap: 8px;
-  margin-top: 10px;
-}
-
-.modal-actions .primary {
-  flex: 1;
-  padding: 9px;
-  font-size: 13px;
-}
-
-.modal-actions .secondary {
-  flex: 1;
-  padding: 9px;
-  font-size: 13px;
-  background: #f3f4f6;
-}
-
-/* subtle elevation */
-.modal-content {
-  box-shadow: 0 8px 25px rgba(0, 0, 0, 0.12);
-}
-
-
-.modal {
-  display: none;
-  /* 🔥 MUST */
-  position: fixed;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  background: rgba(0, 0, 0, 0.4);
-  backdrop-filter: blur(8px);
-  justify-content: center;
+.back-btn {
+  display: inline-flex;
   align-items: center;
-  z-index: 999;
-}
+  gap: 6px;
 
-.modal-content {
-  background: #fff;
-  padding: 20px;
-  border-radius: 18px;
-  width: 90%;
-  max-width: 350px;
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
-  animation: fadeIn 0.25s ease;
-}
+  padding: 8px 14px;
 
-@keyframes fadeIn {
-  from {
-    opacity: 0;
-    transform: translateY(20px) scale(0.95);
-  }
+  border-radius: 10px;
+  border: none;
 
-  to {
-    opacity: 1;
-    transform: translateY(0) scale(1);
-  }
-}
+  background: #f1f3f6;
+  color: var(--text);
 
-#savingsChart {
-  max-height: 260px;
-  width: 100% !important;
-}
+  font-size: 13px;
+  font-weight: 500;
 
-.chart-box {
-  width: 100%;
-  height: 320px;
+  cursor: pointer;
 
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
+  width: fit-content;
+  /* 🔥 IMPORTANT */
+  margin-bottom: var(--space-md);
 
-.chart-inner {
-  width: 100%;
-  max-width: 280px;
-  /* 🔥 desktop limit */
-  height: 100%;
-  max-height: 280px;
-}
-
-/* 📱 MOBILE */
-@media (max-width: 600px) {
-  .chart-box {
-    height: 220px;
-  }
-
-  .chart-inner {
-    max-width: 180px;
-    max-height: 180px;
-  }
-}
-
-.category-item.warning {
-  border-left: 4px solid orange;
-}
-
-.category-item.danger {
-  border-left: 4px solid red;
-  background: rgba(255, 0, 0, 0.05);
-}
-
-.expense-item {
-  padding: 12px 0;
-  border-bottom: 1px solid #eee;
   transition: 0.2s;
 }
 
-.expense-item:hover {
-  background: rgba(0, 0, 0, 0.15);
-  border-radius: 8px;
+.back-btn:hover {
+  background: #e5e7eb;
+}
+
+.back-btn:active {
+  transform: scale(0.95);
+}
+
+h3 {
+  margin-bottom: var(--space-sm);
+}
+
+h4 {
+  margin-top: var(--space-md);
 }
 
 .btn-group {
   display: flex;
-  gap: 10px;
-  margin-top: 10px;
+  gap: var(--space-sm);
+  margin-top: var(--space-sm);
 }
 
-.btn-group button {
-  flex: 1;
-  /* equal width */
-  text-align: center;
+/* =========================
+   🎨 THEME SHADES (DYNAMIC)
+========================= */
+
+:root {
+  --theme-light: color-mix(in srgb, var(--theme), white 25%);
+  --theme-dark: color-mix(in srgb, var(--theme), black 20%);
 }
 
-.clickable-card {
-  cursor: pointer;
-  transition: transform 0.15s ease;
+/* =========================
+   💎 CHROMIUM CARD UPGRADE
+========================= */
+
+.card {
+  position: relative;
+  overflow: hidden;
+
+  background: linear-gradient(145deg,
+      rgba(255, 255, 255, 0.95),
+      rgba(245, 248, 252, 0.9));
+
+  border: 1px solid rgba(255, 255, 255, 0.6);
+
+  box-shadow:
+    0 10px 25px rgba(0, 0, 0, 0.08),
+    inset 0 1px 0 rgba(255, 255, 255, 0.8),
+    inset 0 -2px 6px rgba(0, 0, 0, 0.03);
 }
 
-.clickable-card:active {
-  transform: scale(0.95);
+/* =========================
+   ✨ GLOSS SWEEP EFFECT
+========================= */
+
+.card::before,
+.primary::before,
+.nav button::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: -120%;
+  width: 60%;
+  height: 100%;
+
+  background: linear-gradient(120deg,
+      rgba(255, 255, 255, 0.4),
+      rgba(255, 255, 255, 0.05));
+
+  transform: skewX(-20deg);
+  transition: 0.6s;
 }
 
-
-/* 🔥 Budget Card Layout */
-.budget-card {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 14px;
-  border: 1px solid rgba(0, 0, 0, 0.05);
-  border-radius: 18px;
+.card:hover::before,
+.primary:hover::before,
+.nav button:hover::before {
+  left: 120%;
 }
 
-/* LEFT */
-.budget-title {
-  font-size: 16px;
-  font-weight: 600;
+/* =========================
+   🔘 PRIMARY BUTTON (DYNAMIC)
+========================= */
+
+.primary {
+  position: relative;
+  overflow: hidden;
+
+  background: linear-gradient(145deg,
+      var(--theme),
+      var(--theme-light));
+
+  box-shadow:
+    0 6px 16px rgba(0, 0, 0, 0.15),
+    inset 0 1px 0 rgba(255, 255, 255, 0.3);
+
+  transition: 0.25s ease;
 }
 
-.budget-sub {
-  font-size: 12px;
-  color: #888;
-  margin-top: 2px;
+.primary:hover {
+  transform: translateY(-1px);
+  box-shadow:
+    0 10px 22px rgba(0, 0, 0, 0.2);
 }
 
-/* RIGHT */
-.budget-right {
-  text-align: right;
+.primary:active {
+  transform: scale(0.96);
 }
 
-.budget-amount {
-  font-size: 16px;
-  font-weight: 600;
+/* =========================
+   🧭 NAV PREMIUM
+========================= */
+
+.nav button {
+  position: relative;
+  overflow: hidden;
+
+  background: linear-gradient(145deg,
+      #ffffff,
+      #e8ecf2);
+
+  box-shadow:
+    0 4px 10px rgba(0, 0, 0, 0.08),
+    inset 0 1px 0 rgba(255, 255, 255, 0.9);
+
+  transition: 0.2s ease;
 }
 
-/* STATUS BADGE */
-.budget-status {
-  font-size: 12px;
-  margin-top: 4px;
-  padding: 4px 8px;
-  border-radius: 8px;
-  display: inline-block;
+.nav button:hover {
+  transform: translateY(-2px);
 }
 
-/* ACTIVE */
-.budget-status.active {
-  background: #e6f7ec;
-  color: #1b8a3e;
+.nav button.active {
+  background: linear-gradient(145deg,
+      var(--theme),
+      var(--theme-dark));
+
+  color: #fff;
+
+  box-shadow:
+    0 6px 16px rgba(0, 0, 0, 0.18),
+    inset 0 2px 6px rgba(255, 255, 255, 0.25);
 }
 
-/* EXHAUSTED */
-.budget-status.exhausted {
-  background: #fdecea;
-  color: #d93025;
-}
+/* =========================
+   🔘 ICON BUTTON (DYNAMIC)
+========================= */
 
-/* Modal background blur */
-.modal {
-  backdrop-filter: blur(6px);
-}
+.icon-btn {
+  position: relative;
+  overflow: hidden;
 
-/* Modal box */
-.modal-content {
-  background: #fff;
-  border-radius: 20px;
-  padding: 20px;
-  width: 90%;
-  max-width: 350px;
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.15);
-}
+  background: linear-gradient(145deg,
+      var(--theme),
+      var(--theme-light));
 
-/* Category list container */
-#categoryList {
-  margin-top: 10px;
-}
+  box-shadow:
+    0 4px 12px rgba(0, 0, 0, 0.15),
+    inset 0 1px 0 rgba(255, 255, 255, 0.3);
 
-/* Each row */
-.cat-row {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 8px 10px;
-  margin-bottom: 6px;
-  border-radius: 10px;
-  background: #f5f5f5;
   transition: 0.2s;
 }
 
-.cat-row:hover {
-  background: #f8f8f8;
+.icon-btn:hover {
+  transform: translateY(-2px);
 }
 
-/* Category text */
-.cat-name {
-  font-size: 14px;
-  font-weight: 500;
+.icon-btn:active {
+  transform: scale(0.95);
 }
 
-/* Delete button */
-.cat-delete {
-  border: none;
-  background: linear-gradient(135deg, #ff5252, #d32f2f);
-  color: white;
-  font-size: 14px;
-  width: 26px;
-  height: 26px;
-  border-radius: 50%;
-  cursor: pointer;
+/* =========================
+   📊 DASH CARDS DEPTH
+========================= */
+
+.dash-card {
+  box-shadow:
+    0 8px 18px rgba(0, 0, 0, 0.15);
+}
+
+.progress-wrapper {
   display: flex;
+  flex-direction: column;
   align-items: center;
-  justify-content: center;
-  box-shadow: 0 2px 6px rgba(255, 82, 82, 0.3);
 }
 
-.cat-delete:hover {
-  background: #e53935;
-}
-
-/* Close button */
-.modal-content button {
-  margin-top: 12px;
+.progress-bar {
+  width: 100%;
 }
