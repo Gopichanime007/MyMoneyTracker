@@ -61,6 +61,7 @@ function updateTotals(subtotal, gst, total) {
 // ✅ COMPLETE PURCHASE
 // =========================
 function completePurchase() {
+
   let data = getQuotationData();
 
   if (!data || !data.items || !data.items.length) {
@@ -68,58 +69,118 @@ function completePurchase() {
     return;
   }
 
-  let selectedSourceId = document.getElementById("oSource").value;
-  let paymentType = document.getElementById("oPaymentType").value;
+  let sourceSelect = document.getElementById("oSource");
+  let selectedOption = sourceSelect.options[sourceSelect.selectedIndex];
 
-  if (!selectedSourceId || !paymentType) {
-    alert("Select payment details ❗");
+  if (!selectedOption || !selectedOption.value) {
+    alert("Select source ❗");
     return;
   }
 
-  // 🔍 Get source from savings
-  let sourceData = JSON.parse(localStorage.getItem("savingsTransactions")) || [];
+  let selectedSourceId = Number(selectedOption.value);
+  let sourceType = selectedOption.dataset.type;
+  let paymentType = document.getElementById("oPaymentType").value;
 
-  let selectedSource = sourceData.find(s => s.id == selectedSourceId);
+  if (!paymentType) {
+    alert("Select payment type ❗");
+    return;
+  }
 
-  if (!selectedSource) {
+  // =========================
+  // 🧠 GET LEDGER SUMMARY
+  // =========================
+  let summary = getLedgerSummary(selectedSourceId, sourceType);
+
+  if (!summary) {
     alert("Invalid source ❌");
     return;
   }
 
   let total = Number(data.total) || 0;
 
-  // 🧠 Purpose
+  // 🚨 VALIDATION
+  if (summary.remaining < total) {
+    alert(`❌ Not enough balance!\nAvailable: ₹${summary.remaining}\nNeeded: ₹${total}`);
+    return;
+  }
+
   let purpose = data.items.map(i => i.name).join(", ");
 
-  // 📦 Expenses
+  // =========================
+  // 💸 SAVE EXPENSE
+  // =========================
   let expenses = JSON.parse(localStorage.getItem("expenses") || "[]");
 
-  let expense = {
+  expenses.push({
     id: Date.now(),
     amount: -Math.abs(total),
-    category: "Purchase",
+    type: "expense",
     purpose: "Purchase of " + purpose,
 
-    sourceId: selectedSource.id,     // ✅ correct
-    sourceName: selectedSource.note, // display
+    sourceId: selectedSourceId,
+    sourceName: summary.name,
+    sourceType: sourceType,
 
     paymentType: paymentType,
     date: new Date().toISOString()
-  };
-
-  expenses.push(expense);
+  });
 
   localStorage.setItem("expenses", JSON.stringify(expenses));
 
-  // 🧹 Clean quotation
+  // =========================
+  // 📦 SAVE ORDER
+  // =========================
+  let orders = JSON.parse(localStorage.getItem("orders") || "[]");
+
+  orders.push({
+    id: Date.now(),
+    items: data.items,
+    subtotal: data.subtotal,
+    gst: data.gstAmount,
+    total: data.total,
+
+    sourceId: selectedSourceId,
+    sourceName: summary.name,
+    sourceType: sourceType,
+
+    paymentType: paymentType,
+    date: new Date().toISOString()
+  });
+
+  localStorage.setItem("orders", JSON.stringify(orders));
+
+  // =========================
+  // 🟢 IF SAVINGS → PUSH ENTRY
+  // =========================
+  if (sourceType === "savings") {
+
+    let savings = JSON.parse(localStorage.getItem("savingsTransactions")) || [];
+
+    savings.push({
+      id: Date.now(),
+      type: "expense",
+      amount: -Math.abs(total),
+      note: summary.name,
+      sourceId: selectedSourceId,
+      paymentType: paymentType,
+      date: new Date().toISOString()
+    });
+
+    localStorage.setItem("savingsTransactions", JSON.stringify(savings));
+  }
+
+  // =========================
+  // 🧹 CLEAN
+  // =========================
   localStorage.removeItem("quotationData");
   localStorage.removeItem("quotationItems");
   localStorage.removeItem("quotationCharges");
 
-  alert("Purchase completed ✅");
+  showToast("Purchase completed ✅", "success");
 
-  // 🚀 redirect (LAST)
-  window.location.href = "index.html";
+  setTimeout(() => {
+    window.location.href = "index.html";
+  }, 1000);
 }
 
 
@@ -138,24 +199,208 @@ function cancelOrder() {
 // =========================
 document.addEventListener("DOMContentLoaded", () => {
   renderOrder();
-  loadSourceDropdown();
+  loadSourceOptions();
 });
 
-function loadSourceDropdown() {
-  let data = JSON.parse(localStorage.getItem("savingsTransactions")) || [];
+function loadSourceOptions() {
 
-  let sources = data.filter(t => t.type === "income" && t.note);
-
+  let type = document.getElementById("oSourceType").value;
   let select = document.getElementById("oSource");
 
   select.innerHTML = `<option value="">Select Source</option>`;
 
-  sources.forEach(s => {
-    let option = document.createElement("option");
+  // 🟢 SAVINGS
+  if (type === "savings") {
 
-    option.value = s.id;
-    option.textContent = s.note;
+    let data = JSON.parse(localStorage.getItem("savingsTransactions")) || [];
 
-    select.appendChild(option);
-  });
+    let sources = data.filter(t => t.type === "income");
+
+    sources.forEach(s => {
+      let option = document.createElement("option");
+      option.value = s.id;
+      option.textContent = s.note || "Savings";
+      option.dataset.type = "savings";
+      select.appendChild(option);
+    });
+  }
+
+  // 🔵 BUDGET
+  if (type === "budget") {
+
+    let budgets = JSON.parse(localStorage.getItem("budgets")) || [];
+
+    budgets.forEach(b => {
+      let option = document.createElement("option");
+      option.value = b.id;
+      option.textContent = `${b.name || "Budget"} (${b.monthKey})`;
+      option.dataset.type = "budget";
+      select.appendChild(option);
+    });
+  }
+
+  select.onchange = renderSourcePreview;
+  document.getElementById("sourcePreview").innerHTML = "";
+}
+function renderSourcePreview() {
+
+  let select = document.getElementById("oSource");
+  let preview = document.getElementById("sourcePreview");
+
+  let selectedOption = select.options[select.selectedIndex];
+
+  if (!selectedOption || !selectedOption.value) {
+    preview.innerHTML = "";
+    return;
+  }
+
+  let sourceId = Number(selectedOption.value);
+  let type = selectedOption.dataset.type;
+
+  // =========================
+  // 🟢 SAVINGS
+  // =========================
+  if (type === "savings") {
+
+    let summary = getLedgerSummary(sourceId, "savings");
+
+    if (!summary) {
+      preview.innerHTML = "No data";
+      return;
+    }
+
+    preview.innerHTML = `
+      <strong>${summary.name}</strong><br>
+      💰 Total: ₹${summary.total.toLocaleString("en-IN")}<br>
+      📉 Used: ₹${summary.used.toLocaleString("en-IN")}<br>
+      🟢 Remaining: ₹${summary.remaining.toLocaleString("en-IN")}
+    `;
+  }
+
+  // =========================
+  // 🔵 BUDGET
+  // =========================
+  if (type === "budget") {
+
+    let summary = getLedgerSummary(sourceId, "budget");
+
+    if (!summary) {
+      preview.innerHTML = "No data";
+      return;
+    }
+
+    preview.innerHTML = `
+      <strong>${summary.name}</strong><br>
+      💰 Budget: ₹${summary.total.toLocaleString("en-IN")}<br>
+      📉 Used: ₹${summary.used.toLocaleString("en-IN")}<br>
+      🟢 Remaining: ₹${summary.remaining.toLocaleString("en-IN")}
+    `;
+  }
+}
+// =========================
+// 🧠 MASTER LEDGER
+// =========================
+// function getLedgerSummary(sourceId, type) {
+
+//   let savings = JSON.parse(localStorage.getItem("savingsTransactions")) || [];
+//   let expenses = JSON.parse(localStorage.getItem("expenses")) || [];
+//   let budgets = JSON.parse(localStorage.getItem("budgets")) || [];
+
+//   // 🟢 SAVINGS
+//   if (type === "savings") {
+
+//     let root = savings.find(t => t.id == sourceId && t.type === "income");
+//     if (!root) return null;
+
+//     let linked = savings.filter(t => t.sourceId == sourceId);
+
+//     let income = root.amount;
+
+//     let used = linked.reduce((sum, t) => {
+//       return t.amount < 0 ? sum + Math.abs(t.amount) : sum;
+//     }, 0);
+
+//     return {
+//       name: root.note || "Savings",
+//       total: income,
+//       used,
+//       remaining: income - used,
+//       entries: linked
+//     };
+//   }
+
+//   // 🔵 BUDGET
+//   if (type === "budget") {
+
+//     let budget = budgets.find(b => b.id == sourceId);
+//     if (!budget) return null;
+
+//     let used = expenses
+//       .filter(e => e.sourceId == sourceId && e.sourceType === "budget")
+//       .reduce((sum, e) => sum + Math.abs(e.amount), 0);
+
+//     return {
+//       name: budget.name || "Budget",
+//       total: budget.totalAllocated || 0,
+//       used,
+//       remaining: (budget.totalAllocated || 0) - used,
+//       entries: []
+//     };
+//   }
+
+//   return null;
+// }
+function getLedgerSummary(sourceId, type) {
+
+  let savings = JSON.parse(localStorage.getItem("savingsTransactions")) || [];
+  let expenses = JSON.parse(localStorage.getItem("expenses")) || [];
+  let budgets = JSON.parse(localStorage.getItem("budgets")) || [];
+
+  // =========================
+  // 🟢 SAVINGS
+  // =========================
+  if (type === "savings") {
+
+    let root = savings.find(t => Number(t.id) === Number(sourceId) && t.type === "income");
+    if (!root) return null;
+
+    let linked = savings.filter(t => Number(t.sourceId) === Number(sourceId));
+
+    let income = root.amount;
+
+    let used = linked.reduce((sum, t) => {
+      return t.amount < 0 ? sum + Math.abs(t.amount) : sum;
+    }, 0);
+
+    return {
+      name: root.note || "Savings",
+      total: income,
+      used,
+      remaining: income - used,
+      entries: linked
+    };
+  }
+
+  // =========================
+  // 🔵 BUDGET
+  // =========================
+  if (type === "budget") {
+
+    let budget = budgets.find(b => Number(b.id) === Number(sourceId));
+    if (!budget) return null;
+
+    let used = expenses
+      .filter(e => Number(e.sourceId) === Number(sourceId))
+      .reduce((sum, e) => sum + Math.abs(e.amount), 0);
+
+    return {
+      name: budget.note || "Budget",
+      total: budget.totalAllocated || 0,
+      used,
+      remaining: (budget.totalAllocated || 0) - used,
+      entries: []
+    };
+  }
+
+  return null;
 }

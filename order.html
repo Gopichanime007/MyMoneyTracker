@@ -49,15 +49,18 @@
       <!-- PAYMENT -->
       <h4>💳 Payment</h4>
 
-      <select id="oSource">
-        <option value="">Select Source</option>
-        <option>Cash</option>
-        <option>PhonePe</option>
-        <option>Google Pay</option>
-        <option>Bank</option>
-        <option>Budget</option>
+      <!-- SOURCE TYPE -->
+      <select id="oSourceType" onchange="loadSourceOptions()">
+        <option value="">Select Source Type</option>
+        <option value="savings">Savings</option>
+        <option value="budget">Budget</option>
       </select>
 
+      <!-- SOURCE LIST -->
+      <select id="oSource">
+        <option value="">Select Source</option>
+      </select>
+      <div id="sourcePreview"></div>
       <select id="oPaymentType">
         <option value="">Payment Type</option>
         <option>UPI</option>
@@ -72,7 +75,7 @@
     </div>
 
   </div>
-
+  <script src="script.js"></script>
   <script src="order.js"></script>
 </body>
 

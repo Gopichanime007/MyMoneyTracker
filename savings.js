@@ -86,7 +86,7 @@ function createSavingsEntry({
 
         entity,
 
-        payment,
+        paymentType: payment,
 
         person,
 
@@ -371,7 +371,7 @@ function renderSavingsHistory(data) {
         <div>
     <strong>${t.note || t.person || "Entry"}</strong><br>
     <small>
-        ${label} • ${t.entity} • ${t.payment || "-"} • 
+        ${label} • ${t.sourceName || t.note || t.entity || "-"} • ${t.paymentType || t.payment || "-"} • 
         ${new Date(t.date).toLocaleString()}
     </small>
 </div>
@@ -994,8 +994,8 @@ function exportSavingsPDF() {
         doc.text(date, 14, y);
         doc.text(type, 35, y);
         doc.text(purpose.substring(0, 15), 65, y);
-        doc.text(entity, 105, y);
-        doc.text(t.payment || "-", 135, y);
+        doc.text((t.sourceName || t.note || t.entity || "-"), 105, y);
+        doc.text((t.paymentType || t.payment || "-"), 135, y);
         doc.text("Rs. " + Math.abs(amount).toLocaleString("en-IN"), 165, y);
 
         doc.setTextColor(0);

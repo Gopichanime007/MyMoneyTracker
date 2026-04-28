@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <title>Orders</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <link rel="stylesheet" href="orders.css">
+</head>
+
+<body>
+  <!-- =========================
+   🗑 DELETE MODAL
+========================= -->
+  <div id="deleteModal" class="modal hidden">
+
+    <div class="modal-box">
+
+      <h3>Delete Order</h3>
+
+      <p class="modal-sub">Enter reason (optional)</p>
+
+      <input type="text" id="deleteReason" placeholder="Ex: Cancelled / Wrong order">
+
+      <div class="modal-actions">
+        <button class="secondary" onclick="closeDeleteModal()">Cancel</button>
+        <button class="danger" onclick="confirmDelete()">Delete</button>
+      </div>
+
+    </div>
+
+  </div>
+
+  <div class="app">
+
+    <!-- 🔙 HEADER -->
+    <header class="header header-row">
+      <button class="back-btn" onclick="window.location.href='index.html'">←</button>
+      <h2>📦 Orders</h2>
+    </header>
+
+    <!-- 📦 CONTENT CARD -->
+    <div class="card">
+
+      <h4>Order History</h4>
+
+      <!-- Orders will be injected here -->
+      <div id="ordersList"></div>
+
+    </div>
+
+  </div>
+
+  <!-- 📜 SCRIPT -->
+  <script src="orders.js"></script>
+
+</body>
+
+</html>

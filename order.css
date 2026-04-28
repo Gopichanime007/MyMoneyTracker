@@ -90,3 +90,11 @@ select {
 .summary h3 {
   margin-top: 8px;
 }
+
+#sourcePreview {
+  margin-top: 10px;
+  padding: 10px;
+  border-radius: 10px;
+  background: #f2f2f7;
+  font-size: 13px;
+}
