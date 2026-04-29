@@ -176,19 +176,19 @@ function confirmDelete() {
   // =========================
   // 🔵 UPDATE BUDGET
   // =========================
-  if (order.sourceType === "budget") {
+  //  if(order.sourceType === "budget") {
 
-    let budgets = JSON.parse(localStorage.getItem("budgets")) || [];
+  //     let budgets = JSON.parse(localStorage.getItem("budgets")) || [];
 
-    let b = budgets.find(x => Number(x.id) === sourceId);
+  //     let b = budgets.find(x => Number(x.id) === sourceId);
 
-    if (b) {
-      b.used = (b.used || 0) - Math.abs(order.total || 0);
-      if (b.used < 0) b.used = 0;
-    }
+  //     if (b) {
+  //       b.used = (b.used || 0) - Math.abs(order.total || 0);
+  //       if (b.used < 0) b.used = 0;
+  //     }
 
-    localStorage.setItem("budgets", JSON.stringify(budgets));
-  }
+  //     localStorage.setItem("budgets", JSON.stringify(budgets));
+  //   } i
 
   // =========================
   // 🧾 LOG REFUND
@@ -204,8 +204,11 @@ function confirmDelete() {
 
     sourceId: sourceId,
     sourceName: order.sourceName || "-",
-    paymentType: order.paymentType || "Unknown",
+    sourceType: order.sourceType,
 
+    budgetId: order.budgetId,   // 🔥 CRITICAL FIX
+
+    paymentType: order.paymentType || "Unknown",
     date: new Date().toISOString()
   });
 

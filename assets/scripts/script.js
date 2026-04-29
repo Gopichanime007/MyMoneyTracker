@@ -1,4 +1,79 @@
 let currentFilteredExpenses = [];
+// =========================
+// 💱 CURRENCY CORE SYSTEM
+// =========================
+
+// Base currency (never changes)
+const BASE_CURRENCY = "INR";
+
+// Currency symbols
+const currencySymbols = {
+    INR: "₹",
+    USD: "$",
+    EUR: "€",
+    GBP: "£"
+};
+
+// Static exchange rates (relative to INR)
+const exchangeRates = {
+    INR: 1,
+    USD: 0.012,
+    EUR: 0.011,
+    GBP: 0.0095
+};
+
+// =========================
+// 🧠 USER SELECTED CURRENCY
+// =========================
+
+function getCurrencyCode() {
+    return localStorage.getItem("currencyCode") || "INR";
+}
+
+function setCurrencyCode(code) {
+    localStorage.setItem("currencyCode", code);
+}
+
+// =========================
+// 🔄 CONVERSION
+// =========================
+
+// Convert from BASE (INR) → Selected Currency
+function convertFromBase(amount) {
+    let code = getCurrencyCode();
+    let rate = exchangeRates[code] || 1;
+    return amount * rate;
+}
+
+// Convert from Selected Currency → BASE (INR)
+function convertToBase(amount) {
+    let code = getCurrencyCode();
+    let rate = exchangeRates[code] || 1;
+    return amount / rate;
+}
+
+// =========================
+// 💰 FORMAT (USE EVERYWHERE)
+// =========================
+
+function formatCurrency(amount) {
+    let code = getCurrencyCode();
+    let symbol = currencySymbols[code] || "₹";
+
+    let converted = convertFromBase(amount);
+
+    return symbol + " " + converted.toFixed(2);
+}
+function changeCurrency(code) {
+    setCurrencyCode(code);
+
+    // 🔄 Reload everything
+    loadDashboard();
+    loadHistory();
+    loadBudgetScreen();
+    renderBudgetEntries();
+    renderCategoryBreakdown(groupByCategory(getExpenses()));
+}
 /* =========================
    📦 STORAGE LAYER
 ========================= */
@@ -41,12 +116,14 @@ function addExpense(obj) {
 
     // ✅ USER CONTROLLED CATEGORY (NO AUTO MAGIC)
     let category = obj.category || "Others";
+    let baseAmount = convertToBase(obj.amount);
 
     expenses.push({
         id: Date.now(),
 
         type: type,
-        amount: obj.amount,
+
+        amount: baseAmount,
 
         category: category,   // ✅ correct
 
@@ -163,7 +240,7 @@ function loadHistory(list = getExpenses()) {
     <div class="expense-left">
       <strong>${e.category || e.purpose || e.type || "Entry"}</strong> -
       <span style="color:${e.amount < 0 ? 'red' : 'green'}">
-        ₹${e.amount}
+        ${formatCurrency(e.amount)}
       </span><br>
 
       <small>
@@ -455,8 +532,8 @@ function updateUI() {
     let elSpent = document.getElementById("spent");
     let elIncome = document.getElementById("income");
 
-    if (elSpent) elSpent.innerText = spent;
-    if (elIncome) elIncome.innerText = income;
+    if (elSpent) elSpent.innerText = formatCurrency(spent);
+    if (elIncome) elIncome.innerText = formatCurrency(income);
 }
 
 function handleFilter(type) {
@@ -611,7 +688,7 @@ function downloadPDF() {
 
         doc.setFontSize(11);
         doc.setTextColor(r, g, b);
-        doc.text(`Rs. ${value}`, x + 5, y + 13);
+        doc.text(`${formatCurrency(value)}`, x + 5, y + 13);
     };
 
     const totalIncome = dataSource.filter(e => e.amount > 0)
@@ -700,7 +777,7 @@ function downloadPDF() {
         doc.text(payment, col.payment, y);
 
         doc.setTextColor(amount < 0 ? 200 : 0, amount < 0 ? 0 : 150, 0);
-        doc.text(`Rs. ${formatted}`, col.amount, y, { align: "right" });
+        doc.text(formatCurrency(amount), col.amount, y, { align: "right" });
 
         doc.setTextColor(0);
 
@@ -778,11 +855,11 @@ function downloadPDF() {
         }
 
         doc.text(month, mcol.month, y);
-        doc.text(`Rs. ${budget}`, mcol.budget, y, { align: "right" });
-        doc.text(`Rs. ${spent}`, mcol.spent, y, { align: "right" });
+        doc.text(formatCurrency(budget), mcol.budget, y, { align: "right" });
+        doc.text(formatCurrency(spent), mcol.spent, y, { align: "right" });
 
         doc.setTextColor(remaining < 0 ? 200 : 0, remaining < 0 ? 0 : 150, 0);
-        doc.text(`Rs. ${remaining}`, mcol.remaining, y, { align: "right" });
+        doc.text(formatCurrency(remaining), mcol.remaining, y, { align: "right" });
 
         doc.setTextColor(0);
 
@@ -902,7 +979,7 @@ function loadBudgetOptions() {
 
         let label = formatMonth(b.monthKey);
 
-        opt.textContent = `${label} (${b.entity}) — ₹${remaining} left`;
+        opt.textContent = `${label} (${b.entity}) — ${formatCurrency(remaining)} left`;
 
         select.appendChild(opt);
     });
@@ -1249,12 +1326,12 @@ function loadDashboard() {
         )
         .reduce((sum, e) => sum + Math.abs(e.amount), 0);
 
-    document.getElementById("budgetValue").innerText = totalBudget;
-    document.getElementById("spent").innerText = totalSpent;
-    document.getElementById("remaining").innerText = remaining;
-    document.getElementById("todaySpent").innerText = todaySpent;
-    document.getElementById("incomeValue").innerText = totalIncome;
-    document.getElementById("netValue").innerText = net;
+    document.getElementById("budgetValue").innerText = formatCurrency(totalBudget);
+    document.getElementById("spent").innerText = formatCurrency(totalSpent);
+    document.getElementById("remaining").innerText = formatCurrency(remaining);
+    document.getElementById("todaySpent").innerText = formatCurrency(todaySpent);
+    document.getElementById("incomeValue").innerText = formatCurrency(totalIncome);
+    document.getElementById("netValue").innerText = formatCurrency(net);
     updateProgressBar();
 }
 // =========================
@@ -1272,12 +1349,12 @@ function loadBudgetScreen() {
         .reduce((sum, b) => sum + (b.totalAllocated || 0), 0);
 
     let budgetEl = document.getElementById("currentBudget");
-    if (budgetEl) budgetEl.innerText = "₹" + total;
+    if (budgetEl) budgetEl.innerText = formatCurrency(total);
 
     let daily = getDailyLimit();
 
     let dailyEl = document.getElementById("calculatedDaily"); // ✅ FIXED
-    if (dailyEl) dailyEl.innerText = "₹" + daily;
+    if (dailyEl) dailyEl.innerText = formatCurrency(daily);
 }
 // =========================
 // 📜 RENDER BUDGET LIST
@@ -1338,7 +1415,7 @@ function renderBudgetEntries() {
 
         let statusText = remaining <= 0
             ? "❌ Exhausted"
-            : `₹${remaining} left`;
+            : `${formatCurrency(remaining)} left`;
 
         let statusClass = remaining <= 0 ? "red" : "green";
 
@@ -1354,9 +1431,9 @@ function renderBudgetEntries() {
         </div>
 
         <div class="budget-right">
-            <div class="budget-amount">₹${g.totalAllocated}</div>
+            <div class="budget-amount">${formatCurrency(g.totalAllocated)}</div>
             <div class="budget-status ${remaining <= 0 ? "exhausted" : "active"}">
-                ${remaining <= 0 ? "Exhausted" : `₹${remaining} left`}
+                ${remaining <= 0 ? "Exhausted" : `${formatCurrency(remaining)} left`}
             </div>
         </div>
 
@@ -1386,21 +1463,25 @@ function openBudgetDetails(group) {
     let related = expenses.filter(e => e.budgetId === budgetId);
 
     let used = related
-        .filter(e => e.type === "expense")
+        .filter(e => e.amount < 0)
         .reduce((sum, e) => sum + Math.abs(e.amount), 0);
 
-    let remaining = group.totalAllocated - used;
+    let credited = related
+        .filter(e => e.amount > 0)
+        .reduce((sum, e) => sum + e.amount, 0);
+
+    let remaining = group.totalAllocated - used + credited;
 
     let monthYear = formatMonth(group.monthKey);
 
-    // 🔥 BUILD ENTRIES HTML FIRST
+    // 🔥 ENTRIES LIST BACK
     let entriesHtml = "";
 
     if (!related.length) {
         entriesHtml = "<p>No entries</p>";
     } else {
         related.forEach(e => {
-            let color = e.amount < 0 ? "red" : "green";
+            let color = e.amount < 0 ? "#ff5252" : "#4caf50";
 
             entriesHtml += `
                 <div class="expense-item">
@@ -1410,38 +1491,75 @@ function openBudgetDetails(group) {
                     </div>
 
                     <div style="color:${color}; font-weight:600;">
-                        ₹${Math.abs(e.amount)}
+                        ${formatCurrency(Math.abs(e.amount))}
                     </div>
                 </div>
             `;
         });
     }
 
-    // 🔥 SWITCH SCREEN
     showScreen("budgetDetails");
 
-    // ✅ SINGLE CLEAN UI (NO DUPLICATE)
     container.innerHTML = `
-        <div class="card">
+    
+    <div class="card" style="
+        border-radius:16px;
+        padding:16px;
+        background:#f7f7f7;
+        box-shadow: 0 8px 20px rgba(0,0,0,0.08);
+    ">
 
-            <div style="display:flex; justify-content:space-between; align-items:center;">
-                <h3>${name}</h3>
-                <button class="back-btn" onclick="goBackToBudgets()" class="secondary">← Back</button>
+        <!-- HEADER -->
+        <div style="display:flex; justify-content:space-between; align-items:center;">
+            <div>
+                <h3 style="margin:0;">${name}</h3>
+                <small style="color:#666;">${monthYear}</small>
             </div>
 
-            <small>${monthYear}</small>
+            <button onclick="goBackToBudgets()" style="
+                background:#eee;
+                border:none;
+                padding:6px 12px;
+                border-radius:8px;
+                cursor:pointer;
+            ">
+                ← Back
+            </button>
+        </div>
 
-            <p>Allocated: ₹${group.totalAllocated}</p>
-            <p>Used: ₹${used}</p>
-            <p>Remaining: ₹${remaining}</p>
+        <!-- SUMMARY GRID -->
+        <div style="margin-top:14px; display:grid; grid-template-columns:1fr 1fr; gap:10px;">
+            
+            <div style="background:white; padding:10px; border-radius:10px;">
+                <small>Allocated</small>
+                <div>${formatCurrency(group.totalAllocated)}</div>
+            </div>
 
-            <hr>
+            <div style="background:white; padding:10px; border-radius:10px;">
+                <small>Used</small>
+                <div style="color:#ff5252;">${formatCurrency(used)}</div>
+            </div>
 
-            <h4>Entries</h4>
+            <div style="background:white; padding:10px; border-radius:10px;">
+                <small>Credited</small>
+                <div style="color:#4caf50;">${formatCurrency(credited)}</div>
+            </div>
 
-            ${entriesHtml}
+            <div style="background:white; padding:10px; border-radius:10px;">
+                <small>Remaining</small>
+                <div style="color:#4caf50;">${formatCurrency(remaining)}</div>
+            </div>
 
         </div>
+
+        <hr style="margin:16px 0;">
+
+        <!-- ENTRIES -->
+        <h4>Entries</h4>
+
+        ${entriesHtml}
+
+    </div>
     `;
 }
 
@@ -1567,7 +1685,7 @@ function getChartOptions(type, expenses, dataset, now, customRange) {
                 intersect: false,
                 callbacks: {
                     label: function (ctx) {
-                        return `${ctx.dataset.label}: ₹${ctx.raw}`;
+                        return `${ctx.dataset.label}: ${formatCurrency(ctx.raw)}`;
                     }
                 }
             }
@@ -2006,7 +2124,7 @@ function filterDataByType(type, expenses, now, customRange) {
 //                 tooltip: {
 //                     callbacks: {
 //                         label: function (ctx) {
-//                             return `${ctx.dataset.label}: ₹${ctx.raw}`;
+//return `${ctx.dataset.label}: ${formatCurrency(ctx.raw)}`;
 //                         }
 //                     }
 //                 }
@@ -2168,7 +2286,7 @@ function renderCategoryBreakdown(map) {
 
         div.innerHTML = `
     <span>${cat}</span>
-    <strong>₹${amt}</strong>
+    <strong>${formatCurrency(amt)}</strong>
 `;
         container.appendChild(div);
     });
@@ -2331,10 +2449,10 @@ function renderLoanSummary() {
         div.innerHTML = `
             <div style="margin-bottom:10px;">
                 <strong>${p}</strong><br>
-                Given: ₹${d.given} |
-                Received: ₹${d.received} <br>
+                Given: ${formatCurrency(d.given)} |
+                Received: ${formatCurrency(d.received)} <br>
                 <span style="color:${d.balance > 0 ? 'red' : 'green'}">
-                    ${d.balance > 0 ? "Pending" : "Cleared"}: ₹${d.balance}
+                    ${d.balance > 0 ? "Pending" : "Cleared"}: ${formatCurrency(d.balance)}
                 </span>
             </div>
         `;
@@ -2379,7 +2497,7 @@ function renderLoanSummary() {
 //                 Allocated: ₹${b.totalAllocated || 0}<br>
 //                 Spent: ₹${spent}<br>
 //                 <strong style="color:${remaining >= 0 ? 'green' : 'red'}">
-//                     Remaining: ₹${remaining}
+//                     Remaining: ${formatCurrency(remaining)}
 //                 </strong>
 //             </div>
 //         `;

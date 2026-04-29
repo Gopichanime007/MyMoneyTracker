@@ -46,32 +46,32 @@
 
           <div class="dash-card budget">
             <span>Budget</span>
-            <h2>₹<span id="budgetValue">0</span></h2>
+            <h2><span id="budgetValue">0</span></h2>
           </div>
 
           <div class="dash-card spent">
             <span>Spent</span>
-            <h2>₹<span id="spent">0</span></h2>
+            <h2><span id="spent">0</span></h2>
           </div>
 
           <div id="remainingCard" class="dash-card remaining clickable-card">
             <span>Remaining</span>
-            <h2>₹<span id="remaining">0</span></h2>
+            <h2><span id="remaining">0</span></h2>
           </div>
 
           <div class="dash-card today">
             <span>Today</span>
-            <h2>₹<span id="todaySpent">0</span></h2>
+            <h2><span id="todaySpent">0</span></h2>
           </div>
 
           <div class="dash-card income">
             <span>Income</span>
-            <h2>₹<span id="incomeValue">0</span></h2>
+            <h2><span id="incomeValue">0</span></h2>
           </div>
 
           <div class="dash-card net">
             <span>Net</span>
-            <h2>₹<span id="netValue">0</span></h2>
+            <h2><span id="netValue">0</span></h2>
           </div>
 
         </div>
@@ -165,7 +165,7 @@
       <div class="card">
         <h3>Budget</h3>
 
-        <p>Current: ₹<span id="currentBudget">0</span></p>
+        <p>Current: <span id="currentBudget">0</span></p>
 
         <select id="budgetType">
           <option value="daily">Daily</option>
@@ -176,7 +176,7 @@
         <input type="month" id="budgetMonth">
         <input type="number" id="budgetAmount" placeholder="Amount">
 
-        <p>Daily Limit: ₹<span id="calculatedDaily">0</span></p>
+        <p>Daily Limit: <span id="calculatedDaily">0</span></p>
 
         <button type="button" class="primary" onclick="saveBudget()">Save</button>
       </div>
@@ -227,7 +227,13 @@
       <div class="card">
 
         <h3>Settings</h3>
-
+        <h4>Currency</h4>
+        <select onchange="changeCurrency(this.value)">
+          <option value="INR">INR (₹)</option>
+          <option value="USD">USD ($)</option>
+          <option value="EUR">EUR (€)</option>
+          <option value="GBP">GBP (£)</option>
+        </select>
         <!-- Theme -->
         <h4>Theme</h4>
         <select onchange="handleTheme(this.value)">

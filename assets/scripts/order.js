@@ -80,6 +80,20 @@ function completePurchase() {
   let selectedSourceId = Number(selectedOption.value);
   let sourceType = selectedOption.dataset.type;
   let paymentType = document.getElementById("oPaymentType").value;
+  // 🔥 GET budgetId (only for budget type)
+  let budgetId = null;
+
+  if (sourceType === "budget") {
+    let budgets = JSON.parse(localStorage.getItem("budgets")) || [];
+
+    let selectedBudget = budgets.find(
+      b => Number(b.id) === Number(selectedSourceId)
+    );
+
+    if (selectedBudget) {
+      budgetId = selectedBudget.budgetId;
+    }
+  }
 
   if (!paymentType) {
     alert("Select payment type ❗");
@@ -120,6 +134,7 @@ function completePurchase() {
     sourceId: selectedSourceId,
     sourceName: summary.name,
     sourceType: sourceType,
+    budgetId: budgetId,
 
     paymentType: paymentType,
     date: new Date().toISOString()
@@ -142,6 +157,7 @@ function completePurchase() {
     sourceId: selectedSourceId,
     sourceName: summary.name,
     sourceType: sourceType,
+    budgetId: budgetId,
 
     paymentType: paymentType,
     date: new Date().toISOString()
@@ -390,11 +406,11 @@ function getLedgerSummary(sourceId, type) {
     if (!budget) return null;
 
     let used = expenses
-      .filter(e => Number(e.sourceId) === Number(sourceId))
+      .filter(e => e.budgetId === budget.budgetId)
       .reduce((sum, e) => sum + Math.abs(e.amount), 0);
 
     return {
-      name: budget.note || "Budget",
+      name: budget.name || budget.note || "Budget",
       total: budget.totalAllocated || 0,
       used,
       remaining: (budget.totalAllocated || 0) - used,

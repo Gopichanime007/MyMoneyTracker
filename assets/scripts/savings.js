@@ -298,13 +298,15 @@ function loadSavings() {
 
     let available = total;
 
-    document.getElementById("savingsBalance").innerText = "₹" + total;
+    document.getElementById("savingsBalance").innerText = 'Rs. ' + total;
+
 
     let allocatedEl = document.getElementById("allocatedToBudget");
-    if (allocatedEl) allocatedEl.innerText = "₹" + allocated;
+    if (allocatedEl) allocatedEl.innerText =  'Rs. ' + allocated;
+
 
     let availableEl = document.getElementById("availableBalance");
-    if (availableEl) availableEl.innerText = "₹" + available;
+    if (availableEl) availableEl.innerText = 'Rs. ' +  available;
 
     renderSavingsHistory(data);
 }
@@ -570,7 +572,7 @@ function getSourceSummary(sourceId) {
     let outgoing = data.filter(t => Number(t.sourceId) === income.id);
 
     let totalOutgoing = outgoing.reduce(
-        (sum, t) => sum + Math.abs(t.amount),
+        (sum, t) => t.amount < 0 ? sum + Math.abs(t.amount) : sum,
         0
     );
 
@@ -585,19 +587,36 @@ function getSourceSummary(sourceId) {
 
 // Displays detailed breakdown of a selected income source
 function renderSourceDetails(sourceId) {
-    let summary = getSourceSummary(sourceId);
-    if (!summary) return;
+    let data = getSavings();
+
+    let income = data.find(t => t.id === Number(sourceId));
+    if (!income) return;
+
+    let related = data.filter(t => Number(t.sourceId) === income.id);
+
+    // 🔴 USED (only negative)
+    let used = related
+        .filter(t => t.amount < 0)
+        .reduce((sum, t) => sum + Math.abs(t.amount), 0);
+
+    // 🟢 CREDITED (only positive)
+    let credited = related
+        .filter(t => t.amount > 0)
+        .reduce((sum, t) => sum + t.amount, 0);
+
+    let remaining = income.amount - used + credited;
 
     let container = document.getElementById("sourceDetails");
     if (!container) return;
 
+    // 🔥 ENTRIES
     let entriesHTML = "";
 
-    if (summary.entries.length === 0) {
+    if (!related.length) {
         entriesHTML = `<p style="margin-top:10px;">No entries</p>`;
     } else {
-        summary.entries.forEach(e => {
-            let color = e.amount < 0 ? "red" : "green";
+        related.forEach(e => {
+            let color = e.amount < 0 ? "#ff5252" : "#4caf50";
 
             entriesHTML += `
                 <div class="expense-item">
@@ -606,25 +625,72 @@ function renderSourceDetails(sourceId) {
                         <small>${new Date(e.date).toLocaleString()}</small>
                     </div>
                     <div style="color:${color}; font-weight:600;">
-                        ₹${Math.abs(e.amount)}
+                        Rs. ${Math.abs(e.amount)}
                     </div>
                 </div>
             `;
         });
     }
 
+    // 🎨 CLEAN LIGHT UI
     container.innerHTML = `
-        <h3>${summary.name}</h3>
+        <div class="card" style="
+            border-radius:16px;
+            padding:16px;
+            background:#f7f7f7;
+            box-shadow: 0 8px 20px rgba(0,0,0,0.08);
+        ">
 
-        <p>💰 Income: ₹${summary.totalIncome}</p>
-        <p>📉 Used: ₹${summary.totalOutgoing}</p>
-        <p>🟢 Remaining: ₹${summary.remaining}</p>
+            <!-- HEADER -->
+            <div style="display:flex; justify-content:space-between; align-items:center;">
+                <div>
+                    <h3 style="margin:0;">${income.note || "Income"}</h3>
+                </div>
 
-        <hr style="margin: 14px 0;">
+                <button onclick="showSavingsScreen('income')" style="
+                    background:#eee;
+                    border:none;
+                    padding:6px 12px;
+                    border-radius:8px;
+                    cursor:pointer;
+                ">
+                    ← Back
+                </button>
+            </div>
 
-        <h4>Entries</h4>
+            <!-- SUMMARY -->
+            <div style="margin-top:14px; display:grid; grid-template-columns:1fr 1fr; gap:10px;">
+                
+                <div style="background:white; padding:10px; border-radius:10px;">
+                    <small>Income</small>
+                    <div>Rs. ${income.amount}</div>
+                </div>
 
-        ${entriesHTML}
+                <div style="background:white; padding:10px; border-radius:10px;">
+                    <small>Used</small>
+                    <div style="color:#ff5252;">Rs. ${used}</div>
+                </div>
+
+                <div style="background:white; padding:10px; border-radius:10px;">
+                    <small>Credited</small>
+                    <div style="color:#4caf50;">Rs. ${credited}</div>
+                </div>
+
+                <div style="background:white; padding:10px; border-radius:10px;">
+                    <small>Remaining</small>
+                    <div style="color:#4caf50;">Rs. ${remaining}</div>
+                </div>
+
+            </div>
+
+            <hr style="margin:16px 0;">
+
+            <!-- ENTRIES -->
+            <h4>Entries</h4>
+
+            ${entriesHTML}
+
+        </div>
     `;
 }
 
@@ -642,7 +708,7 @@ function renderIncomeList() {
 
         // 🔥 CALCULATE USED
         let used = data
-            .filter(t => Number(t.sourceId) === i.id)
+            .filter(t => Number(t.sourceId) === i.id && t.amount < 0)
             .reduce((sum, t) => sum + Math.abs(t.amount), 0);
 
         let remaining = i.amount - used;
