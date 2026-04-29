@@ -52,7 +52,7 @@ function addExpense(obj) {
 
         purpose: obj.purpose || "",
         budgetId: obj.budgetId || null,
-        entity: obj.entity || "Cash",
+        entity: obj.entity || obj.paymentType || "Cash",
 
         date: obj.date
             ? new Date(obj.date).toISOString()
