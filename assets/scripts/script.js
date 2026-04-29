@@ -348,31 +348,38 @@ function resetForm() {
 }
 
 
-/* =========================
-   🚀 INIT
-========================= */
+// ✅ ALWAYS RUN FOOTER (independent)
+window.addEventListener("load", function () {
+    injectGlobalFooter();
+});
 
-window.onload = () => {
-    loadHistory();
-    initCategories();   // 🔥 ADD THIS
-    loadTheme();        // 🔥 ADD THIS
-    updateUI();         // 🔥 ADD THIS
-    loadBudgetOptions();
-    loadDashboard();
-    loadBudgetScreen();
-    loadGraph("day");
+// ✅ MAIN LOGIC (safe execution)
+window.addEventListener("load", function () {
+    try {
+        loadHistory();
+        initCategories();
+        loadTheme();
+        updateUI();
+        loadBudgetOptions();
+        loadDashboard();
+        loadBudgetScreen();
+        loadGraph("day");
 
-    let today = new Date().toISOString().split("T")[0];
-    let dateInput = document.getElementById("expenseDate");
+        let today = new Date().toISOString().split("T")[0];
+        let dateInput = document.getElementById("expenseDate");
 
-    if (dateInput) dateInput.value = today;
+        if (dateInput) dateInput.value = today;
 
-    renderCategoryList();
-    setDefaultDate();
-    bindRemainingCard();
-    renderBudgetEntries();
-    renderCategoryBreakdown();
-};
+        renderCategoryList();
+        setDefaultDate();
+        bindRemainingCard();
+        renderBudgetEntries();
+        renderCategoryBreakdown();
+
+    } catch (e) {
+        console.error("Init crash:", e);
+    }
+});
 
 function showScreen(id) {
     const screens = document.querySelectorAll(".screen");
@@ -2270,6 +2277,12 @@ function renderCategoryBreakdown(map) {
 
     container.innerHTML = "";
 
+    // ✅ FIX: handle undefined/null safely
+    if (!map || typeof map !== "object") {
+        container.innerHTML = "<p>No data</p>";
+        return;
+    }
+
     let entries = Object.entries(map);
 
     if (!entries.length) {
@@ -2285,9 +2298,10 @@ function renderCategoryBreakdown(map) {
         div.style.padding = "6px 0";
 
         div.innerHTML = `
-    <span>${cat}</span>
-    <strong>${formatCurrency(amt)}</strong>
-`;
+            <span>${cat}</span>
+            <strong>${formatCurrency(amt)}</strong>
+        `;
+
         container.appendChild(div);
     });
 }
@@ -2648,4 +2662,286 @@ function updateProgressBar() {
   \____| \___/|_|   |___\____|_| |_/_/   \_\_| \_|___|_|  |_|_____|
 
    Signed by: GOPICHANIME 🐉
-*/
+*/function getLoanSummary() {
+    let expenses = getExpenses();
+
+    let loans = {};
+
+    expenses.forEach(e => {
+        if (!e.entity) return;
+
+        if (!loans[e.entity]) {
+            loans[e.entity] = {
+                given: 0,
+                received: 0
+            };
+        }
+
+        // Money given
+        if (e.amount < 0) {
+            loans[e.entity].given += Math.abs(e.amount);
+        }
+
+        // Money returned (Recovery only)
+        if (e.amount > 0 && e.category === "Recovery") {
+            loans[e.entity].received += e.amount;
+        }
+    });
+
+    // Calculate pending
+    let result = [];
+
+    for (let person in loans) {
+        let given = loans[person].given;
+        let received = loans[person].received;
+
+        result.push({
+            person,
+            given,
+            received,
+            pending: given - received
+        });
+    }
+
+    return result;
+}
+
+function renderLoanSummary() {
+    let data = getLoanSummary();
+    let container = document.getElementById("loanSummary");
+
+    if (!container) return;
+
+    container.innerHTML = "";
+
+    data.forEach(l => {
+        let div = document.createElement("div");
+
+        div.innerHTML = `
+            <div class="loan-row">
+                <span>${l.person}</span>
+                <span>₹${l.pending}</span>
+            </div>
+        `;
+
+        container.appendChild(div);
+    });
+}
+function injectGlobalFooter() {
+    const year = new Date().getFullYear(); // ✅ dynamic year
+
+    const footer = document.createElement("div");
+    footer.className = "app-signature";
+
+    footer.innerHTML = `
+        <div>Developed by <strong>Gopichaninme</strong></div>
+        <small style="opacity:0.7;">© ${year} All rights reserved</small>
+    `;
+
+    document.querySelector(".app")?.appendChild(footer);
+}
+
+// =========================
+// 🔔 CONFIG
+// =========================
+const NOTIF_KEY = "notificationsEnabled";
+const CHECK_INTERVAL = 15000; // 15 sec
+const INSIGHT_INTERVAL = 3600000; // 1 hour
+
+let lastAlertTime = 0;
+let lastUsageLevel = 0;
+
+// =========================
+// 🔐 PERMISSION
+// =========================
+async function requestNotificationPermission() {
+    if (!("Notification" in window)) return;
+
+    try {
+        const permission = await Notification.requestPermission();
+        console.log("🔐 Permission:", permission);
+        updateNotificationStatus();
+    } catch (err) {
+        console.error("Permission Error:", err);
+    }
+}
+
+// =========================
+// 📩 UNIVERSAL NOTIFY
+// =========================
+function notify(title, body) {
+    try {
+        // 📱 Android bridge (if exists)
+        if (window.Android && typeof Android.showNotification === "function") {
+            Android.showNotification(title, body);
+            return;
+        }
+
+        // 🌐 Browser notification
+        if ("Notification" in window && Notification.permission === "granted") {
+            new Notification(title, { body });
+            return;
+        }
+
+        // 🔄 fallback
+        toast(`${title} - ${body}`);
+
+    } catch (e) {
+        console.error("Notify error:", e);
+        toast(body);
+    }
+}
+
+// =========================
+// 📊 BUDGET ALERT ENGINE
+// =========================
+function checkBudgetUsage() {
+    const expenses = JSON.parse(localStorage.getItem("expenses")) || [];
+    const budgets = JSON.parse(localStorage.getItem("budgets")) || [];
+
+    if (!budgets.length) return;
+
+    const totalSpent = expenses.reduce((sum, e) =>
+        sum + (e.amount < 0 ? Math.abs(e.amount) : 0), 0);
+
+    const totalBudget = budgets.reduce((sum, b) =>
+        sum + (b.totalAllocated || 0), 0);
+
+    if (!totalBudget) return;
+
+    const usage = totalSpent / totalBudget;
+
+    // 🔥 Trigger only on crossing threshold
+    if (usage > 0.8 && lastUsageLevel <= 0.8) {
+        notify("⚠️ Budget Alert", `You crossed 80% usage`);
+    }
+
+    lastUsageLevel = usage;
+}
+
+// =========================
+// 💡 SMART INSIGHT ENGINE
+// =========================
+function generateInsight() {
+    const expenses = JSON.parse(localStorage.getItem("expenses")) || [];
+
+    if (!expenses.length) {
+        return "Start tracking your expenses to unlock insights 📊";
+    }
+
+    const total = expenses.reduce((s, e) => s + Math.abs(e.amount), 0);
+
+    const today = new Date().toISOString().split("T")[0];
+    const todaySpent = expenses
+        .filter(e => e.date === today)
+        .reduce((s, e) => s + Math.abs(e.amount), 0);
+
+    const insights = [
+        "💡 You're building a strong habit. Keep going!",
+        "📉 Cutting one small expense daily saves big monthly",
+        `💰 Total tracked spending: ₹${total}`,
+        `📅 Today you spent ₹${todaySpent}`,
+        "🎯 Try a 'No Spend Day' challenge today",
+        "📊 Review your top category and optimize it",
+        "⚡ Smart move: Track every rupee, even small ones",
+        "🧠 Awareness = Control. You're improving already",
+        "📈 Consistency beats motivation",
+        "🔍 Look for one expense you can eliminate today"
+    ];
+
+    return insights[Math.floor(Math.random() * insights.length)];
+}
+
+// =========================
+// ⏱️ HOURLY INSIGHT ENGINE
+// =========================
+function startInsights() {
+    setInterval(() => {
+        const enabled = localStorage.getItem(NOTIF_KEY) !== "false";
+        if (!enabled) return;
+
+        notify("💡 Smart Insight", generateInsight());
+
+    }, INSIGHT_INTERVAL);
+}
+
+// =========================
+// 🔘 TOGGLE CONTROL
+// =========================
+function toggleNotifications() {
+    let enabled = localStorage.getItem(NOTIF_KEY) !== "false";
+
+    enabled = !enabled;
+    localStorage.setItem(NOTIF_KEY, enabled);
+
+    updateToggleButton();
+
+    toast(enabled ? "Notifications ON 🔔" : "Notifications OFF ⛔");
+}
+
+function updateToggleButton() {
+    const btn = document.getElementById("notifToggleBtn");
+    if (!btn) return;
+
+    const enabled = localStorage.getItem(NOTIF_KEY) !== "false";
+    btn.innerText = enabled ? "Stop Notifications" : "Start Notifications";
+}
+
+// =========================
+// 📊 STATUS UI
+// =========================
+function updateNotificationStatus() {
+    const el = document.getElementById("notifStatus");
+    if (!el) return;
+
+    if (!("Notification" in window)) {
+        el.innerText = "Status: Not supported ❌";
+        return;
+    }
+
+    el.innerText = "Status: " + Notification.permission;
+}
+
+// =========================
+// 🧪 TEST
+// =========================
+function testNotification() {
+    notify("🧪 Test Notification", "Everything working perfectly 🎉");
+}
+
+// =========================
+// 🎨 TOAST (fallback)
+// =========================
+function toast(msg) {
+    const div = document.createElement("div");
+    div.innerText = msg;
+    div.style = `
+        position:fixed;
+        bottom:20px;
+        left:50%;
+        transform:translateX(-50%);
+        background:#333;
+        color:#fff;
+        padding:10px 15px;
+        border-radius:8px;
+        z-index:9999;
+    `;
+    document.body.appendChild(div);
+    setTimeout(() => div.remove(), 3000);
+}
+
+// =========================
+// 🚀 INIT
+// =========================
+(function initNotificationSystem() {
+    requestNotificationPermission();
+    updateNotificationStatus();
+    updateToggleButton();
+
+    setInterval(checkBudgetUsage, CHECK_INTERVAL);
+    startInsights();
+})();
+
+function enableNotifications() {
+    requestNotificationPermission();
+}

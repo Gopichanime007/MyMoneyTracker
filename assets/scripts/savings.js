@@ -2,20 +2,25 @@
 // 🚀 INIT
 // =========================
 // Initializes page: loads data, sets date, loads sources, applies theme
-window.onload = function () {
+window.addEventListener("load", function () {
     loadSavings();
     setTodayDate();
     loadSourceOptions();
-    handleSavingsTypeChange(); // 👈 IMPORTANT
+    handleSavingsTypeChange();
     loadBudgetYears();
     loadCategoryOptions();
     loadPersonOptions();
-    renderCategoryList();   // 🔥 ADD THIS
+    renderCategoryList();
     renderPersonList();
 
     let theme = localStorage.getItem("theme") || "#4caf50";
     document.documentElement.style.setProperty("--theme", theme);
-};
+
+    // ✅ GLOBAL FOOTER
+    if (typeof injectGlobalFooter === "function") {
+        injectGlobalFooter();
+    }
+});
 
 /* =========================
    🧠 MASTER LEDGER (SAVINGS)
@@ -302,11 +307,11 @@ function loadSavings() {
 
 
     let allocatedEl = document.getElementById("allocatedToBudget");
-    if (allocatedEl) allocatedEl.innerText =  'Rs. ' + allocated;
+    if (allocatedEl) allocatedEl.innerText = 'Rs. ' + allocated;
 
 
     let availableEl = document.getElementById("availableBalance");
-    if (availableEl) availableEl.innerText = 'Rs. ' +  available;
+    if (availableEl) availableEl.innerText = 'Rs. ' + available;
 
     renderSavingsHistory(data);
 }

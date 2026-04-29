@@ -285,8 +285,21 @@
         <h4>💸 Loans / Recoveries</h4>
         <div id="loanSummary"></div>
       </div>
-      <div class="app-signature">
+      <!-- <div class="app-signature">
         Developed by <strong>Gopichaninme</strong>
+      </div> -->
+      <div class="card" style="margin-top:15px;">
+        <h3>🔔 Notifications</h3>
+
+        <p id="notifStatus">Status: Checking...</p>
+
+        <div class="notif-actions">
+          <button class="btn btn-enable" onclick="enableNotifications()">Enable</button>
+          <button class="btn btn-test" onclick="testNotification()">Test</button>
+          <button class="btn btn-toggle" onclick="toggleNotifications()" id="notifToggleBtn">
+            Stop
+          </button>
+        </div>
       </div>
     </section>
 

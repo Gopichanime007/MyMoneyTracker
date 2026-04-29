@@ -667,3 +667,49 @@ button {
 
   gap: 6px;
 }
+
+.notif-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+/* Base */
+.btn {
+  flex: 1;
+  padding: 10px;
+  border-radius: 10px;
+  border: none;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+/* Enable */
+.btn-enable {
+  background: linear-gradient(135deg, #4caf50, #2e7d32);
+  color: white;
+}
+
+/* Test */
+.btn-test {
+  background: #f2f2f2;
+  color: #333;
+}
+
+/* Toggle */
+.btn-toggle {
+  background: linear-gradient(135deg, #ff4d4d, #b30000);
+  color: white;
+}
+
+/* Effects */
+.btn:hover {
+  transform: translateY(-2px);
+  opacity: 0.9;
+}
+
+.btn:active {
+  transform: scale(0.96);
+}
