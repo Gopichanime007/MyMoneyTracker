@@ -2630,30 +2630,30 @@ function applyHex() {
     document.getElementById("colorPicker").value = hex;
     applyCustomColor(hex);
 }
-function applyPeriodFromModal() {
+// function applyPeriodFromModal() {
 
-    let from = document.getElementById("startDate").value;
-    let to = document.getElementById("endDate").value;
+//     let from = document.getElementById("startDate").value;
+//     let to = document.getElementById("endDate").value;
 
-    if (!from || !to) {
-        showToast("Select both dates");
-        return;
-    }
+//     if (!from || !to) {
+//         showToast("Select both dates");
+//         return;
+//     }
 
-    let filtered = getExpenses().filter(e => {
-        let d = new Date(e.date);
-        return d >= new Date(from) && d <= new Date(to);
-    });
+//     let filtered = getExpenses().filter(e => {
+//         let d = new Date(e.date);
+//         return d >= new Date(from) && d <= new Date(to);
+//     });
 
-    // 🔥 GRAPH
-    loadGraph("custom", filtered, { start: from, end: to });
+//     // 🔥 GRAPH
+//     loadGraph("custom", filtered, { start: from, end: to });
 
-    // 🔥 ALSO UPDATE CATEGORY BREAKDOWN
-    renderCategoryBreakdown(groupByCategory(filtered));
+//     // 🔥 ALSO UPDATE CATEGORY BREAKDOWN
+//     renderCategoryBreakdown(groupByCategory(filtered));
 
-    // 🔥 CLOSE MODAL
-    closePeriod();
-}
+//     // 🔥 CLOSE MODAL
+//     closePeriod();
+// }
 
 function updateProgressBar() {
 
