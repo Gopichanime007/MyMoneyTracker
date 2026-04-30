@@ -946,6 +946,7 @@ function handleGraphFilter(type) {
 function openCustomModal() {
     openDateModal();
 }
+
 function applyPeriodFromModal() {
 
     let from = document.getElementById("startDate").value;
@@ -953,33 +954,65 @@ function applyPeriodFromModal() {
 
     let expenses = getExpenses();
 
+    // 🔥 normalize to remove time issues
+    function normalize(dateStr) {
+        let d = new Date(dateStr);
+        return new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+    }
+
+    let fromTime = from ? normalize(from) : null;
+    let toTime = to ? normalize(to) : null;
+
     let filtered = expenses.filter(e => {
+
         let d = new Date(e.date);
+        let entryTime = new Date(
+            d.getFullYear(),
+            d.getMonth(),
+            d.getDate()
+        ).getTime();
 
-        if (from && !to) {
-            return d.toDateString() === new Date(from).toDateString();
-        }
-
-        if (!from && to) {
-            return d <= new Date(to);
-        }
-
-        if (from && to) {
-            let fromDate = new Date(from);
-            let toDate = new Date(to);
-
-            toDate.setHours(23, 59, 59, 999);
-
-            return d >= fromDate && d <= toDate;
-        }
+        if (fromTime && !toTime) return entryTime === fromTime;
+        if (!fromTime && toTime) return entryTime <= toTime;
+        if (fromTime && toTime) return entryTime >= fromTime && entryTime <= toTime;
 
         return true;
     });
 
-    loadGraph("custom", filtered, { start: from, end: to });
-    renderCategoryBreakdown(groupByCategory(filtered));
+    console.log("Filtered:", filtered.length);
+
+    // =========================
+    // ✅ UPDATE HISTORY
+    // =========================
+    if (typeof loadHistory === "function") {
+        loadHistory(filtered);
+    }
+
+    // =========================
+    // ✅ UPDATE GRAPH (THIS WAS MISSING)
+    // =========================
+    if (typeof loadGraph === "function") {
+        loadGraph("custom", filtered, { start: from, end: to });
+    }
+
+    // =========================
+    // ✅ UPDATE CATEGORY BREAKDOWN
+    // =========================
+    if (typeof renderCategoryBreakdown === "function") {
+        renderCategoryBreakdown(groupByCategory(filtered));
+    }
+
+    // =========================
+    // ✅ UPDATE DROPDOWN LABEL
+    // =========================
+    updateCustomPeriodLabel(from, to);
+
+    // =========================
+    // ✅ CLOSE MODAL
+    // =========================
     closePeriod();
 }
+
 function loadBudgetOptions() {
 
     let select = document.getElementById("budgetSelect");
@@ -2972,7 +3005,7 @@ function enableNotifications() {
 function handleFilter(type) {
 
     if (type === "period") {
-        openPeriod(); // ✅ FIXED
+        openPeriod(); // ✅ OPEN MODAL
         return;
     }
 
@@ -3001,6 +3034,28 @@ function handleFilter(type) {
 
         return true;
     });
-
     loadHistory(filtered);
+}
+function formatDateLabel(dateStr) {
+    let d = new Date(dateStr);
+
+    return d.toLocaleDateString("en-GB", {
+        day: "2-digit",
+        month: "short"
+    });
+}
+
+function updateCustomPeriodLabel(from, to) {
+    const select = document.getElementById("filterType");
+    const option = select.querySelector('option[value="period"]');
+
+    if (from && to) {
+        option.textContent = `Custom Period (${formatDateLabel(from)} → ${formatDateLabel(to)})`;
+    } else if (from) {
+        option.textContent = `Custom Period (${formatDateLabel(from)})`;
+    } else {
+        option.textContent = "Custom Period";
+    }
+
+    select.value = "period"; // keep selected
 }
