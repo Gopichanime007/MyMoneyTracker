@@ -819,19 +819,36 @@ function applySavingsDateFilter() {
     let from = document.getElementById("sFromDate").value;
     let to = document.getElementById("sToDate").value;
 
-    if (!from || !to) {
-        showToast("Select both dates ❗", "warning");
-        return;
-    }
+    let fromDate = from ? new Date(from) : null;
+    let toDate = to ? new Date(to) : null;
 
-    let fromDate = new Date(from);
-    let toDate = new Date(to);
+    // ✅ include full day for "to" date
+    if (toDate) {
+        toDate.setHours(23, 59, 59, 999);
+    }
 
     let data = getSavings();
 
     filteredSavingsData = data.filter(t => {
         let d = new Date(t.date);
-        return d >= fromDate && d <= toDate;
+
+        // Only FROM
+        if (fromDate && !toDate) {
+            return d >= fromDate;
+        }
+
+        // Only TO
+        if (!fromDate && toDate) {
+            return d <= toDate;
+        }
+
+        // BOTH
+        if (fromDate && toDate) {
+            return d >= fromDate && d <= toDate;
+        }
+
+        // NONE → show all
+        return true;
     });
 
     renderSavingsHistory(filteredSavingsData);
