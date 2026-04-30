@@ -543,27 +543,27 @@ function updateUI() {
     if (elIncome) elIncome.innerText = formatCurrency(income);
 }
 
-function handleFilter(type) {
-    let expenses = getExpenses();
-    let now = new Date();
+// function handleFilter(type) {
+//     let expenses = getExpenses();
+//     let now = new Date();
 
-    let filtered = expenses.filter(e => {
-        let d = new Date(e.date);
+//     let filtered = expenses.filter(e => {
+//         let d = new Date(e.date);
 
-        if (type === "today") return d.toDateString() === now.toDateString();
+//         if (type === "today") return d.toDateString() === now.toDateString();
 
-        if (type === "month") {
-            return (
-                d.getMonth() === now.getMonth() &&
-                d.getFullYear() === now.getFullYear()
-            );
-        }
+//         if (type === "month") {
+//             return (
+//                 d.getMonth() === now.getMonth() &&
+//                 d.getFullYear() === now.getFullYear()
+//             );
+//         }
 
-        return true;
-    });
+//         return true;
+//     });
 
-    loadHistory(filtered);
-}
+//     loadHistory(filtered);
+// }
 
 function getSelectedBudgetId() {
     let select = document.getElementById("budgetSelect");
