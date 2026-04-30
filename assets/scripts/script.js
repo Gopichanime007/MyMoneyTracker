@@ -572,20 +572,34 @@ function getSelectedBudgetId() {
 
 
 function applyDateFilter() {
+
     let from = document.getElementById("fromDate").value;
     let to = document.getElementById("toDate").value;
 
-    if (!from || !to) {
-        showToast("Select dates");
-        return;
-    }
+    let expenses = getExpenses();
 
-    let fromDate = new Date(from);
-    let toDate = new Date(to);
-
-    let filtered = getExpenses().filter(e => {
+    let filtered = expenses.filter(e => {
         let d = new Date(e.date);
-        return d >= fromDate && d <= toDate;
+
+        if (from && !to) {
+            return d.toDateString() === new Date(from).toDateString();
+        }
+
+        if (!from && to) {
+            return d <= new Date(to);
+        }
+
+        if (from && to) {
+            let fromDate = new Date(from);
+            let toDate = new Date(to);
+
+            // 🔥 include full day
+            toDate.setHours(23, 59, 59, 999);
+
+            return d >= fromDate && d <= toDate;
+        }
+
+        return true;
     });
 
     loadHistory(filtered);
@@ -2962,4 +2976,39 @@ function toast(msg) {
 
 function enableNotifications() {
     requestNotificationPermission();
+}
+function handleFilter(type) {
+
+    if (type === "period") {
+        openDateModal(); // 🔥 THIS WAS MISSING
+        return;
+    }
+
+    let expenses = getExpenses();
+    let now = new Date();
+
+    let filtered = expenses.filter(e => {
+        let d = new Date(e.date);
+
+        if (type === "today") {
+            return d.toDateString() === now.toDateString();
+        }
+
+        if (type === "month") {
+            return (
+                d.getMonth() === now.getMonth() &&
+                d.getFullYear() === now.getFullYear()
+            );
+        }
+
+        if (type === "week") {
+            let start = new Date();
+            start.setDate(now.getDate() - 7);
+            return d >= start;
+        }
+
+        return true;
+    });
+
+    loadHistory(filtered);
 }
