@@ -1149,27 +1149,61 @@ function closePeriod() {
     document.getElementById("periodModal").style.display = "none";
 }
 // Exports full data backup as JSON
+// function exportDataAsJSON() {
+//     let data = {
+//         expenses: getExpenses(),
+//         budgets: getBudgets(),
+//         savings: getSavings(),
+//         orders: JSON.parse(localStorage.getItem("orders")) || [] // ✅ ADDED
+//     };
+
+//     let blob = new Blob(
+//         [JSON.stringify(data, null, 2)],
+//         { type: "application/json" }
+//     );
+
+//     let url = URL.createObjectURL(blob);
+
+//     let a = document.createElement("a");
+//     a.href = url;
+//     a.download = `money-tracker-backup-${new Date().toISOString().slice(0, 10)}.json`;
+//     a.click();
+
+//     URL.revokeObjectURL(url); // ✅ cleanup
+// }
 function exportDataAsJSON() {
+
     let data = {
-        expenses: getExpenses(),
-        budgets: getBudgets(),
-        savings: getSavings(),
-        orders: JSON.parse(localStorage.getItem("orders")) || [] // ✅ ADDED
+        expenses: getExpenses() || [],
+        budgets: getBudgets() || [],
+        savings: getSavings() || [],
+        orders: JSON.parse(localStorage.getItem("orders")) || []
     };
 
-    let blob = new Blob(
-        [JSON.stringify(data, null, 2)],
-        { type: "application/json" }
-    );
+    try {
+        let json = JSON.stringify(data, null, 2);
 
-    let url = URL.createObjectURL(blob);
+        let blob = new Blob([json], { type: "application/json" });
+        let url = URL.createObjectURL(blob);
 
-    let a = document.createElement("a");
-    a.href = url;
-    a.download = `money-tracker-backup-${new Date().toISOString().slice(0, 10)}.json`;
-    a.click();
+        let a = document.createElement("a");
+        a.href = url;
+        a.download = `money-tracker-backup-${new Date().toISOString().slice(0, 10)}.json`;
 
-    URL.revokeObjectURL(url); // ✅ cleanup
+        // 🔥 IMPORTANT FIXES
+        document.body.appendChild(a);   // ✅ attach to DOM
+        a.click();                      // ✅ trigger download
+        document.body.removeChild(a);   // ✅ cleanup
+
+        // ⏳ Delay revoke (important for some browsers)
+        setTimeout(() => {
+            URL.revokeObjectURL(url);
+        }, 1000);
+
+    } catch (err) {
+        console.error("Export failed:", err);
+        alert("Export failed ❌");
+    }
 }
 // Imports JSON backup into localStorage
 // function importData() {
