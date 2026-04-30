@@ -933,37 +933,35 @@ function applyPeriodFromModal() {
     let from = document.getElementById("startDate").value;
     let to = document.getElementById("endDate").value;
 
-    let filtered = getExpenses().filter(e => {
+    let expenses = getExpenses();
+
+    let filtered = expenses.filter(e => {
         let d = new Date(e.date);
-        return d >= new Date(from) && d <= new Date(to);
+
+        if (from && !to) {
+            return d.toDateString() === new Date(from).toDateString();
+        }
+
+        if (!from && to) {
+            return d <= new Date(to);
+        }
+
+        if (from && to) {
+            let fromDate = new Date(from);
+            let toDate = new Date(to);
+
+            toDate.setHours(23, 59, 59, 999);
+
+            return d >= fromDate && d <= toDate;
+        }
+
+        return true;
     });
 
     loadGraph("custom", filtered, { start: from, end: to });
+    renderCategoryBreakdown(groupByCategory(filtered));
+    closePeriod();
 }
-// function loadBudgetOptions() {
-//     let select = document.getElementById("budgetSelect");
-//     if (!select) return;
-
-//     let budgets = getBudgets();
-
-//     select.innerHTML = "";
-
-//     if (!budgets.length) {
-//         let opt = document.createElement("option");
-//         opt.value = "";
-//         opt.textContent = "No budgets available";
-//         select.appendChild(opt);
-//         return;
-//     }
-
-//     budgets.forEach(b => {
-//         let opt = document.createElement("option");
-//         opt.value = b.budgetId;
-//         opt.textContent = formatBudgetName(b.budgetId);
-//         select.appendChild(opt);
-//     });
-// }
-
 function loadBudgetOptions() {
 
     let select = document.getElementById("budgetSelect");
