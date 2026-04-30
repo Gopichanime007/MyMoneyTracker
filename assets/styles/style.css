@@ -335,6 +335,9 @@ select:focus {
 
   z-index: 9999;
   /* 🔥 VERY IMPORTANT */
+  overflow-y: auto;
+  /* 🔥 allows scrolling */
+  padding: 20px;
 }
 
 .modal-content {
@@ -347,6 +350,9 @@ select:focus {
   max-width: 380px;
 
   z-index: 10000;
+  overflow-y: auto;
+  /* 🔥 allows scrolling */
+  padding: 20px;
 }
 
 /* =========================

@@ -471,6 +471,9 @@ select {
 
   backdrop-filter: blur(4px);
   z-index: 1000;
+  overflow-y: auto;
+  /* 🔥 allows scrolling */
+  padding: 20px;
 }
 
 /* MODAL BOX */
@@ -488,6 +491,9 @@ select {
     0 6px 18px rgba(0, 0, 0, 0.08);
 
   animation: modalFade 0.25s ease;
+  overflow-y: auto;
+  /* 🔥 allows scrolling */
+  padding: 20px;
 }
 
 /* ENTRY ANIMATION */
