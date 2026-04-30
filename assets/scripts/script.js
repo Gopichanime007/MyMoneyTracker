@@ -2980,7 +2980,7 @@ function enableNotifications() {
 function handleFilter(type) {
 
     if (type === "period") {
-        openDateModal(); // 🔥 THIS WAS MISSING
+        openPeriod(); // ✅ FIXED
         return;
     }
 
