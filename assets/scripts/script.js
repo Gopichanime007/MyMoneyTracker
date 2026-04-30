@@ -727,7 +727,7 @@ function downloadPDF() {
 
         doc.setFontSize(11);
         doc.setTextColor(r, g, b);
-        doc.text(`${formatCurrency(value)}`, x + 5, y + 13);
+        doc.text(`${formatCurrencyPDF(value)}`, x + 5, y + 13);
     };
 
     const totalIncome = dataSource.filter(e => e.amount > 0)
@@ -748,12 +748,12 @@ function downloadPDF() {
     // 📊 TABLE HEADER
     // =========================
     const col = {
-        date: 20,
-        type: 45,
-        category: 70,
-        payment: 100,
-        amount: 150,
-        purpose: 170
+        date: 17,
+        type: 47,
+        category: 67,
+        payType: 97,   // 👈 move slightly left
+        amount: 137,    // 👈 move right (important)
+        purpose: 147    // 👈 give space for wrapping
     };
 
     const theme = localStorage.getItem("theme") || "#4caf50";
@@ -768,13 +768,13 @@ function downloadPDF() {
 
     doc.text("Date", col.date, y + 2, { align: "center" });
     doc.text("Type", col.type, y + 2, { align: "center" });
-    doc.text("Category", col.category, y + 2);
 
-    // ✅ SINGLE LINE PayType
-    doc.text("PayType", col.payment, y + 2);
+    doc.text("Category", col.category, y + 2, { align: "left" });
+    doc.text("PayType", col.payType, y + 2, { align: "left" });
 
     doc.text("Amount", col.amount, y + 2, { align: "right" });
-    doc.text("Purpose", col.purpose, y + 2);
+
+    doc.text("Purpose", col.purpose, y + 2, { align: "left" });
 
     y += 9;
 
@@ -813,17 +813,26 @@ function downloadPDF() {
         doc.setTextColor(0);
         doc.text(category, col.category, y);
 
-        doc.text(payment, col.payment, y);
+        doc.text(payment, col.payType, y);
 
         doc.setTextColor(amount < 0 ? 200 : 0, amount < 0 ? 0 : 150, 0);
-        doc.text(formatCurrency(amount), col.amount, y, { align: "right" });
+        doc.text(formatCurrencyPDF(amount), col.amount, y, { align: "right" });
 
         doc.setTextColor(0);
 
-        const splitPurpose = doc.splitTextToSize(purpose, 40);
+        // ✅ Control width for purpose column
+        let maxWidth = 50;   // 👈 reduce from 40 → better fit
+
+        let splitPurpose = doc.splitTextToSize(purpose, maxWidth);
+
+        // ✅ Draw text
         doc.text(splitPurpose, col.purpose, y);
 
-        y += Math.max(9, splitPurpose.length * 5);
+        // ✅ Adjust row height dynamically
+        let lineHeight = 5;
+        let rowHeight = Math.max(9, splitPurpose.length * lineHeight);
+
+        y += rowHeight;
     });
 
     // =========================
@@ -894,11 +903,11 @@ function downloadPDF() {
         }
 
         doc.text(month, mcol.month, y);
-        doc.text(formatCurrency(budget), mcol.budget, y, { align: "right" });
-        doc.text(formatCurrency(spent), mcol.spent, y, { align: "right" });
+        doc.text(formatCurrencyPDF(budget), mcol.budget, y, { align: "right" });
+        doc.text(formatCurrencyPDF(spent), mcol.spent, y, { align: "right" });
 
         doc.setTextColor(remaining < 0 ? 200 : 0, remaining < 0 ? 0 : 150, 0);
-        doc.text(formatCurrency(remaining), mcol.remaining, y, { align: "right" });
+        doc.text(formatCurrencyPDF(remaining), mcol.remaining, y, { align: "right" });
 
         doc.setTextColor(0);
 
@@ -1140,7 +1149,7 @@ function closePeriod() {
     document.getElementById("periodModal").style.display = "none";
 }
 // Exports full data backup as JSON
-function exportDataAsPDF() {
+function exportDataAsJSON() {
     let data = {
         expenses: getExpenses(),
         budgets: getBudgets(),
@@ -2798,210 +2807,210 @@ function injectGlobalFooter() {
     document.querySelector(".app")?.appendChild(footer);
 }
 
-// =========================
-// 🔔 CONFIG
-// =========================
-const NOTIF_KEY = "notificationsEnabled";
-const CHECK_INTERVAL = 15000; // 15 sec
-const INSIGHT_INTERVAL = 3600000; // 1 hour
+// // =========================
+// // 🔔 CONFIG
+// // =========================
+// const NOTIF_KEY = "notificationsEnabled";
+// const CHECK_INTERVAL = 15000; // 15 sec
+// const INSIGHT_INTERVAL = 3600000; // 1 hour
 
-let lastAlertTime = 0;
-let lastUsageLevel = 0;
+// let lastAlertTime = 0;
+// let lastUsageLevel = 0;
 
-// =========================
-// 🔐 PERMISSION
-// =========================
-async function requestNotificationPermission() {
-    if (!("Notification" in window)) return;
+// // =========================
+// // 🔐 PERMISSION
+// // =========================
+// async function requestNotificationPermission() {
+//     if (!("Notification" in window)) return;
 
-    try {
-        const permission = await Notification.requestPermission();
-        console.log("🔐 Permission:", permission);
-        updateNotificationStatus();
-    } catch (err) {
-        console.error("Permission Error:", err);
-    }
-}
+//     try {
+//         const permission = await Notification.requestPermission();
+//         console.log("🔐 Permission:", permission);
+//         updateNotificationStatus();
+//     } catch (err) {
+//         console.error("Permission Error:", err);
+//     }
+// }
 
-// =========================
-// 📩 UNIVERSAL NOTIFY
-// =========================
-function notify(title, body) {
-    try {
-        // 📱 Android bridge (if exists)
-        if (window.Android && typeof Android.showNotification === "function") {
-            Android.showNotification(title, body);
-            return;
-        }
+// // =========================
+// // 📩 UNIVERSAL NOTIFY
+// // =========================
+// function notify(title, body) {
+//     try {
+//         // 📱 Android bridge (if exists)
+//         if (window.Android && typeof Android.showNotification === "function") {
+//             Android.showNotification(title, body);
+//             return;
+//         }
 
-        // 🌐 Browser notification
-        if ("Notification" in window && Notification.permission === "granted") {
-            new Notification(title, { body });
-            return;
-        }
+//         // 🌐 Browser notification
+//         if ("Notification" in window && Notification.permission === "granted") {
+//             new Notification(title, { body });
+//             return;
+//         }
 
-        // 🔄 fallback
-        toast(`${title} - ${body}`);
+//         // 🔄 fallback
+//         toast(`${title} - ${body}`);
 
-    } catch (e) {
-        console.error("Notify error:", e);
-        toast(body);
-    }
-}
+//     } catch (e) {
+//         console.error("Notify error:", e);
+//         toast(body);
+//     }
+// }
 
-// =========================
-// 📊 BUDGET ALERT ENGINE
-// =========================
-function checkBudgetUsage() {
-    const expenses = JSON.parse(localStorage.getItem("expenses")) || [];
-    const budgets = JSON.parse(localStorage.getItem("budgets")) || [];
+// // =========================
+// // 📊 BUDGET ALERT ENGINE
+// // =========================
+// function checkBudgetUsage() {
+//     const expenses = JSON.parse(localStorage.getItem("expenses")) || [];
+//     const budgets = JSON.parse(localStorage.getItem("budgets")) || [];
 
-    if (!budgets.length) return;
+//     if (!budgets.length) return;
 
-    const totalSpent = expenses.reduce((sum, e) =>
-        sum + (e.amount < 0 ? Math.abs(e.amount) : 0), 0);
+//     const totalSpent = expenses.reduce((sum, e) =>
+//         sum + (e.amount < 0 ? Math.abs(e.amount) : 0), 0);
 
-    const totalBudget = budgets.reduce((sum, b) =>
-        sum + (b.totalAllocated || 0), 0);
+//     const totalBudget = budgets.reduce((sum, b) =>
+//         sum + (b.totalAllocated || 0), 0);
 
-    if (!totalBudget) return;
+//     if (!totalBudget) return;
 
-    const usage = totalSpent / totalBudget;
+//     const usage = totalSpent / totalBudget;
 
-    // 🔥 Trigger only on crossing threshold
-    if (usage > 0.8 && lastUsageLevel <= 0.8) {
-        notify("⚠️ Budget Alert", `You crossed 80% usage`);
-    }
+//     // 🔥 Trigger only on crossing threshold
+//     if (usage > 0.8 && lastUsageLevel <= 0.8) {
+//         notify("⚠️ Budget Alert", `You crossed 80% usage`);
+//     }
 
-    lastUsageLevel = usage;
-}
+//     lastUsageLevel = usage;
+// }
 
-// =========================
-// 💡 SMART INSIGHT ENGINE
-// =========================
-function generateInsight() {
-    const expenses = JSON.parse(localStorage.getItem("expenses")) || [];
+// // =========================
+// // 💡 SMART INSIGHT ENGINE
+// // =========================
+// function generateInsight() {
+//     const expenses = JSON.parse(localStorage.getItem("expenses")) || [];
 
-    if (!expenses.length) {
-        return "Start tracking your expenses to unlock insights 📊";
-    }
+//     if (!expenses.length) {
+//         return "Start tracking your expenses to unlock insights 📊";
+//     }
 
-    const total = expenses.reduce((s, e) => s + Math.abs(e.amount), 0);
+//     const total = expenses.reduce((s, e) => s + Math.abs(e.amount), 0);
 
-    const today = new Date().toISOString().split("T")[0];
-    const todaySpent = expenses
-        .filter(e => e.date === today)
-        .reduce((s, e) => s + Math.abs(e.amount), 0);
+//     const today = new Date().toISOString().split("T")[0];
+//     const todaySpent = expenses
+//         .filter(e => e.date === today)
+//         .reduce((s, e) => s + Math.abs(e.amount), 0);
 
-    const insights = [
-        "💡 You're building a strong habit. Keep going!",
-        "📉 Cutting one small expense daily saves big monthly",
-        `💰 Total tracked spending: ₹${total}`,
-        `📅 Today you spent ₹${todaySpent}`,
-        "🎯 Try a 'No Spend Day' challenge today",
-        "📊 Review your top category and optimize it",
-        "⚡ Smart move: Track every rupee, even small ones",
-        "🧠 Awareness = Control. You're improving already",
-        "📈 Consistency beats motivation",
-        "🔍 Look for one expense you can eliminate today"
-    ];
+//     const insights = [
+//         "💡 You're building a strong habit. Keep going!",
+//         "📉 Cutting one small expense daily saves big monthly",
+//         `💰 Total tracked spending: ₹${total}`,
+//         `📅 Today you spent ₹${todaySpent}`,
+//         "🎯 Try a 'No Spend Day' challenge today",
+//         "📊 Review your top category and optimize it",
+//         "⚡ Smart move: Track every rupee, even small ones",
+//         "🧠 Awareness = Control. You're improving already",
+//         "📈 Consistency beats motivation",
+//         "🔍 Look for one expense you can eliminate today"
+//     ];
 
-    return insights[Math.floor(Math.random() * insights.length)];
-}
+//     return insights[Math.floor(Math.random() * insights.length)];
+// }
 
-// =========================
-// ⏱️ HOURLY INSIGHT ENGINE
-// =========================
-function startInsights() {
-    setInterval(() => {
-        const enabled = localStorage.getItem(NOTIF_KEY) !== "false";
-        if (!enabled) return;
+// // =========================
+// // ⏱️ HOURLY INSIGHT ENGINE
+// // =========================
+// function startInsights() {
+//     setInterval(() => {
+//         const enabled = localStorage.getItem(NOTIF_KEY) !== "false";
+//         if (!enabled) return;
 
-        notify("💡 Smart Insight", generateInsight());
+//         notify("💡 Smart Insight", generateInsight());
 
-    }, INSIGHT_INTERVAL);
-}
+//     }, INSIGHT_INTERVAL);
+// }
 
-// =========================
-// 🔘 TOGGLE CONTROL
-// =========================
-function toggleNotifications() {
-    let enabled = localStorage.getItem(NOTIF_KEY) !== "false";
+// // =========================
+// // 🔘 TOGGLE CONTROL
+// // =========================
+// function toggleNotifications() {
+//     let enabled = localStorage.getItem(NOTIF_KEY) !== "false";
 
-    enabled = !enabled;
-    localStorage.setItem(NOTIF_KEY, enabled);
+//     enabled = !enabled;
+//     localStorage.setItem(NOTIF_KEY, enabled);
 
-    updateToggleButton();
+//     updateToggleButton();
 
-    toast(enabled ? "Notifications ON 🔔" : "Notifications OFF ⛔");
-}
+//     toast(enabled ? "Notifications ON 🔔" : "Notifications OFF ⛔");
+// }
 
-function updateToggleButton() {
-    const btn = document.getElementById("notifToggleBtn");
-    if (!btn) return;
+// function updateToggleButton() {
+//     const btn = document.getElementById("notifToggleBtn");
+//     if (!btn) return;
 
-    const enabled = localStorage.getItem(NOTIF_KEY) !== "false";
-    btn.innerText = enabled ? "Stop Notifications" : "Start Notifications";
-}
+//     const enabled = localStorage.getItem(NOTIF_KEY) !== "false";
+//     btn.innerText = enabled ? "Stop Notifications" : "Start Notifications";
+// }
 
-// =========================
-// 📊 STATUS UI
-// =========================
-function updateNotificationStatus() {
-    const el = document.getElementById("notifStatus");
-    if (!el) return;
+// // =========================
+// // 📊 STATUS UI
+// // =========================
+// function updateNotificationStatus() {
+//     const el = document.getElementById("notifStatus");
+//     if (!el) return;
 
-    if (!("Notification" in window)) {
-        el.innerText = "Status: Not supported ❌";
-        return;
-    }
+//     if (!("Notification" in window)) {
+//         el.innerText = "Status: Not supported ❌";
+//         return;
+//     }
 
-    el.innerText = "Status: " + Notification.permission;
-}
+//     el.innerText = "Status: " + Notification.permission;
+// }
 
-// =========================
-// 🧪 TEST
-// =========================
-function testNotification() {
-    notify("🧪 Test Notification", "Everything working perfectly 🎉");
-}
+// // =========================
+// // 🧪 TEST
+// // =========================
+// function testNotification() {
+//     notify("🧪 Test Notification", "Everything working perfectly 🎉");
+// }
 
-// =========================
-// 🎨 TOAST (fallback)
-// =========================
-function toast(msg) {
-    const div = document.createElement("div");
-    div.innerText = msg;
-    div.style = `
-        position:fixed;
-        bottom:20px;
-        left:50%;
-        transform:translateX(-50%);
-        background:#333;
-        color:#fff;
-        padding:10px 15px;
-        border-radius:8px;
-        z-index:9999;
-    `;
-    document.body.appendChild(div);
-    setTimeout(() => div.remove(), 3000);
-}
+// // =========================
+// // 🎨 TOAST (fallback)
+// // =========================
+// function toast(msg) {
+//     const div = document.createElement("div");
+//     div.innerText = msg;
+//     div.style = `
+//         position:fixed;
+//         bottom:20px;
+//         left:50%;
+//         transform:translateX(-50%);
+//         background:#333;
+//         color:#fff;
+//         padding:10px 15px;
+//         border-radius:8px;
+//         z-index:9999;
+//     `;
+//     document.body.appendChild(div);
+//     setTimeout(() => div.remove(), 3000);
+// }
 
-// =========================
-// 🚀 INIT
-// =========================
-(function initNotificationSystem() {
-    requestNotificationPermission();
-    updateNotificationStatus();
-    updateToggleButton();
+// // =========================
+// // 🚀 INIT
+// // =========================
+// (function initNotificationSystem() {
+//     requestNotificationPermission();
+//     updateNotificationStatus();
+//     updateToggleButton();
 
-    setInterval(checkBudgetUsage, CHECK_INTERVAL);
-    startInsights();
-})();
+//     setInterval(checkBudgetUsage, CHECK_INTERVAL);
+//     startInsights();
+// })();
 
-function enableNotifications() {
-    requestNotificationPermission();
-}
+// function enableNotifications() {
+//     requestNotificationPermission();
+// }
 function handleFilter(type) {
 
     if (type === "period") {
@@ -3058,4 +3067,135 @@ function updateCustomPeriodLabel(from, to) {
     }
 
     select.value = "period"; // keep selected
+}
+
+function exportDataAsExcel() {
+
+    let data = {
+        expenses: getExpenses() || [],
+        budgets: getBudgets() || [],
+        savings: getSavings() || [],
+        orders: JSON.parse(localStorage.getItem("orders")) || []
+    };
+
+    // =========================
+    // 🧠 HELPER: Normalize Order ID
+    // =========================
+    function normalizeOrderId(id) {
+        let str = String(id || "");
+        return str.startsWith("order_") ? str : "order_" + str;
+    }
+
+    // =========================
+    // 📦 CREATE WORKBOOK
+    // =========================
+    let wb = XLSX.utils.book_new();
+
+    // =========================
+    // 📄 SHEET 1: EXPENSES
+    // =========================
+    let expSheet = XLSX.utils.json_to_sheet(
+        data.expenses.map(e => ({
+            ...e,
+            sourceId: e.sourceId ? String(e.sourceId) : ""
+        }))
+    );
+    XLSX.utils.book_append_sheet(wb, expSheet, "Expenses");
+
+    // =========================
+    // 📄 SHEET 2: BUDGETS
+    // =========================
+    let budSheet = XLSX.utils.json_to_sheet(
+        data.budgets.map(b => ({
+            ...b,
+            id: b.id ? String(b.id) : ""
+        }))
+    );
+    XLSX.utils.book_append_sheet(wb, budSheet, "Budgets");
+
+    // =========================
+    // 📄 SHEET 3: SAVINGS
+    // =========================
+    let savSheet = XLSX.utils.json_to_sheet(
+        data.savings.map(s => ({
+            ...s,
+            id: s.id ? String(s.id) : "",
+            sourceId: s.sourceId ? String(s.sourceId) : ""
+        }))
+    );
+    XLSX.utils.book_append_sheet(wb, savSheet, "Savings");
+
+    // =========================
+    // 📄 SHEET 4: ORDERS
+    // =========================
+    let ordersSheetData = data.orders.map(o => ({
+        orderId: normalizeOrderId(o.id),
+
+        subtotal: Number(o.subtotal) || 0,
+        gst: Number(o.gst) || 0,
+        total: Number(o.total) || 0,
+
+        sourceName: o.sourceName || "",
+        sourceType: o.sourceType || "",
+        paymentType: o.paymentType || "",
+
+        date: o.date || ""
+    }));
+
+    let ordersSheet = XLSX.utils.json_to_sheet(ordersSheetData);
+    XLSX.utils.book_append_sheet(wb, ordersSheet, "Orders");
+
+    // =========================
+    // 📄 SHEET 5: ORDER ITEMS
+    // =========================
+    let orderItems = [];
+
+    data.orders.forEach(o => {
+        let orderId = normalizeOrderId(o.id);
+
+        (o.items || []).forEach(i => {
+            orderItems.push({
+                orderId: orderId,
+
+                itemName: i.name || "",
+                qty: Number(i.qty) || 0,
+                price: Number(i.price) || 0,
+                itemTotal: Number(i.total) || 0
+            });
+        });
+    });
+
+    let itemsSheet = XLSX.utils.json_to_sheet(orderItems);
+    XLSX.utils.book_append_sheet(wb, itemsSheet, "Order Items");
+
+    // =========================
+    // 💾 DOWNLOAD FILE
+    // =========================
+    XLSX.writeFile(
+        wb,
+        `money-tracker-${new Date().toISOString().slice(0, 10)}.xlsx`
+    );
+}
+
+function openBackupOptions() {
+    document.getElementById("backupModal").style.display = "flex";
+}
+
+function closeBackupModal() {
+    document.getElementById("backupModal").style.display = "none";
+}
+
+function toggleCategory() {
+    openCategoryModal(); // your existing function
+
+    let arrow = document.getElementById("catArrow");
+
+    arrow.textContent = arrow.textContent === ">" ? "⌄" : ">";
+}
+
+function formatCurrencyPDF(amount) {
+    let code = getCurrencyCode();
+    let converted = convertFromBase(amount);
+
+    return `${code}. ${converted.toFixed(2)}`;
 }

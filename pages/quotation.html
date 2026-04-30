@@ -6,6 +6,7 @@
   <title>Quotation</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
+  <link rel="stylesheet" href="../assets/styles/style.css">
   <link rel="stylesheet" href="../assets/styles/quotation.css">
 </head>
 
@@ -55,9 +56,9 @@
 
       <!-- TOTAL -->
       <div class="summary">
-        <p>Subtotal: ₹<span id="qSubtotal">0</span></p>
-        <p>GST: ₹<span id="qGSTAmount">0</span></p>
-        <h3>Total: ₹<span id="qFinalTotal">0</span></h3>
+        <p>Subtotal: <span id="qSubtotal">0</span></p>
+        <p>GST: <span id="qGSTAmount">0</span></p>
+        <h3>Total: <span id="qFinalTotal">0</span></h3>
       </div>
 
       <!-- ACTION -->
@@ -85,7 +86,7 @@
 
         <div class="form-field">
           <label>Price</label>
-          <input type="number" id="mPrice" placeholder="₹ Price">
+          <input type="number" id="mPrice" placeholder="Price">
         </div>
 
         <div class="form-field">
@@ -152,7 +153,7 @@
       <input type="number" id="cValue" placeholder="Value">
 
       <select id="cMode">
-        <option value="fixed">Fixed ₹</option>
+        <option value="fixed" id="fixedCurrencyOption">Fixed</option>
         <option value="percent">Percentage %</option>
       </select>
       <label>Apply To</label>

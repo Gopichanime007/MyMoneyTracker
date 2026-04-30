@@ -713,3 +713,15 @@ button {
 .btn:active {
   transform: scale(0.96);
 }
+
+.clickable-header {
+  cursor: pointer;
+  font-weight: 600;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.arrow {
+  font-size: 14px;
+}

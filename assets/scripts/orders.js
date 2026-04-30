@@ -37,7 +37,7 @@ function renderOrders() {
     const itemsHTML = (order.items || []).map(i => `
       <div class="item-row">
         <span>${i.name || "-"}</span>
-        <span>${i.qty || 0} × ₹${i.price || 0}</span>
+        <span>${i.qty || 0} × ${formatCurrency(i.price || 0)}</span>
       </div>
     `).join("");
 
@@ -45,7 +45,7 @@ function renderOrders() {
       <div class="order-header" onclick="toggleOrder('${order.id}')">
 
         <div>
-          <strong>₹${order.total || 0}</strong>
+          <strong>${formatCurrency(order.total || 0)}</strong>
           <small>${date}</small>
         </div>
 

@@ -28,11 +28,11 @@ function renderOrder() {
 
     div.innerHTML = `
       <span>${i.name}</span>
-      <span>₹${i.price}</span>
+      <span>${formatCurrency(i.price)}</span>
       <span>${i.qty}</span>
       <span>${i.source}</span>
       <span>${i.link ? `<a href="${i.link}" target="_blank">🔗</a>` : "-"}</span>
-      <span>₹${i.total}</span>
+      <span>${formatCurrency(i.total)}</span>
     `;
 
     container.appendChild(div);
@@ -51,9 +51,9 @@ function renderOrder() {
 // 🧮 UPDATE TOTALS UI
 // =========================
 function updateTotals(subtotal, gst, total) {
-  document.getElementById("oSubtotal").innerText = subtotal;
-  document.getElementById("oGSTAmount").innerText = gst;
-  document.getElementById("oFinalTotal").innerText = total;
+  document.getElementById("oSubtotal").innerText = formatCurrency(subtotal);
+  document.getElementById("oGSTAmount").innerText = formatCurrency(gst);
+  document.getElementById("oFinalTotal").innerText = formatCurrency(total);
 }
 
 
@@ -77,32 +77,15 @@ async function completePurchase() {
     return;
   }
 
-  let selectedSourceId = Number(selectedOption.value);
+  let selectedSourceId = String(selectedOption.value);
   let sourceType = selectedOption.dataset.type;
   let paymentType = document.getElementById("oPaymentType").value;
-
-  let budgetId = null;
-
-  if (sourceType === "budget") {
-    let budgets = JSON.parse(localStorage.getItem("budgets")) || [];
-
-    let selectedBudget = budgets.find(
-      b => Number(b.id) === Number(selectedSourceId)
-    );
-
-    if (selectedBudget) {
-      budgetId = selectedBudget.budgetId;
-    }
-  }
 
   if (!paymentType) {
     alert("Select payment type ❗");
     return;
   }
 
-  // =========================
-  // 🧠 GET LEDGER SUMMARY
-  // =========================
   let summary = getLedgerSummary(selectedSourceId, sourceType);
 
   if (!summary) {
@@ -113,15 +96,19 @@ async function completePurchase() {
   let total = Number(data.total) || 0;
 
   // =========================
-  // 🚨 BALANCE VALIDATION
+  // 💰 BALANCE CHECK
   // =========================
   if (summary.remaining < total) {
-    alert(`❌ Not enough balance!\nAvailable: ₹${summary.remaining}\nNeeded: ₹${total}`);
+    alert(
+      `❌ Not enough balance!\n` +
+      `Available: ${formatCurrency(summary.remaining)}\n` +
+      `Needed: ${formatCurrency(total)}`
+    );
     return;
   }
 
   // =========================
-  // 🧠 DAILY LIMIT CHECK
+  // 📅 DAILY LIMIT CHECK
   // =========================
   let dailyLimit = getDailyLimit ? getDailyLimit() : 0;
 
@@ -132,33 +119,27 @@ async function completePurchase() {
   let todaySpent = expenses
     .filter(e =>
       new Date(e.date).toDateString() === today &&
-      e.amount < 0
+      e.type === "expense"
     )
     .reduce((sum, e) => sum + Math.abs(e.amount), 0);
 
   if (dailyLimit > 0 && (todaySpent + total > dailyLimit)) {
 
-    let confirmMsg = `
-⚠️ Daily limit exceeded!
-
-Limit: ₹${dailyLimit}
-Spent today: ₹${todaySpent}
-This purchase: ₹${total}
-
-After purchase: ₹${todaySpent + total}
-
-Do you still want to proceed?
-    `;
-
-    let proceed = confirm(confirmMsg);
+    let proceed = confirm(
+      `⚠️ Daily limit exceeded!\n\n` +
+      `Limit: ${formatCurrency(dailyLimit)}\n` +
+      `Spent today: ${formatCurrency(todaySpent)}\n` +
+      `This purchase: ${formatCurrency(total)}\n\n` +
+      `Continue?`
+    );
 
     if (!proceed) return;
   }
 
   // =========================
-  // ⏳ OPTIONAL DELAY (ANTI-IMPULSE)
+  // ⏳ DELAY (ANTI-IMPULSE)
   // =========================
-  await new Promise(r => setTimeout(r, 1500));
+  await new Promise(r => setTimeout(r, 1000));
 
   let purpose = data.items.map(i => i.name).join(", ");
 
@@ -166,7 +147,7 @@ Do you still want to proceed?
   // 💸 SAVE EXPENSE
   // =========================
   expenses.push({
-    id: Date.now(),
+    id: "order_" + Date.now(),
     amount: -Math.abs(total),
     type: "expense",
     purpose: "Purchase of " + purpose,
@@ -174,7 +155,6 @@ Do you still want to proceed?
     sourceId: selectedSourceId,
     sourceName: summary.name,
     sourceType: sourceType,
-    budgetId: budgetId,
 
     paymentType: paymentType,
     date: new Date().toISOString()
@@ -188,7 +168,7 @@ Do you still want to proceed?
   let orders = JSON.parse(localStorage.getItem("orders") || "[]");
 
   orders.push({
-    id: Date.now(),
+    id: "order_" + Date.now(),
     items: data.items,
     subtotal: data.subtotal,
     gst: data.gstAmount,
@@ -197,7 +177,6 @@ Do you still want to proceed?
     sourceId: selectedSourceId,
     sourceName: summary.name,
     sourceType: sourceType,
-    budgetId: budgetId,
 
     paymentType: paymentType,
     date: new Date().toISOString()
@@ -206,14 +185,14 @@ Do you still want to proceed?
   localStorage.setItem("orders", JSON.stringify(orders));
 
   // =========================
-  // 🟢 IF SAVINGS → PUSH ENTRY
+  // 🟢 IF SAVINGS → TRACK
   // =========================
   if (sourceType === "savings") {
 
     let savings = JSON.parse(localStorage.getItem("savingsTransactions")) || [];
 
     savings.push({
-      id: Date.now(),
+      id: "order_" + Date.now(),
       type: "expense",
       amount: -Math.abs(total),
       note: summary.name,
@@ -226,7 +205,7 @@ Do you still want to proceed?
   }
 
   // =========================
-  // 🧹 CLEAN
+  // 🧹 CLEANUP
   // =========================
   localStorage.removeItem("quotationData");
   localStorage.removeItem("quotationItems");
@@ -274,7 +253,7 @@ function loadSourceOptions() {
 
     sources.forEach(s => {
       let option = document.createElement("option");
-      option.value = s.id;
+      option.value = String(s.id);
       option.textContent = s.note || "Savings";
       option.dataset.type = "savings";
       select.appendChild(option);
@@ -288,7 +267,7 @@ function loadSourceOptions() {
 
     budgets.forEach(b => {
       let option = document.createElement("option");
-      option.value = b.id;
+      option.value = String(b.id);
       option.textContent = `${b.name || "Budget"} (${b.monthKey})`;
       option.dataset.type = "budget";
       select.appendChild(option);
@@ -310,7 +289,7 @@ function renderSourcePreview() {
     return;
   }
 
-  let sourceId = Number(selectedOption.value);
+  let sourceId = String(selectedOption.value);
   let type = selectedOption.dataset.type;
 
   // =========================
@@ -326,11 +305,11 @@ function renderSourcePreview() {
     }
 
     preview.innerHTML = `
-      <strong>${summary.name}</strong><br>
-      💰 Total: ₹${summary.total.toLocaleString("en-IN")}<br>
-      📉 Used: ₹${summary.used.toLocaleString("en-IN")}<br>
-      🟢 Remaining: ₹${summary.remaining.toLocaleString("en-IN")}
-    `;
+  <strong>${summary.name}</strong><br>
+  💰 Total: ${formatCurrency(summary.total)}<br>
+  📉 Used: ${formatCurrency(summary.used)}<br>
+  🟢 Remaining: ${formatCurrency(summary.remaining)}
+`;
   }
 
   // =========================
@@ -412,24 +391,32 @@ function getLedgerSummary(sourceId, type) {
   let expenses = JSON.parse(localStorage.getItem("expenses")) || [];
   let budgets = JSON.parse(localStorage.getItem("budgets")) || [];
 
+  //sourceId = Number(sourceId);
+
   // =========================
   // 🟢 SAVINGS
   // =========================
   if (type === "savings") {
 
-    let root = savings.find(t => Number(t.id) === Number(sourceId) && t.type === "income");
+    let root = savings.find(t =>
+      String(t.id) === String(sourceId) && t.type === "income"
+    );
     if (!root) return null;
 
-    let linked = savings.filter(t => Number(t.sourceId) === Number(sourceId));
+    let linked = savings.filter(t =>
+      String(t.sourceId) === String(sourceId)
+    );
 
-    let income = root.amount;
+    let income = Number(root.amount) || 0;
 
     let used = linked.reduce((sum, t) => {
-      return t.amount < 0 ? sum + Math.abs(t.amount) : sum;
+      if (t.type === "expense") return sum + Math.abs(t.amount);
+      if (t.type === "refund") return sum - Math.abs(t.amount);
+      return sum;
     }, 0);
 
     return {
-      name: root.note || "Savings",
+      name: root.note || root.entity || "Savings",
       total: income,
       used,
       remaining: income - used,
@@ -442,18 +429,27 @@ function getLedgerSummary(sourceId, type) {
   // =========================
   if (type === "budget") {
 
-    let budget = budgets.find(b => Number(b.id) === Number(sourceId));
+    let budget = budgets.find(b => String(b.id) === String(sourceId));
     if (!budget) return null;
 
+    let totalAllocated = Number(budget.totalAllocated) || 0;
+
     let used = expenses
-      .filter(e => e.budgetId === budget.budgetId)
-      .reduce((sum, e) => sum + Math.abs(e.amount), 0);
+      .filter(e =>
+        String(e.sourceId) === String(sourceId) &&
+        e.sourceType === "budget"
+      )
+      .reduce((sum, e) => {
+        if (e.type === "expense") return sum + Math.abs(e.amount);
+        if (e.type === "refund") return sum - Math.abs(e.amount);
+        return sum;
+      }, 0);
 
     return {
       name: budget.name || budget.note || "Budget",
-      total: budget.totalAllocated || 0,
+      total: totalAllocated,
       used,
-      remaining: (budget.totalAllocated || 0) - used,
+      remaining: totalAllocated - used,
       entries: []
     };
   }

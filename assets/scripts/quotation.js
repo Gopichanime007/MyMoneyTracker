@@ -175,13 +175,13 @@ function renderQuotation() {
 
     div.innerHTML = `
   <span>${i.name}</span>
-  <span>₹${i.price}</span>
+  <span>${formatCurrency(i.price)}</span>
   <span>${i.qty}</span>
   <span>${i.source}</span>
   <span>
     ${i.link ? `<button onclick="window.open('${i.link}')">View</button>` : "-"}
   </span>
-  <span>₹${i.total}</span>
+  <span>${formatCurrency(i.total)}</span>
   <span>
     <button onclick="deleteItem(${i.id})">❌</button>
   </span>
@@ -192,6 +192,7 @@ function renderQuotation() {
 
   renderCharges();
   updateTotals();
+  updateCurrencyUI();
 }
 
 
@@ -267,7 +268,7 @@ function renderCharges() {
         </span>
 
         <span class="charge-amount">
-          ₹${Math.round(amount)}
+          ${formatCurrency(Math.round(amount))}
         </span>
 
         <button onclick="deleteCharge(${c.id})" class="delete-btn">❌</button>
@@ -316,9 +317,9 @@ function updateTotals() {
 
   let finalTotal = subtotal + gstAmount + delivery - discount;
 
-  document.getElementById("qSubtotal").innerText = Math.round(subtotal);
-  document.getElementById("qGSTAmount").innerText = Math.round(gstAmount);
-  document.getElementById("qFinalTotal").innerText = Math.round(finalTotal);
+  document.getElementById("qSubtotal").innerText = formatCurrency(Math.round(subtotal));
+  document.getElementById("qGSTAmount").innerText = formatCurrency(Math.round(gstAmount));
+  document.getElementById("qFinalTotal").innerText = formatCurrency(Math.round(finalTotal));
 }
 
 
@@ -330,13 +331,34 @@ function convertToOrder() {
     alert("Add items first ❗");
     return;
   }
+  let subtotal = quotationItems.reduce((sum, i) => sum + i.total, 0);
+
+  let gstAmount = 0;
+  let delivery = 0;
+  let discount = 0;
+
+  quotationCharges.forEach(c => {
+    let baseAmount = c.appliesTo === "all"
+      ? subtotal
+      : (quotationItems.find(i => i.id == c.appliesTo)?.total || 0);
+
+    let amount = c.mode === "percent"
+      ? (baseAmount * c.value) / 100
+      : c.value;
+
+    if (c.type === "gst") gstAmount += amount;
+    if (c.type === "delivery") delivery += amount;
+    if (c.type === "discount") discount += amount;
+  });
+
+  let finalTotal = subtotal + gstAmount + delivery - discount;
 
   let data = {
     items: quotationItems,
     charges: quotationCharges,
-    subtotal: document.getElementById("qSubtotal").innerText,
-    gstAmount: document.getElementById("qGSTAmount").innerText,
-    total: document.getElementById("qFinalTotal").innerText
+    subtotal: subtotal,        // ✅ NUMBER
+    gstAmount: gstAmount,      // ✅ NUMBER
+    total: finalTotal          // ✅ NUMBER
   };
 
   localStorage.setItem("quotationData", JSON.stringify(data));
@@ -419,5 +441,12 @@ function handleSourceChange(val) {
     input.focus();
   } else {
     input.style.display = "none";
+  }
+} function updateCurrencyUI() {
+  let symbol = getCurrency();
+
+  let fixedOption = document.getElementById("fixedCurrencyOption");
+  if (fixedOption) {
+    fixedOption.textContent = `Fixed ${symbol}`;
   }
 }

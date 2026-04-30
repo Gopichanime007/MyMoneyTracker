@@ -16,6 +16,7 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 </head>
 
@@ -252,7 +253,9 @@
         <input type="text" id="newCategory" placeholder="New category">
         <button class="primary" onclick="addCategory()">Add</button>
 
-        <h4 onclick="openCategoryModal()" style="cursor:pointer;">Your Categories ⬇️</h4>
+        <h4 class="clickable-header" onclick="toggleCategory()">
+          Your Categories <span id="catArrow">></span>
+        </h4>
 
         <!-- Modal -->
         <div id="categoryModal" class="modal">
@@ -266,7 +269,7 @@
         <!-- Backup -->
         <h4>Backup & Restore</h4>
         <div class="btn-group">
-          <button class="primary" onclick="exportDataAsPDF()">📤 Export Data</button>
+          <button class="primary" onclick="openBackupOptions()">📤 Backup</button>
           <button class="secondary" onclick="openImportModal()">📥 Import Data</button>
 
           <!-- <button class="secondary" onclick="runMigration()"> 🔄 Fix Old Data </button> -->
@@ -282,25 +285,25 @@
             </div>
           </div>
         </div>
-        <h4>💸 Loans / Recoveries</h4>
+        <!-- <h4>💸 Loans / Recoveries</h4>
         <div id="loanSummary"></div>
       </div>
-      <!-- <div class="app-signature">
+      <div class="app-signature">
         Developed by <strong>Gopichaninme</strong>
       </div> -->
-      <div class="card" style="margin-top:15px;">
+        <!-- <div class="card" style="margin-top:15px;">
         <h3>🔔 Notifications</h3>
 
         <p id="notifStatus">Status: Checking...</p>
 
-        <div class="notif-actions">
+      <div class="notif-actions">
           <button class="btn btn-enable" onclick="enableNotifications()">Enable</button>
           <button class="btn btn-test" onclick="testNotification()">Test</button>
           <button class="btn btn-toggle" onclick="toggleNotifications()" id="notifToggleBtn">
             Stop
           </button>
         </div>
-      </div>
+      </div> -->
     </section>
 
   </div>
@@ -321,7 +324,31 @@
 
     </div>
   </div>
+  <div id="backupModal" class="modal">
+    <div class="modal-content">
 
+      <h3>Backup & Restore</h3>
+
+      <div class="modal-actions" style="flex-direction:column; gap:10px;">
+
+        <button class="primary" onclick="exportDataAsJSON()">
+          📄 Export JSON
+        </button>
+
+        <button class="primary" onclick="exportDataAsExcel()">
+          📊 Export Excel
+        </button>
+
+        <!-- <button class="secondary" onclick="openImportModal()">
+          📥 Import Data
+        </button> -->
+
+      </div>
+
+      <button class="secondary" onclick="closeBackupModal()">Close</button>
+
+    </div>
+  </div>
   <div id="importModal" class="modal">
     <div class="modal-content">
       <h3>Import Data</h3>

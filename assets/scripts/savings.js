@@ -166,7 +166,8 @@ function addSavings() {
     else if (type === "transfer") {
 
         let person = document.getElementById("sPerson").value;
-        let sourceId = Number(document.getElementById("sourceSelect").value);
+        let sourceId = String(document.getElementById("sourceSelect").value);
+    
 
         if (!sourceId) {
             showToast("Select source ❗", "warning");
@@ -192,7 +193,7 @@ function addSavings() {
     // =========================
     else if (type === "withdraw_budget") {
 
-        let sourceId = Number(document.getElementById("sourceSelect").value);
+        let sourceId = String(document.getElementById("sourceSelect").value);
 
         if (!budgetDate) {
             showToast("Select budget date ❗", "warning");
@@ -422,7 +423,7 @@ function loadSourceOptions() {
 
     sources.forEach(s => {
         let used = data
-            .filter(t => Number(t.sourceId) === s.id)
+            .filter(t => String(t.sourceId) === String(s.id))
             .reduce((sum, t) => sum + Math.abs(t.amount), 0);
 
         let remaining = s.amount - used;
@@ -566,10 +567,10 @@ function showSavingsScreen(id) {
 function getSourceSummary(sourceId) {
     let data = getSavings();
 
-    let income = data.find(t => t.id === Number(sourceId));
+    let income = data.find(t => String(t.id) === String(sourceId));
     if (!income) return null;
 
-    let outgoing = data.filter(t => Number(t.sourceId) === income.id);
+    let outgoing = data.filter(t => String(t.sourceId) === income.id);
 
     let totalOutgoing = outgoing.reduce(
         (sum, t) => t.amount < 0 ? sum + Math.abs(t.amount) : sum,
@@ -589,10 +590,10 @@ function getSourceSummary(sourceId) {
 function renderSourceDetails(sourceId) {
     let data = getSavings();
 
-    let income = data.find(t => t.id === Number(sourceId));
+    let income = data.find(t => String(t.id) === String(sourceId));
     if (!income) return;
 
-    let related = data.filter(t => Number(t.sourceId) === income.id);
+    let related = data.filter(t => String(t.sourceId) === income.id);
 
     // 🔴 USED (only negative)
     let used = related
@@ -708,7 +709,7 @@ function renderIncomeList() {
 
         // 🔥 CALCULATE USED
         let used = data
-            .filter(t => Number(t.sourceId) === i.id && t.amount < 0)
+            .filter(t => String(t.sourceId) === i.id && t.amount < 0)
             .reduce((sum, t) => sum + Math.abs(t.amount), 0);
 
         let remaining = i.amount - used;
