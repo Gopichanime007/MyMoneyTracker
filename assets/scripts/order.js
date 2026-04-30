@@ -60,7 +60,7 @@ function updateTotals(subtotal, gst, total) {
 // =========================
 // ✅ COMPLETE PURCHASE
 // =========================
-function completePurchase() {
+async function completePurchase() {
 
   let data = getQuotationData();
 
@@ -80,7 +80,7 @@ function completePurchase() {
   let selectedSourceId = Number(selectedOption.value);
   let sourceType = selectedOption.dataset.type;
   let paymentType = document.getElementById("oPaymentType").value;
-  // 🔥 GET budgetId (only for budget type)
+
   let budgetId = null;
 
   if (sourceType === "budget") {
@@ -112,19 +112,59 @@ function completePurchase() {
 
   let total = Number(data.total) || 0;
 
-  // 🚨 VALIDATION
+  // =========================
+  // 🚨 BALANCE VALIDATION
+  // =========================
   if (summary.remaining < total) {
     alert(`❌ Not enough balance!\nAvailable: ₹${summary.remaining}\nNeeded: ₹${total}`);
     return;
   }
+
+  // =========================
+  // 🧠 DAILY LIMIT CHECK
+  // =========================
+  let dailyLimit = getDailyLimit ? getDailyLimit() : 0;
+
+  let today = new Date().toDateString();
+
+  let expenses = JSON.parse(localStorage.getItem("expenses") || "[]");
+
+  let todaySpent = expenses
+    .filter(e =>
+      new Date(e.date).toDateString() === today &&
+      e.amount < 0
+    )
+    .reduce((sum, e) => sum + Math.abs(e.amount), 0);
+
+  if (dailyLimit > 0 && (todaySpent + total > dailyLimit)) {
+
+    let confirmMsg = `
+⚠️ Daily limit exceeded!
+
+Limit: ₹${dailyLimit}
+Spent today: ₹${todaySpent}
+This purchase: ₹${total}
+
+After purchase: ₹${todaySpent + total}
+
+Do you still want to proceed?
+    `;
+
+    let proceed = confirm(confirmMsg);
+
+    if (!proceed) return;
+  }
+
+  // =========================
+  // ⏳ OPTIONAL DELAY (ANTI-IMPULSE)
+  // =========================
+  await new Promise(r => setTimeout(r, 1500));
 
   let purpose = data.items.map(i => i.name).join(", ");
 
   // =========================
   // 💸 SAVE EXPENSE
   // =========================
-  let expenses = JSON.parse(localStorage.getItem("expenses") || "[]");
-
   expenses.push({
     id: Date.now(),
     amount: -Math.abs(total),

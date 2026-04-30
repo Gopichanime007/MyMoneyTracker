@@ -1650,8 +1650,26 @@ function prepareChartData(dataset) {
 }
 function createDatasets(data) {
 
-    const dailyBudget = getDailyLimit ? getDailyLimit() : 0;
-    const budgetData = data.labels.map(() => dailyBudget);
+    function getFixedDailyBudget() {
+        let budgets = getBudgets();
+        let currentMonth = new Date().toISOString().slice(0, 7);
+
+        let total = budgets
+            .filter(b => b.monthKey === currentMonth)
+            .reduce((sum, b) => sum + (b.totalAllocated || 0), 0);
+
+        let today = new Date();
+        let totalDays = new Date(
+            today.getFullYear(),
+            today.getMonth() + 1,
+            0
+        ).getDate();
+
+        return Math.floor(total / totalDays);
+    }
+
+    const fixedDaily = getFixedDailyBudget();
+    const budgetData = data.labels.map(() => fixedDaily);
 
     return [
         {

@@ -15,11 +15,6 @@ window.addEventListener("load", function () {
 
     let theme = localStorage.getItem("theme") || "#4caf50";
     document.documentElement.style.setProperty("--theme", theme);
-
-    // ✅ GLOBAL FOOTER
-    if (typeof injectGlobalFooter === "function") {
-        injectGlobalFooter();
-    }
 });
 
 /* =========================
