@@ -573,36 +573,54 @@ function getSelectedBudgetId() {
 
 function applyDateFilter() {
 
-    let from = document.getElementById("fromDate").value;
-    let to = document.getElementById("toDate").value;
+    const from = document.getElementById("fromDate").value;
+    const to = document.getElementById("toDate").value;
 
-    let expenses = getExpenses();
+    const expenses = getExpenses();
 
-    let filtered = expenses.filter(e => {
-        let d = new Date(e.date);
+    // 🔥 helper: normalize date → YYYY-MM-DD
+    function normalize(date) {
+        return new Date(date).toISOString().slice(0, 10);
+    }
 
+    const filtered = expenses.filter(e => {
+
+        const d = normalize(e.date);
+
+        // ✅ ONLY FROM → exact day
         if (from && !to) {
-            return d.toDateString() === new Date(from).toDateString();
+            return d === from;
         }
 
+        // ✅ ONLY TO → everything till that day
         if (!from && to) {
-            return d <= new Date(to);
+            return d <= to;
         }
 
+        // ✅ BOTH → range
         if (from && to) {
-            let fromDate = new Date(from);
-            let toDate = new Date(to);
-
-            // 🔥 include full day
-            toDate.setHours(23, 59, 59, 999);
-
-            return d >= fromDate && d <= toDate;
+            return d >= from && d <= to;
         }
 
+        // ✅ NONE → return all
         return true;
     });
 
+    // 🔥 update UI
     loadHistory(filtered);
+
+    // 🔥 optional (if graph exists)
+    if (typeof loadGraph === "function") {
+        loadGraph("custom", filtered, { start: from, end: to });
+    }
+
+    // 🔥 optional (category breakdown)
+    if (typeof renderCategoryBreakdown === "function") {
+        renderCategoryBreakdown(groupByCategory(filtered));
+    }
+
+    // 🔥 debug (remove later)
+    console.log("Filtered count:", filtered.length);
 }
 
 function applyPeriod(type) {
