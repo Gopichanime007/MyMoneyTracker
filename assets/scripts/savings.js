@@ -167,7 +167,7 @@ function addSavings() {
 
         let person = document.getElementById("sPerson").value;
         let sourceId = String(document.getElementById("sourceSelect").value);
-    
+
 
         if (!sourceId) {
             showToast("Select source ❗", "warning");
@@ -402,14 +402,66 @@ function getAvailableSources() {
     return getSavings().filter(t => t.type === "income");
 }
 // Loads income sources into dropdown with remaining balance
-function loadSourceOptions() {
+// function loadSourceOptions() {
+//     let select = document.getElementById("sourceSelect");
+//     if (!select) return;
+
+//     let data = getSavings();
+//     let sources = data.filter(t => t.type === "income");
+
+//     select.innerHTML = "";
+
+//     if (!sources.length) {
+//         let option = document.createElement("option");
+//         option.value = "";
+//         option.textContent = "No sources available";
+//         select.appendChild(option);
+//         return;
+//     }
+
+//     select.innerHTML = "<option value=''>Select Source</option>";
+
+//     sources.forEach(s => {
+//         let used = data
+//             .filter(t => String(t.sourceId) === String(s.id))
+//             .reduce((sum, t) => sum + Math.abs(t.amount), 0);
+
+//         let remaining = s.amount - used;
+
+//         if (remaining <= 0) return;
+
+//         let option = document.createElement("option");
+//         option.value = s.id;
+//         option.textContent = `${s.note || "Income"} (₹${remaining} left)`;
+
+//         select.appendChild(option);
+//     });
+// }
+function loadSourceOptions({
+    showAll = true,          // 🔥 all months or current month
+    includeUsed = true       // 🔥 show fully used sources or not
+} = {}) {
+
     let select = document.getElementById("sourceSelect");
     if (!select) return;
 
     let data = getSavings();
+
+    let currentMonth = new Date().toISOString().slice(0, 7);
+
+    // =========================
+    // 📦 GET SOURCES
+    // =========================
     let sources = data.filter(t => t.type === "income");
 
-    select.innerHTML = "";
+    // =========================
+    // 📅 FILTER BY MONTH (OPTIONAL)
+    // =========================
+    if (!showAll) {
+        sources = sources.filter(s => s.monthKey === currentMonth);
+    }
+
+    select.innerHTML = "<option value=''>Select Source</option>";
 
     if (!sources.length) {
         let option = document.createElement("option");
@@ -419,25 +471,34 @@ function loadSourceOptions() {
         return;
     }
 
-    select.innerHTML = "<option value=''>Select Source</option>";
-
+    // =========================
+    // 🔄 BUILD OPTIONS
+    // =========================
     sources.forEach(s => {
+
         let used = data
             .filter(t => String(t.sourceId) === String(s.id))
             .reduce((sum, t) => sum + Math.abs(t.amount), 0);
 
         let remaining = s.amount - used;
 
-        if (remaining <= 0) return;
+        // ❌ skip used sources if needed
+        if (!includeUsed && remaining <= 0) return;
 
         let option = document.createElement("option");
         option.value = s.id;
-        option.textContent = `${s.note || "Income"} (₹${remaining} left)`;
+
+        let monthLabel = formatMonth(s.monthKey);
+
+        let status = remaining <= 0
+            ? "Used"
+            : `₹${remaining} left`;
+
+        option.textContent = `${s.note || "Income"} (${monthLabel}) — ${status}`;
 
         select.appendChild(option);
     });
 }
-
 // =========================
 // 🔄 RESET FORM
 // =========================
