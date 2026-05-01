@@ -1186,23 +1186,36 @@ function exportDataAsJSON() {
         let blob = new Blob([json], { type: "application/json" });
         let url = URL.createObjectURL(blob);
 
+        // 🔥 MOBILE SAFE DOWNLOAD
         let a = document.createElement("a");
         a.href = url;
         a.download = `money-tracker-backup-${new Date().toISOString().slice(0, 10)}.json`;
 
-        // 🔥 IMPORTANT FIXES
-        document.body.appendChild(a);   // ✅ attach to DOM
-        a.click();                      // ✅ trigger download
-        document.body.removeChild(a);   // ✅ cleanup
+        document.body.appendChild(a);
 
-        // ⏳ Delay revoke (important for some browsers)
+        // 👉 TRY DOWNLOAD
+        a.click();
+
+        // 👉 CLEANUP
         setTimeout(() => {
+            document.body.removeChild(a);
             URL.revokeObjectURL(url);
         }, 1000);
 
+        // =========================
+        // 🔥 FALLBACK (IMPORTANT)
+        // =========================
+        setTimeout(() => {
+            // If download didn't happen → open manually
+            window.open(url, "_blank");
+        }, 500);
+
     } catch (err) {
         console.error("Export failed:", err);
-        alert("Export failed ❌");
+
+        // 🔥 FINAL FALLBACK (copy)
+        let json = JSON.stringify(data, null, 2);
+        prompt("Copy your backup manually:", json);
     }
 }
 // Imports JSON backup into localStorage
