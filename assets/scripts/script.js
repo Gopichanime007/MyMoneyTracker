@@ -1034,7 +1034,7 @@ function loadBudgetOptions() {
 
     select.innerHTML = "";
 
-    let filtered = budgets.filter(b => b.monthKey === currentMonth);
+    let filtered = budgets;
 
     if (!filtered.length) {
         let opt = document.createElement("option");
