@@ -320,7 +320,7 @@ function loadHistory(list = getExpenses()) {
         container.innerHTML = "";
 
         if (!list.length) {
-            container.innerHTML = `<p style="text-align:center; color:#888;">No data</p>`;
+            container.innerHTML = `<p style="text-align:center; color:#888;">No data yet 📭</p>`;
             return;
         }
 
@@ -329,18 +329,22 @@ function loadHistory(list = getExpenses()) {
             let div = document.createElement("div");
             div.className = "expense-item";
 
+            let category = e.category || e.type || "Entry";
+            let purpose = e.purpose ? ` • ${e.purpose}` : "";
+            let title = category + purpose;
             let amount = formatCurrency(e.amount);
-            let date = new Date(e.date).toLocaleDateString("en-IN", {
-                day: "numeric",
-                month: "short"
-            });
-
             let color = e.amount < 0 ? "#ff5252" : "#4caf50";
+
+            let meta = `${e.paymentType || e.entity || e.sourceName || "-"}`;
+            let date = new Date(e.date).toLocaleString("en-IN");
 
             div.innerHTML = `
                 <div class="expense-left">
-                    <strong>${e.category}</strong><br>
-                    <small style="color:#888;">${date}</small>
+                    <strong>${title}</strong><br>
+
+                    <small style="color:#888;">
+                        ${meta} • ${date}
+                    </small>
                 </div>
 
                 <div style="text-align:right;">
@@ -348,9 +352,15 @@ function loadHistory(list = getExpenses()) {
                         ${amount}
                     </div>
 
-                    <button class="delete-btn" onclick="deleteExpenseUI(${index})">
-                        ✕
-                    </button>
+                    <button class="delete-btn" onclick="deleteExpenseUI(${index})" title="Delete">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M3 6h18"></path>
+        <path d="M8 6V4h8v2"></path>
+        <path d="M19 6l-1 14H6L5 6"></path>
+        <path d="M10 11v6"></path>
+        <path d="M14 11v6"></path>
+    </svg>
+</button>
                 </div>
             `;
 
@@ -361,7 +371,6 @@ function loadHistory(list = getExpenses()) {
         console.error("History error:", err);
     }
 }
-
 
 
 // ❌ UI Delete Wrapper

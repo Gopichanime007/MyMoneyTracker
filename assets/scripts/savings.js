@@ -572,31 +572,68 @@ function handleSavingsFilter(type) {
     let now = new Date();
 
     // 🆕 CUSTOM PERIOD
-    if (type === "period") {
-        let modal = document.getElementById("savingsDateModal");
-        if (modal) modal.style.display = "flex";
-        return;
-    }
+    let period = typeof getActiveBudgetPeriod === "function"
+        ? getActiveBudgetPeriod()
+        : null;
 
+    let start = period ? new Date(period.start) : null;
+    let end = period ? new Date(period.end || new Date()) : null;
+
+    // 🔥 TODAY
     if (type === "today") {
-        filteredSavingsData = data.filter(t =>
-            new Date(t.date).toDateString() === now.toDateString()
-        );
-    }
-    else if (type === "week") {
-        let start = new Date();
-        start.setDate(now.getDate() - 7);
 
-        filteredSavingsData = data.filter(t =>
-            new Date(t.date) >= start
-        );
-    }
-    else if (type === "month") {
+        let today = new Date();
+        today.setHours(0, 0, 0, 0);
+
+        let endOfDay = new Date(today);
+        endOfDay.setHours(23, 59, 59, 999);
+
         filteredSavingsData = data.filter(t => {
             let d = new Date(t.date);
-            return d.getMonth() === now.getMonth() &&
-                d.getFullYear() === now.getFullYear();
+
+            if (period && (d < start || d > end)) return false;
+
+            return d >= today && d <= endOfDay;
         });
+    }
+    else if (type === "week") {
+        let weekStart = new Date(now);
+        weekStart.setDate(now.getDate() - 6);
+        weekStart.setHours(0, 0, 0, 0);
+
+        let weekEnd = new Date(now);
+        weekEnd.setHours(23, 59, 59, 999);
+
+        if (period) {
+            if (weekStart < start) weekStart = new Date(start);
+            if (weekEnd > end) weekEnd = new Date(end);
+        }
+
+        filteredSavingsData = data.filter(t => {
+            let d = new Date(t.date);
+            return d >= weekStart && d <= weekEnd;
+        });
+    }
+    else if (type === "month") {
+        if (period) {
+
+            let s = new Date(start);
+            let e = new Date(end);
+
+            s.setHours(0, 0, 0, 0);
+            e.setHours(23, 59, 59, 999);
+
+            filteredSavingsData = data.filter(t => {
+                let d = new Date(t.date);
+                return d >= s && d <= e;
+            });
+
+        } else {
+
+            let currentMonth = new Date().toISOString().slice(0, 7);
+
+            filteredSavingsData = data.filter(t => t.monthKey === currentMonth);
+        }
     }
     else {
         filteredSavingsData = data;
