@@ -26,30 +26,49 @@ const exchangeRates = {
 // 🧠 USER SELECTED CURRENCY
 // =========================
 
+
 function getCurrencyCode() {
-    return localStorage.getItem("currencyCode") || "INR";
+    try {
+        let code = localStorage.getItem("currencyCode") || "INR";
+        return code;
+    } catch (err) {
+        return "INR";
+    }
 }
 
 function setCurrencyCode(code) {
-    localStorage.setItem("currencyCode", code);
+    try {
+        localStorage.setItem("currencyCode", code);
+    } catch (err) {
+    }
 }
-
 // =========================
 // 🔄 CONVERSION
 // =========================
 
 // Convert from BASE (INR) → Selected Currency
 function convertFromBase(amount) {
-    let code = getCurrencyCode();
-    let rate = exchangeRates[code] || 1;
-    return amount * rate;
+    try {
+        let code = getCurrencyCode();
+        let rate = exchangeRates[code] || 1;
+        let result = amount * rate;
+
+        return result;
+    } catch (err) {
+        return amount;
+    }
 }
 
 // Convert from Selected Currency → BASE (INR)
 function convertToBase(amount) {
-    let code = getCurrencyCode();
-    let rate = exchangeRates[code] || 1;
-    return amount / rate;
+    try {
+        let code = getCurrencyCode();
+        let rate = exchangeRates[code] || 1;
+        let result = amount / rate;
+        return result;
+    } catch (err) {
+        return amount;
+    }
 }
 
 // =========================
@@ -57,42 +76,114 @@ function convertToBase(amount) {
 // =========================
 
 function formatCurrency(amount) {
-    let code = getCurrencyCode();
-    let symbol = currencySymbols[code] || "₹";
+    try {
+        let code = getCurrencyCode();
+        let symbol = currencySymbols[code] || "₹";
 
-    let converted = convertFromBase(amount);
+        let converted = convertFromBase(amount);
 
-    return symbol + " " + converted.toFixed(2);
+        let result = symbol + " " + converted.toFixed(2);
+
+        return result;
+
+    } catch (err) {
+        return amount;
+    }
 }
+
+
 function changeCurrency(code) {
-    setCurrencyCode(code);
 
-    // 🔄 Reload everything
-    loadDashboard();
-    loadHistory();
-    loadBudgetScreen();
-    renderBudgetEntries();
-    renderCategoryBreakdown(groupByCategory(getExpenses()));
+    try {
+        setCurrencyCode(code);
+
+        loadDashboard();
+        loadHistory();
+        loadBudgetScreen();
+        renderBudgetEntries();
+        renderCategoryBreakdown(groupByCategory(getExpenses()));
+
+
+    } catch (err) {
+    }
 }
+
 /* =========================
    📦 STORAGE LAYER
 ========================= */
 
 function getExpenses() {
-    return JSON.parse(localStorage.getItem("expenses")) || [];
+
+    try {
+        let data = JSON.parse(localStorage.getItem("expenses")) || [];
+        return data;
+    } catch (err) {
+        return [];
+    }
+}
+function calculateSpentForPeriod(start, end) {
+
+    let expenses = JSON.parse(localStorage.getItem("expenses")) || [];
+
+    let startTime = new Date(start).getTime();
+    let endTime = end
+        ? new Date(end).getTime()
+        : new Date().getTime();
+
+    return expenses
+        .filter(e => {
+            let d = new Date(e.date).getTime();
+            return d >= startTime && d <= endTime && e.amount < 0;
+        })
+        .reduce((sum, e) => sum + Math.abs(e.amount), 0);
 }
 
+function getBudgetForPeriod(start, end) {
+
+    let budgets = JSON.parse(localStorage.getItem("budgets")) || [];
+
+    // build periodKey
+    let s = new Date(start).toISOString().slice(0, 10);
+    let e = end
+        ? new Date(end).toISOString().slice(0, 10)
+        : new Date().toISOString().slice(0, 10);
+
+    let periodKey = `${s}_to_${e}`;
+
+    // find matching budgets
+    let filtered = budgets.filter(b => b.periodKey === periodKey);
+
+    if (!filtered.length) return null;
+
+    return {
+        totalAllocated: filtered.reduce((sum, b) => sum + (b.totalAllocated || 0), 0)
+    };
+}
 function saveExpenses(data) {
-    localStorage.setItem("expenses", JSON.stringify(data));
+
+    try {
+        localStorage.setItem("expenses", JSON.stringify(data));
+    } catch (err) {
+    }
 }
 
 function getBudgets() {
-    return JSON.parse(localStorage.getItem("budgets")) || [];
+
+    try {
+        let data = JSON.parse(localStorage.getItem("budgets")) || [];
+        return data;
+    } catch (err) {
+        return [];
+    }
+}
+function saveBudgets(data) {
+
+    try {
+        localStorage.setItem("budgets", JSON.stringify(data));
+    } catch (err) {
+    }
 }
 
-function saveBudgets(data) {
-    localStorage.setItem("budgets", JSON.stringify(data));
-}
 
 function getSavings() {
     return JSON.parse(localStorage.getItem("savingsTransactions")) || [];
@@ -108,55 +199,57 @@ function saveSavings(data) {
 ========================= */
 
 // ➕ Add Expense
+
 function addExpense(obj) {
-    let expenses = getExpenses();
 
-    // ✅ FIX TYPE SAFELY
-    let type = obj.type || (obj.amount < 0 ? "expense" : "income");
+    try {
+        let expenses = getExpenses();
 
-    // ✅ USER CONTROLLED CATEGORY (NO AUTO MAGIC)
-    let category = obj.category || "Others";
-    let baseAmount = convertToBase(obj.amount);
+        let type = obj.type || (obj.amount < 0 ? "expense" : "income");
+        let category = obj.category || "Others";
 
-    expenses.push({
-        id: Date.now(),
+        let baseAmount = convertToBase(obj.amount);
 
-        type: type,
+        let newEntry = {
+            id: Date.now(),
+            type,
+            amount: baseAmount,
+            category,
+            purpose: obj.purpose || "",
+            budgetId: obj.budgetId || null,
+            entity: obj.entity || obj.paymentType || "Cash",
+            date: obj.date ? new Date(obj.date).toISOString() : new Date().toISOString(),
+            monthKey: (obj.date || new Date().toISOString()).slice(0, 7),
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString()
+        };
 
-        amount: baseAmount,
+        expenses.push(newEntry);
+        saveExpenses(expenses);
 
-        category: category,   // ✅ correct
 
-        purpose: obj.purpose || "",
-        budgetId: obj.budgetId || null,
-        entity: obj.entity || obj.paymentType || "Cash",
-
-        date: obj.date
-            ? new Date(obj.date).toISOString()
-            : new Date().toISOString(),
-
-        monthKey: (obj.date || new Date().toISOString()).slice(0, 7),
-
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
-    });
-
-    saveExpenses(expenses);
-    updateProgressBar();
-    loadBudgetOptions();
+    } catch (err) {
+    }
 }
 
 
 // ❌ Delete Expense
 function deleteExpenseByIndex(index) {
-    let expenses = getExpenses();
 
-    if (index < 0 || index >= expenses.length) return;
+    try {
+        let expenses = getExpenses();
 
-    expenses.splice(index, 1);
+        if (index < 0 || index >= expenses.length) return;
 
-    saveExpenses(expenses);
+        expenses.splice(index, 1);
+
+        saveExpenses(expenses);
+
+
+    } catch (err) {
+    }
 }
+
 
 
 // 📊 Budget Balance
@@ -181,38 +274,34 @@ function getBudgetBalance(budgetId) {
    🔔 SIMPLE TOAST (NO SPAM)
 ========================= */
 
+
 let toastTimeout;
 
 function showToast(msg) {
-    clearTimeout(toastTimeout);
 
-    let el = document.getElementById("toast");
+    try {
+        clearTimeout(toastTimeout);
 
-    if (!el) {
-        el = document.createElement("div");
-        el.id = "toast";
+        let el = document.getElementById("toast");
 
-        el.style.position = "fixed";
-        el.style.bottom = "20px";
-        el.style.left = "50%";
-        el.style.transform = "translateX(-50%)";
-        el.style.background = "#333";
-        el.style.color = "#fff";
-        el.style.padding = "10px 16px";
-        el.style.borderRadius = "10px";
-        el.style.fontSize = "14px";
-        el.style.zIndex = "9999";
+        if (!el) {
+            el = document.createElement("div");
+            el.id = "toast";
+            document.body.appendChild(el);
+        }
 
-        document.body.appendChild(el);
+        el.innerText = msg;
+        el.style.display = "block";
+
+        toastTimeout = setTimeout(() => {
+            el.style.display = "none";
+        }, 1500);
+
+
+    } catch (err) {
     }
-
-    el.innerText = msg;
-    el.style.display = "block";
-
-    toastTimeout = setTimeout(() => {
-        el.style.display = "none";
-    }, 1500);
 }
+
 
 
 /* =========================
@@ -221,49 +310,71 @@ function showToast(msg) {
 
 // 📜 Load History
 function loadHistory(list = getExpenses()) {
-    currentFilteredExpenses = list;
-    let container = document.getElementById("historyList");
-    if (!container) return;
 
-    container.innerHTML = "";
+    try {
+        currentFilteredExpenses = list;
 
-    if (!list.length) {
-        container.innerHTML = `<p style="color:#888;">No data yet 📭</p>`;
-        return;
+        let container = document.getElementById("historyList");
+        if (!container) return;
+
+        container.innerHTML = "";
+
+        if (!list.length) {
+            container.innerHTML = `<p style="text-align:center; color:#888;">No data</p>`;
+            return;
+        }
+
+        list.forEach((e, index) => {
+
+            let div = document.createElement("div");
+            div.className = "expense-item";
+
+            let amount = formatCurrency(e.amount);
+            let date = new Date(e.date).toLocaleDateString("en-IN", {
+                day: "numeric",
+                month: "short"
+            });
+
+            let color = e.amount < 0 ? "#ff5252" : "#4caf50";
+
+            div.innerHTML = `
+                <div class="expense-left">
+                    <strong>${e.category}</strong><br>
+                    <small style="color:#888;">${date}</small>
+                </div>
+
+                <div style="text-align:right;">
+                    <div style="color:${color}; font-weight:600;">
+                        ${amount}
+                    </div>
+
+                    <button class="delete-btn" onclick="deleteExpenseUI(${index})">
+                        ✕
+                    </button>
+                </div>
+            `;
+
+            container.appendChild(div);
+        });
+
+    } catch (err) {
+        console.error("History error:", err);
     }
-
-    list.forEach((e, index) => {
-        let div = document.createElement("div");
-        div.className = "expense-item";
-
-        div.innerHTML = `
-    <div class="expense-left">
-      <strong>${e.category || e.purpose || e.type || "Entry"}</strong> -
-      <span style="color:${e.amount < 0 ? 'red' : 'green'}">
-        ${formatCurrency(e.amount)}
-      </span><br>
-
-      <small>
-        ${e.paymentType || e.entity || e.sourceName || "-"} • 
-        ${new Date(e.date).toLocaleString("en-IN")}
-      </small>
-    </div>
-
-    <button class="delete-btn" onclick="deleteExpenseUI(${index})">
-      🗑
-    </button>
-`;
-
-        container.appendChild(div);
-    });
 }
+
 
 
 // ❌ UI Delete Wrapper
 function deleteExpenseUI(index) {
-    deleteExpenseByIndex(index);
-    loadHistory();
-    showToast("Deleted");
+
+    try {
+        deleteExpenseByIndex(index);
+        loadHistory();
+        showToast("Deleted");
+
+
+    } catch (err) {
+    }
 }
 
 
@@ -350,12 +461,9 @@ function resetForm() {
 
 // ✅ ALWAYS RUN FOOTER (independent)
 window.addEventListener("load", function () {
-    injectGlobalFooter();
-});
-
-// ✅ MAIN LOGIC (safe execution)
-window.addEventListener("load", function () {
     try {
+        injectGlobalFooter();
+
         loadHistory();
         initCategories();
         loadTheme();
@@ -367,7 +475,6 @@ window.addEventListener("load", function () {
 
         let today = new Date().toISOString().split("T")[0];
         let dateInput = document.getElementById("expenseDate");
-
         if (dateInput) dateInput.value = today;
 
         renderCategoryList();
@@ -377,10 +484,8 @@ window.addEventListener("load", function () {
         renderCategoryBreakdown();
 
     } catch (e) {
-        console.error("Init crash:", e);
     }
 });
-
 function showScreen(id) {
     const screens = document.querySelectorAll(".screen");
     const buttons = document.querySelectorAll(".nav button");
@@ -545,7 +650,7 @@ function updateUI() {
 
 // function handleFilter(type) {
 //     let expenses = getExpenses();
-//     let now = new Date();
+//let now = new Date(); // ✅ rename
 
 //     let filtered = expenses.filter(e => {
 //         let d = new Date(e.date);
@@ -620,11 +725,10 @@ function applyDateFilter() {
     }
 
     // 🔥 debug (remove later)
-    console.log("Filtered count:", filtered.length);
 }
 
 function applyPeriod(type) {
-    let now = new Date();
+    let now = new Date(); // ✅ rename
 
     let filtered = getExpenses().filter(e => {
         let d = new Date(e.date);
@@ -634,7 +738,7 @@ function applyPeriod(type) {
         }
 
         if (type === "week") {
-            let start = new Date();
+            let start = new Date(now);
             start.setDate(now.getDate() - 7);
             return d >= start;
         }
@@ -838,6 +942,9 @@ function downloadPDF() {
     // =========================
     // 🟣 BUDGET SUMMARY
     // =========================
+    // =========================
+    // 🟣 BUDGET SUMMARY (PERIOD BASED)
+    // =========================
     y += 8;
 
     doc.setDrawColor(200);
@@ -847,7 +954,7 @@ function downloadPDF() {
 
     doc.setFontSize(11);
     doc.setFont(undefined, "bold");
-    doc.text("Budget Summary (Monthly)", 14, y);
+    doc.text("Budget Summary (Active Period)", 14, y);
 
     y += 5;
     doc.setFontSize(8);
@@ -855,64 +962,35 @@ function downloadPDF() {
     doc.text("Overview of budget vs spending", 14, y);
 
     doc.setTextColor(0);
-
     y += 5;
 
-    const mcol = {
-        month: 14,
-        budget: 90,
-        spent: 130,
-        remaining: 170
-    };
+    // 🔥 PERIOD-BASED TOTALS
+    let totalBudget = getTotalBudget();
+
+    let totalSpent = dataSource
+        .filter(e => e.amount < 0)
+        .reduce((sum, e) => sum + Math.abs(e.amount), 0);
+
+    let remaining = totalBudget - totalSpent;
 
     doc.setFont(undefined, "bold");
-    doc.setFontSize(8);
+    doc.setFontSize(9);
 
-    doc.text("Month", mcol.month, y);
-    doc.text("Budget", mcol.budget, y, { align: "right" });
-    doc.text("Spent", mcol.spent, y, { align: "right" });
-    doc.text("Remaining", mcol.remaining, y, { align: "right" });
+    doc.text("Total Budget:", 14, y);
+    doc.text(formatCurrencyPDF(totalBudget), 90, y);
 
-    y += 5;
-    doc.setFont(undefined, "normal");
+    y += 6;
 
-    const monthMap = {};
+    doc.text("Total Spent:", 14, y);
+    doc.text(formatCurrencyPDF(totalSpent), 90, y);
 
-    dataSource.forEach(e => {
-        let key = new Date(e.date).toISOString().slice(0, 7);
-        if (!monthMap[key]) monthMap[key] = 0;
+    y += 6;
 
-        if (e.amount < 0) {
-            monthMap[key] += Math.abs(e.amount);
-        }
-    });
+    doc.setTextColor(remaining < 0 ? 200 : 0, remaining < 0 ? 0 : 150, 0);
+    doc.text("Remaining:", 14, y);
+    doc.text(formatCurrencyPDF(remaining), 90, y);
 
-    Object.keys(monthMap).forEach((month, index) => {
-        let spent = monthMap[month];
-        let budget = getTotalBudget(month);
-        let remaining = budget - spent;
-
-        if (y > 280) {
-            doc.addPage();
-            y = 20;
-        }
-
-        if (index % 2 === 0) {
-            doc.setFillColor(248, 248, 248);
-            doc.rect(10, y - 3, 190, 7, "F");
-        }
-
-        doc.text(month, mcol.month, y);
-        doc.text(formatCurrencyPDF(budget), mcol.budget, y, { align: "right" });
-        doc.text(formatCurrencyPDF(spent), mcol.spent, y, { align: "right" });
-
-        doc.setTextColor(remaining < 0 ? 200 : 0, remaining < 0 ? 0 : 150, 0);
-        doc.text(formatCurrencyPDF(remaining), mcol.remaining, y, { align: "right" });
-
-        doc.setTextColor(0);
-
-        y += 7;
-    });
+    doc.setTextColor(0);
 
     // =========================
     // 💾 SAVE
@@ -938,8 +1016,9 @@ function hexToRgb(hex) {
 function getTotalBudget(monthKey) {
     let budgets = getBudgets();
 
-    return budgets
-        .filter(b => b.monthKey === monthKey)
+    let filtered = filterBudgetsByActivePeriod(budgets);
+
+    return filtered
         .reduce((sum, b) => sum + (b.totalAllocated || 0), 0);
 }
 
@@ -988,7 +1067,6 @@ function applyPeriodFromModal() {
         return true;
     });
 
-    console.log("Filtered:", filtered.length);
 
     // =========================
     // ✅ UPDATE HISTORY
@@ -1030,11 +1108,9 @@ function loadBudgetOptions() {
     let budgets = getBudgets();
     let expenses = getExpenses();
 
-    let currentMonth = new Date().toISOString().slice(0, 7);
-
     select.innerHTML = "";
 
-    let filtered = budgets;
+    let filtered = filterBudgetsByActivePeriod(budgets);
 
     if (!filtered.length) {
         let opt = document.createElement("option");
@@ -1046,6 +1122,7 @@ function loadBudgetOptions() {
 
     filtered.forEach(b => {
 
+        // 🔥 Calculate spent per budget
         let spent = expenses
             .filter(e => e.budgetId === b.budgetId && e.amount < 0)
             .reduce((sum, e) => sum + Math.abs(e.amount), 0);
@@ -1053,23 +1130,61 @@ function loadBudgetOptions() {
         let remaining = (b.totalAllocated || 0) - spent;
 
         let opt = document.createElement("option");
-
         opt.value = b.budgetId;
 
-        let label = formatMonth(b.monthKey);
+        // 🔥 FIX: Proper label using periodKey
+        let label;
+
+        if (b.periodKey) {
+            let [start, end] = b.periodKey.split("_to_");
+
+            label = `${formatDateShort(start)} → ${formatDateShort(end)}`;
+
+        } else if (b.monthKey) {
+
+            label = formatMonth(b.monthKey);
+
+        } else {
+
+            label = "No Date";
+
+        }
 
         opt.textContent = `${label} (${b.entity}) — ${formatCurrency(remaining)} left`;
 
         select.appendChild(opt);
     });
 }
+function formatDateShort(date) {
+    return new Date(date).toLocaleDateString("en-IN", {
+        day: "numeric",
+        month: "short"
+    });
+}
 
-function formatBudgetName(budgetId) {
-    if (!budgetId) return "Unknown";
+function formatBudgetName(budget) {
 
-    let parts = budgetId.split("_");
+    if (!budget) return "Unknown";
 
-    if (parts.length < 3) return budgetId;
+    // 🔥 If full object passed
+    if (typeof budget === "object") {
+
+        if (budget.periodKey) {
+            let [start, end] = budget.periodKey.split("_to_");
+            return `${format(start)} → ${format(end)}`;
+        }
+
+        if (budget.monthKey) {
+            return formatMonth(budget.monthKey);
+        }
+
+        return "No Date";
+    }
+
+    // 🔥 Fallback if only ID passed (legacy)
+    let parts = budget.split("_");
+
+    if (parts.length < 3) return budget;
 
     let part1 = parts[1];
     let part2 = parts[2];
@@ -1104,7 +1219,14 @@ function saveBudget() {
 
     let budgetId = "budget_" + month.replace("-", "_");
 
-    createOrUpdateBudget(budgetId, null, amount, "Manual");
+    createOrUpdateBudget(budgetId, {
+        amount: amount,
+        sourceId: "manual",
+        entity: "Manual",
+        note: "Manual Entry",
+        date: new Date().toISOString(),
+        monthKey: month
+    });
 
     showToast("Budget saved");
 
@@ -1211,7 +1333,6 @@ function exportDataAsJSON() {
         }, 500);
 
     } catch (err) {
-        console.error("Export failed:", err);
 
         // 🔥 FINAL FALLBACK (copy)
         let json = JSON.stringify(data, null, 2);
@@ -1428,16 +1549,19 @@ function loadDashboard() {
 
     let currentMonth = new Date().toISOString().slice(0, 7);
 
-    let totalBudget = budgets
-        .filter(b => b.monthKey === currentMonth)
+    let filteredBudgets = filterBudgetsByActivePeriod(budgets);
+
+    let totalBudget = filteredBudgets
         .reduce((sum, b) => sum + (b.totalAllocated || 0), 0);
 
-    let totalIncome = expenses
-        .filter(e => e.amount > 0 && e.monthKey === currentMonth)
+    let filtered = filterByActivePeriod(expenses);
+
+    let totalIncome = filtered
+        .filter(e => e.amount > 0)
         .reduce((sum, e) => sum + e.amount, 0);
 
-    let totalSpent = expenses
-        .filter(e => e.amount < 0 && e.monthKey === currentMonth)
+    let totalSpent = filtered
+        .filter(e => e.amount < 0)
         .reduce((sum, e) => sum + Math.abs(e.amount), 0);
 
     let net = totalIncome - totalSpent;
@@ -1445,7 +1569,7 @@ function loadDashboard() {
 
     let today = new Date().toDateString();
 
-    let todaySpent = expenses
+    let todaySpent = filtered
         .filter(e =>
             new Date(e.date).toDateString() === today &&
             e.amount < 0
@@ -1467,11 +1591,10 @@ function loadDashboard() {
 function loadBudgetScreen() {
 
     let budgets = getBudgets();
-    let currentMonth = new Date().toISOString().slice(0, 7);
 
-    let budget = budgets.find(b => b.monthKey === currentMonth);
-    let total = budgets
-        .filter(b => b.monthKey === currentMonth)
+    let filtered = filterBudgetsByActivePeriod(budgets);
+
+    let total = filtered
         .reduce((sum, b) => sum + (b.totalAllocated || 0), 0);
 
     let budgetEl = document.getElementById("currentBudget");
@@ -1487,6 +1610,7 @@ function loadBudgetScreen() {
 // =========================
 // Displays all budget entries
 function renderBudgetEntries() {
+
     let budgets = JSON.parse(localStorage.getItem("budgets")) || [];
     let expenses = JSON.parse(localStorage.getItem("expenses")) || [];
     let savings = JSON.parse(localStorage.getItem("savingsTransactions")) || [];
@@ -1501,16 +1625,17 @@ function renderBudgetEntries() {
         return;
     }
 
-    // 🔥 GROUP BY SOURCE + MONTH
+    // 🔥 GROUP BY SOURCE + PERIOD
     let map = {};
 
     budgets.forEach(b => {
-        let key = b.sourceId + "_" + b.monthKey;
+
+        let key = b.sourceId + "_" + (b.periodKey || "no_period");
 
         if (!map[key]) {
             map[key] = {
                 sourceId: b.sourceId,
-                monthKey: b.monthKey,
+                periodKey: b.periodKey,
                 totalAllocated: 0,
                 entity: b.entity
             };
@@ -1523,13 +1648,21 @@ function renderBudgetEntries() {
 
     list.forEach(g => {
 
-        let budgetId = `budget_${g.monthKey}_${g.sourceId}`;
-
+        // 🔥 Use periodKey-based matching
         let used = expenses
-            .filter(e =>
-                e.budgetId === budgetId &&
-                e.type === "expense"
-            )
+            .filter(e => {
+
+                if (!g.periodKey) return false;
+
+                let [start, end] = g.periodKey.split("_to_");
+
+                let d = new Date(e.date).getTime();
+                let s = new Date(start).getTime();
+                let en = new Date(end).getTime();
+
+                return d >= s && d <= en && e.amount < 0;
+
+            })
             .reduce((sum, e) => sum + Math.abs(e.amount), 0);
 
         let remaining = g.totalAllocated - used;
@@ -1537,34 +1670,34 @@ function renderBudgetEntries() {
         let source = savings.find(s => s.id === g.sourceId);
         let name = source ? (source.note || source.entity) : "Budget";
 
-        let monthYear = formatMonth(g.monthKey);
+        // 🔥 Proper label
+        let label = "No Date";
 
-        let statusText = remaining <= 0
-            ? "❌ Exhausted"
-            : `${formatCurrency(remaining)} left`;
-
-        let statusClass = remaining <= 0 ? "red" : "green";
+        if (g.periodKey) {
+            let [start, end] = g.periodKey.split("_to_");
+            label = `${formatDateShort(start)} → ${formatDateShort(end)}`;
+        }
 
         let div = document.createElement("div");
         div.className = "income-card";
 
         div.innerHTML = `
-    <div class="budget-card">
+        <div class="budget-card">
 
-        <div class="budget-left">
-            <div class="budget-title">${name}</div>
-            <div class="budget-sub">${monthYear}</div>
-        </div>
-
-        <div class="budget-right">
-            <div class="budget-amount">${formatCurrency(g.totalAllocated)}</div>
-            <div class="budget-status ${remaining <= 0 ? "exhausted" : "active"}">
-                ${remaining <= 0 ? "Exhausted" : `${formatCurrency(remaining)} left`}
+            <div class="budget-left">
+                <div class="budget-title">${name}</div>
+                <div class="budget-sub">${label}</div>
             </div>
-        </div>
 
-    </div>
-`;
+            <div class="budget-right">
+                <div class="budget-amount">${formatCurrency(g.totalAllocated)}</div>
+                <div class="budget-status ${remaining <= 0 ? "exhausted" : "active"}">
+                    ${remaining <= 0 ? "Exhausted" : `${formatCurrency(remaining)} left`}
+                </div>
+            </div>
+
+        </div>
+        `;
 
         div.style.cursor = "pointer";
         div.onclick = () => openBudgetDetails(g);
@@ -1581,12 +1714,24 @@ function openBudgetDetails(group) {
     let container = document.getElementById("budgetDetailsContainer");
     if (!container) return;
 
-    let budgetId = `budget_${group.monthKey}_${group.sourceId}`;
-
     let source = savings.find(s => s.id === group.sourceId);
     let name = source ? (source.note || source.entity) : "Budget";
 
-    let related = expenses.filter(e => e.budgetId === budgetId);
+    let related = [];
+
+    // 🔥 Filter by period
+    if (group.periodKey) {
+
+        let [start, end] = group.periodKey.split("_to_");
+
+        let s = new Date(start).getTime();
+        let en = new Date(end).getTime();
+
+        related = expenses.filter(e => {
+            let d = new Date(e.date).getTime();
+            return d >= s && d <= en;
+        });
+    }
 
     let used = related
         .filter(e => e.amount < 0)
@@ -1598,15 +1743,21 @@ function openBudgetDetails(group) {
 
     let remaining = group.totalAllocated - used + credited;
 
-    let monthYear = formatMonth(group.monthKey);
+    // 🔥 Proper label
+    let label = "No Date";
 
-    // 🔥 ENTRIES LIST BACK
+    if (group.periodKey) {
+        let [start, end] = group.periodKey.split("_to_");
+        label = `${formatDateShort(start)} → ${formatDateShort(end)}`;
+    }
+
     let entriesHtml = "";
 
     if (!related.length) {
         entriesHtml = "<p>No entries</p>";
     } else {
         related.forEach(e => {
+
             let color = e.amount < 0 ? "#ff5252" : "#4caf50";
 
             entriesHtml += `
@@ -1635,11 +1786,10 @@ function openBudgetDetails(group) {
         box-shadow: 0 8px 20px rgba(0,0,0,0.08);
     ">
 
-        <!-- HEADER -->
         <div style="display:flex; justify-content:space-between; align-items:center;">
             <div>
                 <h3 style="margin:0;">${name}</h3>
-                <small style="color:#666;">${monthYear}</small>
+                <small style="color:#666;">${label}</small>
             </div>
 
             <button onclick="goBackToBudgets()" style="
@@ -1653,7 +1803,6 @@ function openBudgetDetails(group) {
             </button>
         </div>
 
-        <!-- SUMMARY GRID -->
         <div style="margin-top:14px; display:grid; grid-template-columns:1fr 1fr; gap:10px;">
             
             <div style="background:white; padding:10px; border-radius:10px;">
@@ -1680,7 +1829,6 @@ function openBudgetDetails(group) {
 
         <hr style="margin:16px 0;">
 
-        <!-- ENTRIES -->
         <h4>Entries</h4>
 
         ${entriesHtml}
@@ -1704,12 +1852,15 @@ function getDailyLimit() {
 
     let currentMonth = new Date().toISOString().slice(0, 7);
 
-    let budget = budgets.find(b => b.monthKey === currentMonth);
+    let filteredBudgets = filterBudgetsByActivePeriod(budgets);
 
-    let totalBudget = budget ? (budget.totalAllocated || 0) : 0;
+    let totalBudget = filteredBudgets
+        .reduce((sum, b) => sum + (b.totalAllocated || 0), 0);
 
-    let spent = expenses
-        .filter(e => e.monthKey === currentMonth && e.amount < 0)
+    let filteredExpenses = filterByActivePeriod(expenses);
+
+    let spent = filteredExpenses
+        .filter(e => e.amount < 0)
         .reduce((s, e) => s + Math.abs(e.amount), 0);
 
     let remaining = totalBudget - spent;
@@ -1729,8 +1880,197 @@ function getDailyLimit() {
 // 📊 LOAD GRAPH (MERGED VERSION)
 // =========================
 // Shows day/week/month + category breakdown
-let chart;
+// let chart;
 
+// function loadGraph(type = "day", data = null, customRange = null) {
+
+//     const ctx = document.getElementById("myChart");
+//     if (!ctx || !window.Chart) return;
+
+//     if (chart) chart.destroy();
+
+//     const expenses = data || getExpenses();
+//     const now = new Date();
+
+//     const dataset = groupData(expenses, type, now, customRange);
+
+//     const chartData = prepareChartData(dataset);
+//     const datasets = createDatasets(chartData);
+
+//     chart = new Chart(ctx, {
+//         type: "bar",
+//         data: {
+//             labels: chartData.labels,
+//             datasets: datasets
+//         },
+//         options: getChartOptions(type, expenses, dataset, now, customRange)
+//     });
+
+//     // 🔥 Initial Category Breakdown
+//     const filtered = filterDataByType(type, expenses, now, customRange);
+//     renderCategoryBreakdown(groupByCategory(filtered));
+// }
+// function prepareChartData(dataset) {
+//     return {
+//         labels: dataset.map(d => d.label),
+//         expense: dataset.map(d => d.exp),
+//         income: dataset.map(d => d.inc),
+//         total: dataset.map(d => d.inc - d.exp)
+//     };
+// }
+// function createDatasets(data) {
+
+//     function getFixedDailyBudget() {
+//         let budgets = getBudgets();
+//         let currentMonth = new Date().toISOString().slice(0, 7);
+
+//         let filteredBudgets = filterBudgetsByActivePeriod(budgets);
+
+//         let total = filteredBudgets
+//             .reduce((sum, b) => sum + (b.totalAllocated || 0), 0);
+
+//         let today = new Date();
+//         let totalDays = new Date(
+//             today.getFullYear(),
+//             today.getMonth() + 1,
+//             0
+//         ).getDate();
+
+//         return Math.floor(total / totalDays);
+//     }
+
+//     const fixedDaily = getFixedDailyBudget();
+//     const budgetData = data.labels.map(() => fixedDaily);
+
+//     return [
+//         {
+//             label: "Expense",
+//             data: data.expense,
+//             backgroundColor: "rgba(255,99,132,0.7)"
+//         },
+//         {
+//             label: "Income",
+//             data: data.income,
+//             backgroundColor: "rgba(75,192,192,0.7)"
+//         },
+//         {
+//             label: "Total",
+//             data: data.total,
+//             type: "line",
+//             borderColor: "purple",
+//             tension: 0.4
+//         },
+//         {
+//             label: "Budget",
+//             data: budgetData,
+//             type: "line",
+//             borderColor: "orange",
+//             borderDash: [5, 5]
+//         }
+//     ];
+// }
+// function getChartOptions(type, expenses, dataset, now, customRange) {
+
+//     return {
+//         responsive: true,
+//         maintainAspectRatio: false,
+
+//         plugins: {
+//             tooltip: {
+//                 mode: "index",
+//                 intersect: false,
+//                 callbacks: {
+//                     label: function (ctx) {
+//                         return `${ctx.dataset.label}: ${formatCurrency(ctx.raw)}`;
+//                     }
+//                 }
+//             }
+//         },
+
+//         scales: {
+//             x: {
+//                 ticks: {
+//                     maxRotation: 45,
+//                     minRotation: 45
+//                 }
+//             },
+//             y: {
+//                 beginAtZero: true
+//             }
+//         },
+
+//         onClick: function (evt, elements) {
+//             if (!elements.length) return;
+
+//             const index = elements[0].index;
+//             const filtered = handlePointClick(type, index, expenses, dataset, now, customRange);
+
+//             renderCategoryBreakdown(groupByCategory(filtered));
+//         }
+//     };
+// }
+// function handlePointClick(type, index, expenses, dataset, now, customRange) {
+
+//     // ✅ DAY (hour-based)
+//     if (type === "day") {
+//         return expenses.filter(e => {
+//             const d = new Date(e.date);
+//             return d.getHours() === index &&
+//                 d.toDateString() === now.toDateString();
+//         });
+//     }
+
+//     // ✅ RANGE (date-based)
+//     const selected = dataset[index];
+//     if (!selected || !selected.key) return [];
+
+//     return expenses.filter(e => {
+//         const d = new Date(e.date);
+//         const dKey = d.toLocaleDateString("en-CA");
+
+//         return dKey === selected.key;
+//     });
+// }
+// function filterDataByType(type, expenses, now, customRange) {
+
+//     if (type === "day") {
+//         return expenses.filter(e =>
+//             new Date(e.date).toDateString() === now.toDateString()
+//         );
+//     }
+
+//     if (type === "week") {
+//         const start = new Date(now);
+//         start.setDate(now.getDate() - now.getDay());
+
+//         const end = new Date(start);
+//         end.setDate(start.getDate() + 6);
+
+//         return expenses.filter(e => {
+//             const d = new Date(e.date);
+//             return d >= start && d <= end;
+//         });
+//     }
+
+//     if (type === "month") {
+//         return expenses.filter(e => {
+//             const d = new Date(e.date);
+//             return d.getMonth() === now.getMonth();
+//         });
+//     }
+
+//     if (type === "custom" && customRange) {
+//         return expenses.filter(e => {
+//             const d = new Date(e.date);
+//             return d >= new Date(customRange.start) &&
+//                 d <= new Date(customRange.end);
+//         });
+//     }
+
+//     return [];
+// }
+
+let chart;
 function loadGraph(type = "day", data = null, customRange = null) {
 
     const ctx = document.getElementById("myChart");
@@ -1739,12 +2079,11 @@ function loadGraph(type = "day", data = null, customRange = null) {
     if (chart) chart.destroy();
 
     const expenses = data || getExpenses();
-    const now = new Date();
 
-    const dataset = groupData(expenses, type, now, customRange);
+    const dataset = groupData(expenses, type, null, customRange);
 
     const chartData = prepareChartData(dataset);
-    const datasets = createDatasets(chartData);
+    const datasets = createDatasets(chartData, dataset);
 
     chart = new Chart(ctx, {
         type: "bar",
@@ -1752,37 +2091,45 @@ function loadGraph(type = "day", data = null, customRange = null) {
             labels: chartData.labels,
             datasets: datasets
         },
-        options: getChartOptions(type, expenses, dataset, now, customRange)
+        options: getChartOptions(type, expenses, dataset, customRange)
     });
 
-    // 🔥 Initial Category Breakdown
-    const filtered = filterDataByType(type, expenses, now, customRange);
+    const filtered = filterDataByType(type, expenses, customRange);
     renderCategoryBreakdown(groupByCategory(filtered));
 }
+
 function prepareChartData(dataset) {
     return {
         labels: dataset.map(d => d.label),
         expense: dataset.map(d => d.exp),
         income: dataset.map(d => d.inc),
+
+        // 🔥 keep total (for tooltip only)
         total: dataset.map(d => d.inc - d.exp)
     };
 }
-function createDatasets(data) {
+function createDatasets(data, dataset) {
 
     function getFixedDailyBudget() {
+
         let budgets = getBudgets();
-        let currentMonth = new Date().toISOString().slice(0, 7);
 
-        let total = budgets
-            .filter(b => b.monthKey === currentMonth)
-            .reduce((sum, b) => sum + (b.totalAllocated || 0), 0);
+        // 🔥 periodKey based filtering
+        let activeBudgets = filterBudgetsByActivePeriod(budgets);
 
-        let today = new Date();
-        let totalDays = new Date(
-            today.getFullYear(),
-            today.getMonth() + 1,
-            0
-        ).getDate();
+        let total = activeBudgets.reduce((sum, b) => sum + (b.totalAllocated || 0), 0);
+
+        // 🔥 get period days
+        let period = getActiveBudgetPeriod();
+
+        let totalDays = 30;
+
+        if (period) {
+            let s = new Date(period.start);
+            let e = period.end ? new Date(period.end) : new Date();
+
+            totalDays = Math.max(1, Math.floor((e - s) / (1000 * 60 * 60 * 24)) + 1);
+        }
 
         return Math.floor(total / totalDays);
     }
@@ -1801,13 +2148,7 @@ function createDatasets(data) {
             data: data.income,
             backgroundColor: "rgba(75,192,192,0.7)"
         },
-        {
-            label: "Total",
-            data: data.total,
-            type: "line",
-            borderColor: "purple",
-            tension: 0.4
-        },
+        // ❌ REMOVED TOTAL LINE
         {
             label: "Budget",
             data: budgetData,
@@ -1817,528 +2158,229 @@ function createDatasets(data) {
         }
     ];
 }
-function getChartOptions(type, expenses, dataset, now, customRange) {
+
+function getChartOptions(type, expenses, dataset, customRange) {
 
     return {
         responsive: true,
         maintainAspectRatio: false,
 
+        interaction: {
+            mode: "index",
+            intersect: false
+        },
+
         plugins: {
             tooltip: {
-                mode: "index",
-                intersect: false,
+                backgroundColor: "#111",
+                borderColor: "#333",
+                borderWidth: 1,
+                padding: 12,
+                cornerRadius: 10,
+                displayColors: false,
+
                 callbacks: {
-                    label: function (ctx) {
-                        return `${ctx.dataset.label}: ${formatCurrency(ctx.raw)}`;
+
+                    title: function (items) {
+                        return items[0].label;
+                    },
+
+                    label: function () {
+                        return null;
+                    },
+
+                    afterBody: function (items) {
+
+                        if (!items.length) return;
+
+                        let index = items[0].dataIndex;
+                        let point = dataset[index] || {};
+
+                        let expense = point.exp || 0;
+                        let income = point.inc || 0;
+                        let budget = point.budget || 0;
+                        let total = income - expense;
+
+                        let netColor = total >= 0 ? "" : "";
+
+                        return [
+                            `Expense  : ${formatCurrency(expense)}`,
+                            `Income   : ${formatCurrency(income)}`,
+                            `Budget   : ${formatCurrency(budget)}`,
+                            `-----------------------`,
+                            `Net      : ${netColor} ${formatCurrency(total)}`
+                        ];
                     }
+                }
+            },
+
+            legend: {
+                labels: {
+                    color: "#555",
+                    usePointStyle: true
                 }
             }
         },
 
         scales: {
             x: {
+                grid: {
+                    display: true,
+                    color: "rgba(0,0,0,0.08)"
+                },
                 ticks: {
-                    maxRotation: 45,
-                    minRotation: 45
+                    color: "#333",
+                    autoSkip: true,
+                    maxRotation: 90,
+                    minRotation: 90
                 }
             },
+
             y: {
-                beginAtZero: true
+                beginAtZero: true,
+                grid: {
+                    color: "rgba(0,0,0,0.08)"
+                },
+                ticks: {
+                    color: "#333",
+                    callback: function (value) {
+                        return formatCurrency(value);
+                    }
+                }
             }
         },
 
+        animation: {
+            duration: 700,
+            easing: "easeOutQuart"
+        },
+
         onClick: function (evt, elements) {
+
             if (!elements.length) return;
 
             const index = elements[0].index;
-            const filtered = handlePointClick(type, index, expenses, dataset, now, customRange);
+
+            const filtered = handlePointClick(
+                type,
+                index,
+                expenses,
+                dataset,
+                customRange
+            );
 
             renderCategoryBreakdown(groupByCategory(filtered));
         }
     };
 }
-function handlePointClick(type, index, expenses, dataset, now, customRange) {
 
-    // ✅ DAY (hour-based)
+function filterDataByType(type, expenses, customRange) {
+
+    let period = getActiveBudgetPeriod();
+
+    let start, end;
+
+    if (period) {
+        start = new Date(period.start);
+        end = period.end ? new Date(period.end) : new Date();
+    }
+
+    // 🔥 Normalize type
+    type = (type || "").toLowerCase();
+
+    // 🔥 DAY
     if (type === "day") {
+
+        let today = new Date();
+
+        today.setHours(0, 0, 0, 0);
+
+        let endOfDay = new Date(today);
+        endOfDay.setHours(23, 59, 59, 999);
+
         return expenses.filter(e => {
-            const d = new Date(e.date);
-            return d.getHours() === index &&
-                d.toDateString() === now.toDateString();
+            let d = new Date(e.date);
+
+            // 🔥 Respect period if exists
+            if (period) {
+                if (d < start || d > end) return false;
+            }
+
+            return d >= today && d <= endOfDay;
         });
     }
 
-    // ✅ RANGE (date-based)
-    const selected = dataset[index];
-    if (!selected || !selected.key) return [];
-
-    return expenses.filter(e => {
-        const d = new Date(e.date);
-        const dKey = d.toLocaleDateString("en-CA");
-
-        return dKey === selected.key;
-    });
-}
-function filterDataByType(type, expenses, now, customRange) {
-
-    if (type === "day") {
-        return expenses.filter(e =>
-            new Date(e.date).toDateString() === now.toDateString()
-        );
-    }
-
+    // 🔥 WEEK
     if (type === "week") {
-        const start = new Date(now);
-        start.setDate(now.getDate() - now.getDay());
 
-        const end = new Date(start);
-        end.setDate(start.getDate() + 6);
+        let now = new Date(); // ✅ rename
+
+        let weekStart = new Date(now);
+        weekStart.setDate(now.getDate() - 6);
+
+        weekStart.setHours(0, 0, 0, 0);
+
+        let weekEnd = new Date(now);
+        weekEnd.setHours(23, 59, 59, 999);
+
+        // 🔥 Clamp inside period
+        if (period) {
+            if (weekStart < start) weekStart = new Date(start);
+            if (weekEnd > end) weekEnd = new Date(end);
+        }
 
         return expenses.filter(e => {
-            const d = new Date(e.date);
-            return d >= start && d <= end;
+            let d = new Date(e.date);
+            return d >= weekStart && d <= weekEnd;
         });
     }
 
+    // 🔥 MONTH → PERIOD FIRST
     if (type === "month") {
-        return expenses.filter(e => {
-            const d = new Date(e.date);
-            return d.getMonth() === now.getMonth();
-        });
+
+        if (period) {
+
+            let s = new Date(start);
+            let e = new Date(end);
+
+            s.setHours(0, 0, 0, 0);
+            e.setHours(23, 59, 59, 999);
+
+            return expenses.filter(exp => {
+                let d = new Date(exp.date);
+                return d >= s && d <= e;
+            });
+        }
+
+        // fallback → monthKey
+        let currentMonth = new Date().toISOString().slice(0, 7);
+
+        return expenses.filter(e => e.monthKey === currentMonth);
     }
 
+    // 🔥 CUSTOM
     if (type === "custom" && customRange) {
-        return expenses.filter(e => {
-            const d = new Date(e.date);
-            return d >= new Date(customRange.start) &&
-                d <= new Date(customRange.end);
+
+        let s = new Date(customRange.start);
+        let e = new Date(customRange.end);
+
+        s.setHours(0, 0, 0, 0);
+        e.setHours(23, 59, 59, 999);
+
+        return expenses.filter(exp => {
+            let d = new Date(exp.date);
+            return d >= s && d <= e;
         });
     }
 
     return [];
 }
 
-// function loadGraph(type = "day", data = null) {
-
-//     let ctx = document.getElementById("myChart");
-//     if (!ctx || !window.Chart) return;
-
-//     if (chart) chart.destroy();
-
-//     // ✅ USE NEW SYSTEM DATA
-//     let expenses = data || getExpenses();
-
-//     let labels = [], expenseData = [], incomeData = [];
-//     let now = new Date();
-
-//     // =========================
-//     // 📊 DATA BUILD
-//     // =========================
-
-//     if (type === "day") {
-//         for (let i = 0; i < 24; i++) {
-//             labels.push(i + ":00");
-
-//             let exp = 0, inc = 0;
-
-//             expenses.forEach(e => {
-//                 let d = new Date(e.date);
-
-//                 if (
-//                     d.toDateString() === now.toDateString() &&
-//                     d.getHours() === i
-//                 ) {
-//                     e.amount < 0 ? exp += Math.abs(e.amount) : inc += e.amount;
-//                 }
-//             });
-
-//             expenseData.push(exp);
-//             incomeData.push(inc);
-//         }
-//     }
-
-//     if (type === "week") {
-//         let start = new Date(now);
-//         start.setDate(now.getDate() - now.getDay());
-
-//         for (let i = 0; i < 7; i++) {
-//             let day = new Date(start);
-//             day.setDate(start.getDate() + i);
-
-//             labels.push(day.toLocaleDateString("en-IN", { weekday: "short" }));
-
-//             let exp = 0, inc = 0;
-
-//             expenses.forEach(e => {
-//                 let d = new Date(e.date);
-
-//                 if (d.toDateString() === day.toDateString()) {
-//                     e.amount < 0 ? exp += Math.abs(e.amount) : inc += e.amount;
-//                 }
-//             });
-
-//             expenseData.push(exp);
-//             incomeData.push(inc);
-//         }
-//     }
-
-//     if (type === "month") {
-//         let days = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
-
-//         for (let i = 1; i <= days; i++) {
-//             labels.push(i);
-
-//             let exp = 0, inc = 0;
-
-//             expenses.forEach(e => {
-//                 let d = new Date(e.date);
-
-//                 if (
-//                     d.getMonth() === now.getMonth() &&
-//                     d.getDate() === i
-//                 ) {
-//                     e.amount < 0 ? exp += Math.abs(e.amount) : inc += e.amount;
-//                 }
-//             });
-
-//             expenseData.push(exp);
-//             incomeData.push(inc);
-//         }
-//     }
-
-//     // =========================
-//     // 💰 BUDGET FIX
-//     // =========================
-//     let dailyBudget = getDailyLimit ? getDailyLimit() : 0;
-//     let budgetData = labels.map(() => dailyBudget);
-
-//     // =========================
-//     // 📊 CHART
-//     // =========================
-//     chart = new Chart(ctx, {
-//         type: "bar",
-//         data: {
-//             labels,
-//             datasets: [
-//                 {
-//                     label: "Expense",
-//                     data: expenseData
-//                 },
-//                 {
-//                     label: "Income",
-//                     data: incomeData
-//                 },
-//                 {
-//                     label: "Budget",
-//                     data: budgetData,
-//                     type: "line",
-//                     fill: false
-//                 }
-//             ]
-//         },
-//         options: {
-//             responsive: true,
-
-//             onClick: function (evt, elements) {
-//                 if (!elements.length) return;
-
-//                 let index = elements[0].index;
-//                 let filtered = [];
-
-//                 if (type === "day") {
-//                     filtered = expenses.filter(e => {
-//                         let d = new Date(e.date);
-//                         return d.getHours() === index &&
-//                             d.toDateString() === now.toDateString();
-//                     });
-//                 }
-
-//                 if (type === "week") {
-//                     let start = new Date(now);
-//                     start.setDate(now.getDate() - now.getDay());
-
-//                     let selected = new Date(start);
-//                     selected.setDate(start.getDate() + index);
-
-//                     filtered = expenses.filter(e =>
-//                         new Date(e.date).toDateString() === selected.toDateString()
-//                     );
-//                 }
-
-//                 if (type === "month") {
-//                     filtered = expenses.filter(e =>
-//                         new Date(e.date).getDate() === index + 1
-//                     );
-//                 }
-
-//                 renderCategoryBreakdown(groupByCategory(filtered));
-//             }
-//         }
-//     });
-
-//     // =========================
-//     // 🔥 AUTO CATEGORY FIX
-//     // =========================
-//     let filtered = expenses.filter(e => {
-//         let d = new Date(e.date);
-
-//         if (type === "day") return d.toDateString() === now.toDateString();
-//         if (type === "week") return true;
-//         if (type === "month") return d.getMonth() === now.getMonth();
-
-//         return true;
-//     });
-
-//     renderCategoryBreakdown(groupByCategory(filtered));
-// }
-
-// Filters data based on graph click
-
-
-// function loadGraph(type = "day", data = null) {
-
-//     let ctx = document.getElementById("myChart");
-//     if (!ctx || !window.Chart) return;
-
-//     if (chart) chart.destroy();
-
-//     let expenses = data || getExpenses();
-//     let labels = [], expenseData = [], incomeData = [], totalData = [];
-//     let dataset = groupData(expenses, type, now);
-
-//     let labels = dataset.map(d => d.label);
-//     let expenseData = dataset.map(d => d.exp);
-//     let incomeData = dataset.map(d => d.inc);
-//     let totalData = dataset.map(d => d.inc - d.exp);
-
-//     let now = new Date();
-
-//     // =========================
-//     // 📊 BUILD DATA
-//     // =========================
-
-//     function pushData(exp, inc) {
-//         expenseData.push(exp);
-//         incomeData.push(inc);
-//         totalData.push(inc - exp); // 🔥 TOTAL
-//     }
-
-//     // DAY
-//     if (type === "day") {
-//         for (let i = 0; i < 24; i++) {
-//             labels.push(i + ":00");
-
-//             let exp = 0, inc = 0;
-
-//             expenses.forEach(e => {
-//                 let d = new Date(e.date);
-
-//                 if (
-//                     d.toDateString() === now.toDateString() &&
-//                     d.getHours() === i
-//                 ) {
-//                     e.amount < 0 ? exp += Math.abs(e.amount) : inc += e.amount;
-//                 }
-//             });
-
-//             pushData(exp, inc);
-//         }
-//     }
-
-//     // WEEK
-//     if (type === "week") {
-//         let start = new Date(now);
-//         start.setDate(now.getDate() - now.getDay());
-
-//         for (let i = 0; i < 7; i++) {
-//             let day = new Date(start);
-//             day.setDate(start.getDate() + i);
-
-//             labels.push(day.toLocaleDateString("en-IN", { weekday: "short" }));
-
-//             let exp = 0, inc = 0;
-
-//             expenses.forEach(e => {
-//                 let d = new Date(e.date);
-
-//                 if (d.toDateString() === day.toDateString()) {
-//                     e.amount < 0 ? exp += Math.abs(e.amount) : inc += e.amount;
-//                 }
-//             });
-
-//             pushData(exp, inc);
-//         }
-//     }
-
-//     // MONTH
-//     if (type === "month") {
-//         let days = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
-
-//         for (let i = 1; i <= days; i++) {
-//             labels.push(i);
-
-//             let exp = 0, inc = 0;
-
-//             expenses.forEach(e => {
-//                 let d = new Date(e.date);
-
-//                 if (
-//                     d.getMonth() === now.getMonth() &&
-//                     d.getDate() === i
-//                 ) {
-//                     e.amount < 0 ? exp += Math.abs(e.amount) : inc += e.amount;
-//                 }
-//             });
-
-//             pushData(exp, inc);
-//         }
-//     }
-
-//     // =========================
-//     // 💰 BUDGET LINE
-//     // =========================
-//     let dailyBudget = getDailyLimit ? getDailyLimit() : 0;
-//     let budgetData = labels.map(() => dailyBudget);
-
-//     // =========================
-//     // 🎨 COLORS (PREMIUM)
-//     // =========================
-//     const expenseColor = "rgba(255, 99, 132, 0.7)";
-//     const incomeColor = "rgba(75, 192, 192, 0.7)";
-//     const totalColor = "rgba(153, 102, 255, 1)";
-//     const budgetColor = "rgba(255, 206, 86, 1)";
-
-//     // =========================
-//     // 📊 CHART
-//     // =========================
-//     chart = new Chart(ctx, {
-//         type: "bar",
-//         data: {
-//             labels,
-//             datasets: [
-//                 {
-//                     label: "Expense",
-//                     data: expenseData,
-//                     backgroundColor: expenseColor,
-//                     borderRadius: 6
-//                 },
-//                 {
-//                     label: "Income",
-//                     data: incomeData,
-//                     backgroundColor: incomeColor,
-//                     borderRadius: 6
-//                 },
-//                 {
-//                     label: "Total",
-//                     data: totalData,
-//                     type: "line",
-//                     borderColor: totalColor,
-//                     borderWidth: 3,
-//                     tension: 0.4,
-//                     fill: false
-//                 },
-//                 {
-//                     label: "Budget",
-//                     data: budgetData,
-//                     type: "line",
-//                     borderColor: budgetColor,
-//                     borderDash: [5, 5],
-//                     borderWidth: 2,
-//                     fill: false
-//                 }
-//             ]
-//         },
-//         options: {
-//             responsive: true,
-//             maintainAspectRatio: false,
-
-//             interaction: {
-//                 mode: "index",
-//                 intersect: false
-//             },
-
-//             plugins: {
-//                 legend: {
-//                     labels: {
-//                         font: {
-//                             size: 12
-//                         }
-//                     }
-//                 },
-//                 tooltip: {
-//                     callbacks: {
-//                         label: function (ctx) {
-//return `${ctx.dataset.label}: ${formatCurrency(ctx.raw)}`;
-//                         }
-//                     }
-//                 }
-//             },
-
-//             scales: {
-//                 y: {
-//                     beginAtZero: true
-//                 }
-//             },
-
-//             // =========================
-//             // 🔥 CLICK DRILL DOWN
-//             // =========================
-//             onClick: function (evt, elements) {
-//                 if (!elements.length) return;
-
-//                 let index = elements[0].index;
-//                 let filtered = [];
-
-//                 if (type === "day") {
-//                     filtered = expenses.filter(e => {
-//                         let d = new Date(e.date);
-//                         return d.getHours() === index &&
-//                             d.toDateString() === now.toDateString();
-//                     });
-//                 }
-
-//                 if (type === "week") {
-//                     let start = new Date(now);
-//                     start.setDate(now.getDate() - now.getDay());
-
-//                     let selected = new Date(start);
-//                     selected.setDate(start.getDate() + index);
-
-//                     filtered = expenses.filter(e =>
-//                         new Date(e.date).toDateString() === selected.toDateString()
-//                     );
-//                 }
-
-//                 if (type === "month") {
-//                     filtered = expenses.filter(e =>
-//                         new Date(e.date).getDate() === index + 1
-//                     );
-//                 }
-
-//                 renderCategoryBreakdown(groupByCategory(filtered));
-//             }
-//         }
-//     });
-
-//     // =========================
-//     // 🔥 AUTO CATEGORY
-//     // =========================
-//     let filtered = expenses.filter(e => {
-//         let d = new Date(e.date);
-
-//         if (type === "day") return d.toDateString() === now.toDateString();
-//         if (type === "week") return true;
-//         if (type === "month") return d.getMonth() === now.getMonth();
-
-//         return true;
-//     });
-
-//     renderCategoryBreakdown(groupByCategory(filtered));
-// }
-
 function filterByIndex(data, type, index, now) {
     return data.filter(e => {
-        let d = new Date(e.date);
+        let d = e.date ? new Date(e.date) : null;
+
+        if (!d || isNaN(d.getTime())) return;
 
         if (type === "day") {
             return d.getHours() === index &&
@@ -2365,7 +2407,9 @@ function filterByIndex(data, type, index, now) {
 // Default filter
 function filterByType(data, type, now) {
     return data.filter(e => {
-        let d = new Date(e.date);
+        let d = e.date ? new Date(e.date) : null;
+
+        if (!d || isNaN(d.getTime())) return;
 
         if (type === "day") return d.toDateString() === now.toDateString();
 
@@ -2444,13 +2488,14 @@ function renderCategoryBreakdown(map) {
 }
 
 function groupData(expenses, type, now, customRange = null) {
-
+    now = new Date();
     let map = {};
 
-    function formatDate(d) {
-        return d.toLocaleDateString("en-CA"); // ✅ LOCAL SAFE FORMAT
-    }
+    function formatDateSafe(date) {
+        let d = new Date(date);
 
+        return d.toISOString().slice(0, 10); // ✅ ALWAYS UTC SAFE
+    }
     // ================= DAY =================
     if (type === "day") {
         for (let i = 0; i < 24; i++) {
@@ -2486,20 +2531,39 @@ function groupData(expenses, type, now, customRange = null) {
     }
 
     if (type === "month") {
-        start = new Date(now.getFullYear(), now.getMonth(), 1);
-        end = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+
+        let period = getActiveBudgetPeriod();
+
+        if (period) {
+            start = new Date(period.start);
+            end = period.end ? new Date(period.end) : new Date();
+        } else {
+            start = new Date(now.getFullYear(), now.getMonth(), 1);
+            end = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+        }
     }
 
-    if (type === "custom" && customRange) {
-        start = new Date(customRange.start);
-        end = new Date(customRange.end);
+    if (type === "custom") {
+
+        if (customRange && customRange.start && customRange.end) {
+            start = new Date(customRange.start);
+            end = new Date(customRange.end);
+        } else {
+            // fallback → active period
+            let period = getActiveBudgetPeriod();
+
+            if (period) {
+                start = new Date(period.start);
+                end = period.end ? new Date(period.end) : new Date();
+            }
+        }
     }
 
     // build date map
     let current = new Date(start);
 
     while (current <= end) {
-        let key = formatDate(current);
+        let key = current.toISOString().slice(0, 10);
 
         map[key] = {
             key: key, // ✅ ADD THIS LINE
@@ -2517,7 +2581,7 @@ function groupData(expenses, type, now, customRange = null) {
     // fill data
     expenses.forEach(e => {
         let d = new Date(e.date);
-        let key = formatDate(d);
+        let key = formatDateSafe(e.date);
 
         if (map[key]) {
             if (e.amount < 0) map[key].exp += Math.abs(e.amount);
@@ -2549,33 +2613,42 @@ function groupData(expenses, type, now, customRange = null) {
 function getLoanSummary() {
     let expenses = getExpenses();
 
-    let map = {};
+    let loans = {};
 
     expenses.forEach(e => {
-        if (!e.person) return;
+        if (!e.entity) return;
 
-        if (!map[e.person]) {
-            map[e.person] = {
+        if (!loans[e.entity]) {
+            loans[e.entity] = {
                 given: 0,
                 received: 0
             };
         }
 
-        if (e.category === "Loan" && e.amount < 0) {
-            map[e.person].given += Math.abs(e.amount);
+        if (e.amount < 0) {
+            loans[e.entity].given += Math.abs(e.amount);
         }
 
-        if (e.category === "Recovery" && e.amount > 0) {
-            map[e.person].received += e.amount;
+        if (e.amount > 0 && e.category === "Recovery") {
+            loans[e.entity].received += e.amount;
         }
     });
 
-    // calculate balance
-    Object.keys(map).forEach(p => {
-        map[p].balance = map[p].given - map[p].received;
-    });
+    let result = [];
 
-    return map;
+    for (let person in loans) {
+        let given = loans[person].given;
+        let received = loans[person].received;
+
+        result.push({
+            person,
+            given,
+            received,
+            pending: given - received
+        });
+    }
+
+    return result;
 }
 function renderLoanSummary() {
     let container = document.getElementById("loanSummary");
@@ -2585,30 +2658,32 @@ function renderLoanSummary() {
 
     container.innerHTML = "";
 
-    let people = Object.keys(data);
-
-    if (!people.length) {
+    if (!data || !data.length) {
         container.innerHTML = "<p>No loans yet</p>";
         return;
     }
 
-    people.forEach(p => {
-        let d = data[p];
+    data.forEach(item => {
 
-        let div = document.createElement("div");
+        let wrapper = document.createElement("div");
 
-        div.innerHTML = `
-            <div style="margin-bottom:10px;">
-                <strong>${p}</strong><br>
-                Given: ${formatCurrency(d.given)} |
-                Received: ${formatCurrency(d.received)} <br>
-                <span style="color:${d.balance > 0 ? 'red' : 'green'}">
-                    ${d.balance > 0 ? "Pending" : "Cleared"}: ${formatCurrency(d.balance)}
+        let statusColor = item.pending > 0 ? "red" : "green";
+        let statusText = item.pending > 0 ? "Pending" : "Cleared";
+
+        wrapper.innerHTML = `
+            <div style="margin-bottom:12px;">
+                <strong>${item.person}</strong><br>
+
+                Given: ${formatCurrency(item.given)} |
+                Received: ${formatCurrency(item.received)} <br>
+
+                <span style="color:${statusColor}; font-weight:600;">
+                    ${statusText}: ${formatCurrency(item.pending)}
                 </span>
             </div>
         `;
 
-        container.appendChild(div);
+        container.appendChild(wrapper);
     });
 }
 
@@ -2743,24 +2818,28 @@ function updateProgressBar() {
     let budgets = getBudgets();
     let expenses = getExpenses();
 
-    let currentMonth = new Date().toISOString().slice(0, 7);
+    let filteredBudgets = filterBudgetsByActivePeriod(budgets);
 
-    let totalBudget = budgets
-        .filter(b => b.monthKey === currentMonth)
+    let totalBudget = filteredBudgets
         .reduce((sum, b) => sum + (b.totalAllocated || 0), 0);
 
-    let totalSpent = expenses
-        .filter(e => e.amount < 0 && e.monthKey === currentMonth)
+    let filtered = filterByActivePeriod(expenses);
+
+    let totalSpent = filtered
+        .filter(e => e.amount < 0)
         .reduce((sum, e) => sum + Math.abs(e.amount), 0);
 
-    let percent = totalBudget ? (totalSpent / totalBudget) * 100 : 0;
+    let percent = totalBudget
+        ? (totalSpent / totalBudget) * 100
+        : 0;
 
-    percent = Math.min(percent, 100); // limit max 100%
+    percent = Math.min(percent, 100);
 
-    // UI update
-    document.getElementById("progressFill").style.width = percent + "%";
-    document.getElementById("progressText").innerText =
-        `${percent.toFixed(1)}% used`;
+    let fill = document.getElementById("progressFill");
+    let text = document.getElementById("progressText");
+
+    if (fill) fill.style.width = percent + "%";
+    if (text) text.innerText = `${percent.toFixed(1)}% used`;
 }
 // =====================================
 // Author: Gopichanime
@@ -2773,73 +2852,10 @@ function updateProgressBar() {
  | |  _ | | | | |_) || | |   | |_| | / _ \ |  \| || || |\/| |  _|  
  | |_| || |_| |  __/ | | |___|  _  |/ ___ \| |\  || || |  | | |___ 
   \____| \___/|_|   |___\____|_| |_/_/   \_\_| \_|___|_|  |_|_____|
-
+ 
    Signed by: GOPICHANIME 🐉
-*/function getLoanSummary() {
-    let expenses = getExpenses();
+*/
 
-    let loans = {};
-
-    expenses.forEach(e => {
-        if (!e.entity) return;
-
-        if (!loans[e.entity]) {
-            loans[e.entity] = {
-                given: 0,
-                received: 0
-            };
-        }
-
-        // Money given
-        if (e.amount < 0) {
-            loans[e.entity].given += Math.abs(e.amount);
-        }
-
-        // Money returned (Recovery only)
-        if (e.amount > 0 && e.category === "Recovery") {
-            loans[e.entity].received += e.amount;
-        }
-    });
-
-    // Calculate pending
-    let result = [];
-
-    for (let person in loans) {
-        let given = loans[person].given;
-        let received = loans[person].received;
-
-        result.push({
-            person,
-            given,
-            received,
-            pending: given - received
-        });
-    }
-
-    return result;
-}
-
-function renderLoanSummary() {
-    let data = getLoanSummary();
-    let container = document.getElementById("loanSummary");
-
-    if (!container) return;
-
-    container.innerHTML = "";
-
-    data.forEach(l => {
-        let div = document.createElement("div");
-
-        div.innerHTML = `
-            <div class="loan-row">
-                <span>${l.person}</span>
-                <span>₹${l.pending}</span>
-            </div>
-        `;
-
-        container.appendChild(div);
-    });
-}
 function injectGlobalFooter() {
     const year = new Date().getFullYear(); // ✅ dynamic year
 
@@ -3066,7 +3082,7 @@ function handleFilter(type) {
     }
 
     let expenses = getExpenses();
-    let now = new Date();
+    let now = new Date(); // ✅ rename
 
     let filtered = expenses.filter(e => {
         let d = new Date(e.date);
@@ -3083,7 +3099,7 @@ function handleFilter(type) {
         }
 
         if (type === "week") {
-            let start = new Date();
+            let start = new Date(now);
             start.setDate(now.getDate() - 7);
             return d >= start;
         }
@@ -3245,4 +3261,68 @@ function formatCurrencyPDF(amount) {
     let converted = convertFromBase(amount);
 
     return `${code}. ${converted.toFixed(2)}`;
+}
+
+
+/* =========================
+   🧧 BUDGET PERIOD ENGINE
+========================= */
+
+// 🔹 Get active budget period
+function getActiveBudgetPeriod() {
+    let periods = JSON.parse(localStorage.getItem("bp")) || [];
+    return periods.find(p => p.status === "active") || null;
+}
+
+// 🔹 Get active period key (GLOBAL SAFE)
+function getActivePeriodKey() {
+    let p = getActiveBudgetPeriod();
+
+    if (!p) return null;
+
+    let start = new Date(p.start).toISOString().slice(0, 10);
+    let end = p.end
+        ? new Date(p.end).toISOString().slice(0, 10)
+        : new Date().toISOString().slice(0, 10);
+
+    return `${start}_to_${end}`;
+}
+
+function isWithinBudgetPeriod(dateStr) {
+    let period = getActiveBudgetPeriod();
+
+    if (!period) return false;
+
+    let d = new Date(dateStr);
+
+    let start = new Date(period.start);
+    let end = period.end ? new Date(period.end) : new Date();
+
+    return d >= start && d <= end;
+}
+
+function filterByActivePeriod(expenses) {
+    let period = getActiveBudgetPeriod();
+
+    // fallback → month logic
+    if (!period) {
+        let currentMonth = new Date().toISOString().slice(0, 7);
+        return expenses.filter(e => e.monthKey === currentMonth);
+    }
+
+    return expenses.filter(e => isWithinBudgetPeriod(e.date));
+}
+function filterBudgetsByActivePeriod(budgets) {
+    let periodKey = typeof getActivePeriodKey === "function"
+        ? getActivePeriodKey()
+        : null;
+
+    if (periodKey) {
+        // Prefer period-based budgets
+        return budgets.filter(b => b.periodKey === periodKey);
+    }
+
+    // Fallback → month
+    let currentMonth = new Date().toISOString().slice(0, 7);
+    return budgets.filter(b => b.monthKey === currentMonth);
 }

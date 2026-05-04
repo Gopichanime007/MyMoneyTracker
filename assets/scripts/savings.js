@@ -70,31 +70,31 @@ function createSavingsEntry({
     amount,
     sourceId = null,
     entity = "Cash",
-    payment = null,   // ✅ ADD THIS
+    payment = null,
     person = null,
     note = "",
     date = new Date().toISOString()
 }) {
+
+    let periodKey = getActivePeriodKey(); // safe call
+
     return {
         id: Date.now(),
 
-        type, // income | transfer | budget_allocation
-
+        type,
         amount,
 
         sourceId,
-
         entity,
 
         paymentType: payment,
-
         person,
 
         note,
-
         date,
 
-        monthKey: date.slice(0, 7),
+        monthKey: date.slice(0, 7),      // fallback
+        periodKey: periodKey || null,    // new system
 
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString()
@@ -238,28 +238,66 @@ function addSavings() {
 // 📦 BUDGET CREATION (FROM SAVINGS)
 // =========================
 // Creates or updates monthly budget based on savings allocation
-function createOrUpdateBudgetFromSavings(entry) {
+function createOrUpdateBudget(budgetId, entry) {
+
     let budgets = JSON.parse(localStorage.getItem("budgets")) || [];
 
-    let budgetId = "budget_" + entry.monthKey;
+    // 🔥 Get active period
+    let periodKey = typeof getActivePeriodKey === "function"
+        ? getActivePeriodKey()
+        : null;
 
-    let existing = budgets.find(b => b.budgetId === budgetId);
+    // ⚠️ Safety: if no active period → fallback to month
+    let fallbackMonth = entry.monthKey || (entry.date ? entry.date.slice(0, 7) : null);
+
+    // 🔥 Find existing budget (PERIOD-FIRST MATCH)
+    let existing = budgets.find(b =>
+        b.budgetId === budgetId &&
+        b.entity === entry.entity &&
+        (
+            (periodKey && b.periodKey === periodKey) ||
+            (!periodKey && b.monthKey === fallbackMonth)
+        )
+    );
 
     if (existing) {
+
+        // ✅ Update allocation
         existing.totalAllocated += Math.abs(entry.amount);
         existing.updatedAt = new Date().toISOString();
+
+        // ✅ Ensure keys exist
+        if (!existing.periodKey && periodKey) {
+            existing.periodKey = periodKey;
+        }
+
+        if (!existing.monthKey && fallbackMonth) {
+            existing.monthKey = fallbackMonth;
+        }
+
     } else {
+
+        // 🔥 Create new budget (PERIOD FIRST)
         budgets.push({
             id: Date.now(),
             type: "budget",
-            totalAllocated: Math.abs(entry.amount),
-            sourceId: entry.sourceId,
+
             budgetId,
+            sourceId: entry.sourceId,
+
+            totalAllocated: Math.abs(entry.amount),
+
             entity: entry.entity,
-            note: entry.note,
-            date: entry.date,
-            monthKey: entry.monthKey,
-            createdAt: new Date().toISOString()
+
+            note: entry.note || "",
+            date: entry.date || new Date().toISOString(),
+
+            // 🔥 CORE CHANGE
+            periodKey: periodKey || null,
+            monthKey: periodKey ? null : fallbackMonth, // fallback only
+
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString()
         });
     }
 
@@ -1247,42 +1285,6 @@ function generateBudgetId(period, date) {
     return null;
 }
 
-
-function createOrUpdateBudget(budgetId, entry) {
-    let budgets = JSON.parse(localStorage.getItem("budgets")) || [];
-
-    let existing = budgets.find(b =>
-        b.budgetId === budgetId &&
-        b.entity === entry.entity   // 🔥 ADD THIS
-    );
-
-    if (existing) {
-        existing.totalAllocated += Math.abs(entry.amount);
-        existing.updatedAt = new Date().toISOString();
-    } else {
-        budgets.push({
-            id: Date.now(),
-            type: "budget",
-
-            budgetId,
-            sourceId: entry.sourceId,
-
-            totalAllocated: Math.abs(entry.amount),
-
-            entity: entry.entity,   // 🔥 IMPORTANT
-
-            note: entry.note,
-            date: entry.date,
-            monthKey: entry.monthKey,
-
-            createdAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString()
-        });
-    }
-
-    localStorage.setItem("budgets", JSON.stringify(budgets));
-}
-
 function getCategories() {
     return JSON.parse(localStorage.getItem("categories")) ||
         ["Self", "Family", "Friend", "Company", "Charity", "Other"];
@@ -1519,3 +1521,6 @@ window.addEventListener("DOMContentLoaded", function () {
 
    Signed by: GOPICHANIME 🐉
 */
+function goToBudgetPeriods() {
+    window.location.href = "../pages/budgetperiod.html";
+}

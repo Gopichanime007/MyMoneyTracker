@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <title>Budget Periods</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+  <!-- Fonts -->
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600&display=swap" rel="stylesheet">
+
+  <!-- Styles -->
+  <link rel="stylesheet" href="../assets/styles/style.css">
+  <link rel="stylesheet" href="../assets/styles/budgetperiod.css">
+</head>
+
+<body>
+
+  <div class="page-shell">
+    <div class="app">
+
+      <div class="page-container">
+
+        <!-- HEADER -->
+        <div class="header-card">
+          <div class="header-inner">
+            <h2 class="page-title">Budget Periods</h2>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- ================= ACTION BAR ================= -->
+      <section class="card">
+        <!-- TOP NAVIGATION -->
+        <div class="nav-buttons">
+          <button onclick="goToHome()">🏠 Home</button>
+          <button onclick="goToSavings()">💰 Savings</button>
+        </div>
+        <!-- PRIMARY ACTION -->
+        <div class="budget-toolbar">
+          <button class="add-btn" onclick="openBudgetForm()">
+            <span class="plus">+</span>
+            <span>Add Budget</span>
+          </button>
+        </div>
+      </section>
+
+      <!-- ================= LIST SECTION ================= -->
+      <section class="card">
+
+        <div class="list-header">
+
+          <div class="list-title">
+            <h3 id="periodHeader">All Periods</h3>
+          </div>
+
+          <div class="list-filter">
+            <select id="filterSelect" class="filter-dropdown" onchange="filterBudgets(this.value)">
+              <option value="all">All</option>
+              <option value="active">Active</option>
+              <option value="closed">Closed</option>
+            </select>
+          </div>
+
+        </div>
+
+        <!-- LIST -->
+        <div id="budgetList" class="budget-list"></div>
+
+      </section>
+
+    </div>
+  </div>
+
+  <!-- ================= ADD MODAL ================= -->
+  <div id="budgetModal" class="modal">
+    <div class="modal-box">
+
+      <div class="modal-header">
+        <h3>Create Budget Period</h3>
+      </div>
+
+      <div class="modal-body">
+
+        <!-- FROM DATE -->
+        <label>From Date</label>
+        <input type="date" id="bpStartDate" onchange="calculateEndDate()" />
+
+        <!-- DURATION -->
+        <label>Duration (days)</label>
+        <input type="number" id="bpDuration" value="30" onchange="calculateEndDate()" />
+
+        <!-- TO DATE -->
+        <label>To Date</label>
+        <input type="date" id="bpEndDate" />
+
+        <!-- STATUS -->
+        <label>Status</label>
+        <select id="bpStatus">
+          <option value="active">Active</option>
+          <option value="closed">Closed</option>
+        </select>
+
+      </div>
+
+      <div class="modal-actions">
+        <button onclick="closeBudgetForm()">Cancel</button>
+        <button onclick="saveBudget()">Save</button>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ================= DETAILS MODAL ================= -->
+  <div id="detailsModal" class="modal">
+    <div class="modal-box">
+
+      <div class="modal-header">
+        <h3 id="detailsTitle">Budget Details</h3>
+      </div>
+
+      <div class="modal-body" id="detailsContent"></div>
+
+      <div class="modal-actions">
+        <button class="secondary-btn" onclick="closeDetails()">Close</button>
+        <button class="primary-btn" onclick="toggleStatus()">Toggle Status</button>
+        <button class="danger-btn" onclick="deleteBudget()">Delete</button>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ================= SCRIPTS ================= -->
+  <script src="../assets/scripts/storage.js"></script>
+  <script src="../assets/scripts/script.js"></script>
+  <script src="../assets/scripts/budgetperiod.js"></script>
+
+</body>
+
+</html>
