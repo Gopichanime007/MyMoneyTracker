@@ -1307,13 +1307,74 @@ function closePeriod() {
 
 //     URL.revokeObjectURL(url); // ✅ cleanup
 // }
+// function exportDataAsJSON() {
+
+//     let data = {
+//         expenses: getExpenses() || [],
+//         budgets: getBudgets() || [],
+//         savings: getSavings() || [],
+//         orders: JSON.parse(localStorage.getItem("orders")) || []
+//     };
+
+//     try {
+//         let json = JSON.stringify(data, null, 2);
+
+//         let blob = new Blob([json], { type: "application/json" });
+//         let url = URL.createObjectURL(blob);
+
+//         // 🔥 MOBILE SAFE DOWNLOAD
+//         let a = document.createElement("a");
+//         a.href = url;
+//         a.download = `money-tracker-backup-${new Date().toISOString().slice(0, 10)}.json`;
+
+//         document.body.appendChild(a);
+
+//         // 👉 TRY DOWNLOAD
+//         a.click();
+
+//         // 👉 CLEANUP
+//         setTimeout(() => {
+//             document.body.removeChild(a);
+//             URL.revokeObjectURL(url);
+//         }, 1000);
+
+//         // =========================
+//         // 🔥 FALLBACK (IMPORTANT)
+//         // =========================
+//         setTimeout(() => {
+//             // If download didn't happen → open manually
+//             window.open(url, "_blank");
+//         }, 500);
+
+//     } catch (err) {
+
+//         // 🔥 FINAL FALLBACK (copy)
+//         let json = JSON.stringify(data, null, 2);
+//         prompt("Copy your backup manually:", json);
+//     }
+// }
 function exportDataAsJSON() {
 
     let data = {
         expenses: getExpenses() || [],
         budgets: getBudgets() || [],
         savings: getSavings() || [],
-        orders: JSON.parse(localStorage.getItem("orders")) || []
+        orders: JSON.parse(localStorage.getItem("orders")) || [],
+
+        // 🔥 NEW (IMPORTANT)
+        categories: JSON.parse(localStorage.getItem("categories")) || [],
+        persons: JSON.parse(localStorage.getItem("persons")) || [],
+        budgetPeriods: JSON.parse(localStorage.getItem("bp")) || [],
+
+        settings: {
+            theme: localStorage.getItem("theme") || "",
+            currencyCode: localStorage.getItem("currencyCode") || "INR"
+        },
+
+        meta: {
+            exportedAt: new Date().toISOString(),
+            version: "v2"
+        }
     };
 
     try {
@@ -1322,33 +1383,24 @@ function exportDataAsJSON() {
         let blob = new Blob([json], { type: "application/json" });
         let url = URL.createObjectURL(blob);
 
-        // 🔥 MOBILE SAFE DOWNLOAD
         let a = document.createElement("a");
         a.href = url;
         a.download = `money-tracker-backup-${new Date().toISOString().slice(0, 10)}.json`;
 
         document.body.appendChild(a);
-
-        // 👉 TRY DOWNLOAD
         a.click();
 
-        // 👉 CLEANUP
         setTimeout(() => {
             document.body.removeChild(a);
             URL.revokeObjectURL(url);
         }, 1000);
 
-        // =========================
-        // 🔥 FALLBACK (IMPORTANT)
-        // =========================
+        // 🔥 fallback (mobile/webview safe)
         setTimeout(() => {
-            // If download didn't happen → open manually
             window.open(url, "_blank");
         }, 500);
 
     } catch (err) {
-
-        // 🔥 FINAL FALLBACK (copy)
         let json = JSON.stringify(data, null, 2);
         prompt("Copy your backup manually:", json);
     }
@@ -1370,7 +1422,42 @@ function exportDataAsJSON() {
 
 //     showToast("Imported successfully");
 // }
+// function importData() {
+//     let text = document.getElementById("importText").value;
+
+//     if (!text) {
+//         showToast("Paste data");
+//         return;
+//     }
+
+//     try {
+//         let data = JSON.parse(text);
+
+//         if (data.expenses) saveExpenses(data.expenses);
+//         if (data.budgets) saveBudgets(data.budgets);
+//         if (data.savings) saveSavings(data.savings);
+
+//         showToast("Imported successfully");
+
+//         // 🔄 Refresh UI
+//         loadHistory();
+//         loadBudgetOptions();
+//         loadDashboard();
+//         loadGraph();
+//         renderBudgetEntries();   // 🔥 ADD THIS
+
+//         // 🧹 Clear input
+//         document.getElementById("importText").value = "";
+
+//         // ❌ Close modal
+//         closeImportModal();
+
+//     } catch (err) {
+//         showToast("Invalid JSON ❌");
+//     }
+// }
 function importData() {
+
     let text = document.getElementById("importText").value;
 
     if (!text) {
@@ -1381,27 +1468,102 @@ function importData() {
     try {
         let data = JSON.parse(text);
 
-        if (data.expenses) saveExpenses(data.expenses);
-        if (data.budgets) saveBudgets(data.budgets);
-        if (data.savings) saveSavings(data.savings);
+        // =========================
+        // 🧠 BASIC VALIDATION
+        // =========================
+        if (!data || typeof data !== "object") {
+            throw new Error("Invalid structure");
+        }
 
-        showToast("Imported successfully");
+        // =========================
+        // 🔥 CORE TABLES
+        // =========================
+        if (Array.isArray(data.expenses)) {
+            saveExpenses(data.expenses);
+        }
 
-        // 🔄 Refresh UI
+        if (Array.isArray(data.budgets)) {
+            saveBudgets(data.budgets);
+        }
+
+        if (Array.isArray(data.savings)) {
+            saveSavings(data.savings);
+        }
+
+        // =========================
+        // 📦 ORDERS
+        // =========================
+        if (Array.isArray(data.orders)) {
+            localStorage.setItem("orders", JSON.stringify(data.orders));
+        }
+
+        // =========================
+        // 🧩 EXTRA TABLES (NEW)
+        // =========================
+        if (Array.isArray(data.categories)) {
+            localStorage.setItem("categories", JSON.stringify(data.categories));
+        }
+
+        if (Array.isArray(data.persons)) {
+            localStorage.setItem("persons", JSON.stringify(data.persons));
+        }
+
+        if (Array.isArray(data.budgetPeriods)) {
+            localStorage.setItem("bp", JSON.stringify(data.budgetPeriods));
+        }
+
+        // =========================
+        // ⚙️ SETTINGS
+        // =========================
+        if (data.settings) {
+            if (data.settings.theme) {
+                localStorage.setItem("theme", data.settings.theme);
+            }
+
+            if (data.settings.currencyCode) {
+                localStorage.setItem("currencyCode", data.settings.currencyCode);
+            }
+        }
+
+        // =========================
+        // 🧠 META (OPTIONAL FUTURE USE)
+        // =========================
+        if (data.meta) {
+            console.log("Imported version:", data.meta.version);
+        }
+
+        showToast("Import successful ✅");
+
+        // =========================
+        // 🔄 FULL UI REFRESH
+        // =========================
         loadHistory();
         loadBudgetOptions();
         loadDashboard();
         loadGraph();
-        renderBudgetEntries();   // 🔥 ADD THIS
 
-        // 🧹 Clear input
+        if (typeof renderBudgetEntries === "function") {
+            renderBudgetEntries();
+        }
+
+        if (typeof renderIncomeList === "function") {
+            renderIncomeList();
+        }
+
+        if (typeof loadSavings === "function") {
+            loadSavings();
+        }
+
+        // =========================
+        // 🧹 CLEANUP
+        // =========================
         document.getElementById("importText").value = "";
-
-        // ❌ Close modal
         closeImportModal();
 
     } catch (err) {
-        showToast("Invalid JSON ❌");
+
+        console.error(err);
+        showToast("Invalid or incompatible backup ❌");
     }
 }
 // Fixes old data structure to new system
@@ -3146,84 +3308,181 @@ function updateCustomPeriodLabel(from, to) {
     select.value = "period"; // keep selected
 }
 
+// function exportDataAsExcel() {
+
+//     let data = {
+//         expenses: getExpenses() || [],
+//         budgets: getBudgets() || [],
+//         savings: getSavings() || [],
+//         orders: JSON.parse(localStorage.getItem("orders")) || []
+//     };
+
+//     // =========================
+//     // 🧠 HELPER: Normalize Order ID
+//     // =========================
+//     function normalizeOrderId(id) {
+//         let str = String(id || "");
+//         return str.startsWith("order_") ? str : "order_" + str;
+//     }
+
+//     // =========================
+//     // 📦 CREATE WORKBOOK
+//     // =========================
+//     let wb = XLSX.utils.book_new();
+
+//     // =========================
+//     // 📄 SHEET 1: EXPENSES
+//     // =========================
+//     let expSheet = XLSX.utils.json_to_sheet(
+//         data.expenses.map(e => ({
+//             ...e,
+//             sourceId: e.sourceId ? String(e.sourceId) : ""
+//         }))
+//     );
+//     XLSX.utils.book_append_sheet(wb, expSheet, "Expenses");
+
+//     // =========================
+//     // 📄 SHEET 2: BUDGETS
+//     // =========================
+//     let budSheet = XLSX.utils.json_to_sheet(
+//         data.budgets.map(b => ({
+//             ...b,
+//             id: b.id ? String(b.id) : ""
+//         }))
+//     );
+//     XLSX.utils.book_append_sheet(wb, budSheet, "Budgets");
+
+//     // =========================
+//     // 📄 SHEET 3: SAVINGS
+//     // =========================
+//     let savSheet = XLSX.utils.json_to_sheet(
+//         data.savings.map(s => ({
+//             ...s,
+//             id: s.id ? String(s.id) : "",
+//             sourceId: s.sourceId ? String(s.sourceId) : ""
+//         }))
+//     );
+//     XLSX.utils.book_append_sheet(wb, savSheet, "Savings");
+
+//     // =========================
+//     // 📄 SHEET 4: ORDERS
+//     // =========================
+//     let ordersSheetData = data.orders.map(o => ({
+//         orderId: normalizeOrderId(o.id),
+
+//         subtotal: Number(o.subtotal) || 0,
+//         gst: Number(o.gst) || 0,
+//         total: Number(o.total) || 0,
+
+//         sourceName: o.sourceName || "",
+//         sourceType: o.sourceType || "",
+//         paymentType: o.paymentType || "",
+
+//         date: o.date || ""
+//     }));
+
+//     let ordersSheet = XLSX.utils.json_to_sheet(ordersSheetData);
+//     XLSX.utils.book_append_sheet(wb, ordersSheet, "Orders");
+
+//     // =========================
+//     // 📄 SHEET 5: ORDER ITEMS
+//     // =========================
+//     let orderItems = [];
+
+//     data.orders.forEach(o => {
+//         let orderId = normalizeOrderId(o.id);
+
+//         (o.items || []).forEach(i => {
+//             orderItems.push({
+//                 orderId: orderId,
+
+//                 itemName: i.name || "",
+//                 qty: Number(i.qty) || 0,
+//                 price: Number(i.price) || 0,
+//                 itemTotal: Number(i.total) || 0
+//             });
+//         });
+//     });
+
+//     let itemsSheet = XLSX.utils.json_to_sheet(orderItems);
+//     XLSX.utils.book_append_sheet(wb, itemsSheet, "Order Items");
+
+//     // =========================
+//     // 💾 DOWNLOAD FILE
+//     // =========================
+//     XLSX.writeFile(
+//         wb,
+//         `money-tracker-${new Date().toISOString().slice(0, 10)}.xlsx`
+//     );
+// }
+
 function exportDataAsExcel() {
 
     let data = {
         expenses: getExpenses() || [],
         budgets: getBudgets() || [],
         savings: getSavings() || [],
-        orders: JSON.parse(localStorage.getItem("orders")) || []
+        orders: JSON.parse(localStorage.getItem("orders")) || [],
+
+        categories: JSON.parse(localStorage.getItem("categories")) || [],
+        persons: JSON.parse(localStorage.getItem("persons")) || [],
+        budgetPeriods: JSON.parse(localStorage.getItem("bp")) || []
     };
 
-    // =========================
-    // 🧠 HELPER: Normalize Order ID
-    // =========================
     function normalizeOrderId(id) {
         let str = String(id || "");
         return str.startsWith("order_") ? str : "order_" + str;
     }
 
-    // =========================
-    // 📦 CREATE WORKBOOK
-    // =========================
     let wb = XLSX.utils.book_new();
 
     // =========================
-    // 📄 SHEET 1: EXPENSES
+    // 📄 EXPENSES
     // =========================
-    let expSheet = XLSX.utils.json_to_sheet(
-        data.expenses.map(e => ({
-            ...e,
-            sourceId: e.sourceId ? String(e.sourceId) : ""
+    XLSX.utils.book_append_sheet(
+        wb,
+        XLSX.utils.json_to_sheet(data.expenses),
+        "Expenses"
+    );
+
+    // =========================
+    // 📄 BUDGETS
+    // =========================
+    XLSX.utils.book_append_sheet(
+        wb,
+        XLSX.utils.json_to_sheet(data.budgets),
+        "Budgets"
+    );
+
+    // =========================
+    // 📄 SAVINGS
+    // =========================
+    XLSX.utils.book_append_sheet(
+        wb,
+        XLSX.utils.json_to_sheet(data.savings),
+        "Savings"
+    );
+
+    // =========================
+    // 📄 ORDERS
+    // =========================
+    let ordersSheet = XLSX.utils.json_to_sheet(
+        data.orders.map(o => ({
+            orderId: normalizeOrderId(o.id),
+            subtotal: Number(o.subtotal) || 0,
+            gst: Number(o.gst) || 0,
+            total: Number(o.total) || 0,
+            sourceName: o.sourceName || "",
+            sourceType: o.sourceType || "",
+            paymentType: o.paymentType || "",
+            date: o.date || ""
         }))
     );
-    XLSX.utils.book_append_sheet(wb, expSheet, "Expenses");
 
-    // =========================
-    // 📄 SHEET 2: BUDGETS
-    // =========================
-    let budSheet = XLSX.utils.json_to_sheet(
-        data.budgets.map(b => ({
-            ...b,
-            id: b.id ? String(b.id) : ""
-        }))
-    );
-    XLSX.utils.book_append_sheet(wb, budSheet, "Budgets");
-
-    // =========================
-    // 📄 SHEET 3: SAVINGS
-    // =========================
-    let savSheet = XLSX.utils.json_to_sheet(
-        data.savings.map(s => ({
-            ...s,
-            id: s.id ? String(s.id) : "",
-            sourceId: s.sourceId ? String(s.sourceId) : ""
-        }))
-    );
-    XLSX.utils.book_append_sheet(wb, savSheet, "Savings");
-
-    // =========================
-    // 📄 SHEET 4: ORDERS
-    // =========================
-    let ordersSheetData = data.orders.map(o => ({
-        orderId: normalizeOrderId(o.id),
-
-        subtotal: Number(o.subtotal) || 0,
-        gst: Number(o.gst) || 0,
-        total: Number(o.total) || 0,
-
-        sourceName: o.sourceName || "",
-        sourceType: o.sourceType || "",
-        paymentType: o.paymentType || "",
-
-        date: o.date || ""
-    }));
-
-    let ordersSheet = XLSX.utils.json_to_sheet(ordersSheetData);
     XLSX.utils.book_append_sheet(wb, ordersSheet, "Orders");
 
     // =========================
-    // 📄 SHEET 5: ORDER ITEMS
+    // 📄 ORDER ITEMS
     // =========================
     let orderItems = [];
 
@@ -3232,21 +3491,44 @@ function exportDataAsExcel() {
 
         (o.items || []).forEach(i => {
             orderItems.push({
-                orderId: orderId,
-
+                orderId,
                 itemName: i.name || "",
                 qty: Number(i.qty) || 0,
                 price: Number(i.price) || 0,
-                itemTotal: Number(i.total) || 0
+                itemTotal: Number(i.total) || (i.qty * i.price) || 0
             });
         });
     });
 
-    let itemsSheet = XLSX.utils.json_to_sheet(orderItems);
-    XLSX.utils.book_append_sheet(wb, itemsSheet, "Order Items");
+    XLSX.utils.book_append_sheet(
+        wb,
+        XLSX.utils.json_to_sheet(orderItems),
+        "Order Items"
+    );
 
     // =========================
-    // 💾 DOWNLOAD FILE
+    // 📄 EXTRA TABLES
+    // =========================
+    XLSX.utils.book_append_sheet(
+        wb,
+        XLSX.utils.json_to_sheet(data.categories),
+        "Categories"
+    );
+
+    XLSX.utils.book_append_sheet(
+        wb,
+        XLSX.utils.json_to_sheet(data.persons),
+        "Persons"
+    );
+
+    XLSX.utils.book_append_sheet(
+        wb,
+        XLSX.utils.json_to_sheet(data.budgetPeriods),
+        "Budget Periods"
+    );
+
+    // =========================
+    // 💾 DOWNLOAD
     // =========================
     XLSX.writeFile(
         wb,
