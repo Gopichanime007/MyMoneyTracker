@@ -1,6 +1,21 @@
 document.addEventListener("DOMContentLoaded", () => {
     console.log("DOM ready ✅");
 });
+
+// 🔥 FIX MODAL CLOSE (SAFE CLICK ONLY ON BACKDROP)
+
+document.getElementById("categoryModal").addEventListener("click", function (e) {
+    if (e.target === this) {
+        closeCategoryModal();
+    }
+});
+
+document.getElementById("personModal").addEventListener("click", function (e) {
+    if (e.target === this) {
+        closePersonModal();
+    }
+});
+
 // =========================
 // 🚀 INIT
 // =========================
@@ -602,10 +617,11 @@ function setTodayDate() {
 let filteredSavingsData = [];
 // Filters savings data by time (today, week, month, all) and updates UI
 function handleSavingsFilter(type) {
+
     let data = getSavings() || [];
 
     // =========================
-    // 🧠 GET ACTIVE PERIOD
+    // 🧠 ACTIVE PERIOD CONTEXT
     // =========================
     let period = typeof getActiveBudgetPeriod === "function"
         ? getActiveBudgetPeriod()
@@ -618,34 +634,39 @@ function handleSavingsFilter(type) {
     let now = new Date();
 
     // =========================
-    // 🧱 BASE FILTER (CORE RULE)
+    // 🧱 BASE DATA (PERIOD FIRST)
     // =========================
     let baseData = data.filter(t => {
+        if (periodKey) return t.periodKey === periodKey;
 
-        // 🔥 PRIORITY → PERIOD
-        if (periodKey) {
-            return t.periodKey === periodKey;
-        }
-
-        // ⚠️ FALLBACK → MONTH
         let currentMonth = now.toISOString().slice(0, 7);
         return t.monthKey === currentMonth;
     });
 
     // =========================
-    // 🧠 HELPER: SAFE DATE
+    // 🧠 SAFE DATE PARSER
     // =========================
     function getSafeDate(d) {
-        if (!d) return null;
         let parsed = new Date(d);
         return isNaN(parsed) ? null : parsed;
     }
 
     // =========================
-    // 🎯 FILTER TYPES
+    // 🔥 CUSTOM PERIOD (MODAL)
+    // =========================
+    if (type === "period") {
+        let modal = document.getElementById("savingsDateModal");
+        if (modal) modal.style.display = "flex";
+        return; // ⛔ STOP execution
+    }
+
+    // =========================
+    // 🎯 FILTER LOGIC
     // =========================
 
-    // 🔥 TODAY (within period)
+    let result = [];
+
+    // 🔥 TODAY
     if (type === "today") {
 
         let start = new Date();
@@ -654,14 +675,13 @@ function handleSavingsFilter(type) {
         let end = new Date();
         end.setHours(23, 59, 59, 999);
 
-        filteredSavingsData = baseData.filter(t => {
+        result = baseData.filter(t => {
             let d = getSafeDate(t.date);
-            if (!d) return false;
-            return d >= start && d <= end;
+            return d && d >= start && d <= end;
         });
     }
 
-    // 🔥 WEEK (last 7 days, inside period)
+    // 🔥 WEEK (LAST 7 DAYS)
     else if (type === "week") {
 
         let start = new Date(now);
@@ -671,7 +691,7 @@ function handleSavingsFilter(type) {
         let end = new Date(now);
         end.setHours(23, 59, 59, 999);
 
-        // 🧠 Clamp to period if exists
+        // 🧠 CLAMP TO PERIOD
         if (period) {
             let pStart = getSafeDate(period.start);
             let pEnd = getSafeDate(period.end) || new Date();
@@ -680,33 +700,29 @@ function handleSavingsFilter(type) {
             if (pEnd && end > pEnd) end = pEnd;
         }
 
-        filteredSavingsData = baseData.filter(t => {
+        result = baseData.filter(t => {
             let d = getSafeDate(t.date);
-            if (!d) return false;
-            return d >= start && d <= end;
+            return d && d >= start && d <= end;
         });
     }
 
-    // 🔥 MONTH (FULL PERIOD, not calendar)
+    // 🔥 MONTH / FULL PERIOD
     else if (type === "month") {
-
-        // 💡 IMPORTANT:
-        // Since baseData already filtered by periodKey,
-        // we just return it directly
-
-        filteredSavingsData = [...baseData];
+        result = [...baseData];
     }
 
     // 🔥 ALL
     else {
-        filteredSavingsData = [...baseData];
+        result = [...baseData];
     }
 
     // =========================
-    // 📊 UPDATE UI
+    // 📊 STORE + UPDATE UI
     // =========================
-    renderSavingsHistory(filteredSavingsData);
-    loadSavingsGraph(filteredSavingsData);
+    filteredSavingsData = result;
+
+    renderSavingsHistory(result);
+    loadSavingsGraph(result);
 }
 // Generates income vs expense chart using filtered or full data
 function loadSavingsGraph(data) {
