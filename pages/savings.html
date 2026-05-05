@@ -165,23 +165,54 @@
 
       </div>
     </section>
-    <section id="details" class="screen">
+    <!-- ========================= -->
+    <!-- 💰 INCOME SCREEN -->
+    <!-- Displays all income sources -->
+    <!-- ========================= -->
+    <section id="income" class="screen">
+
       <div class="card">
+
+        <!-- 🔹 Section Title -->
+        <div class="card-header">
+          <h3>💰 Income Sources</h3>
+        </div>
+
+        <!-- 🔹 Income List Container (Dynamic Content) -->
+        <div id="incomeList">
+          <!-- Income cards will be rendered here via JS -->
+        </div>
+
+      </div>
+
+    </section>
+
+
+    <!-- ========================= -->
+    <!-- 📊 SOURCE DETAILS SCREEN -->
+    <!-- Shows selected income breakdown -->
+    <!-- ========================= -->
+    <section id="details" class="screen">
+
+      <div class="card">
+
+        <!-- 🔹 Header with Navigation -->
         <div class="card-header">
           <h3>📊 Source Details</h3>
-          <button class="secondary" onclick="showSavingsScreen('income')">
-            ⬅
+
+          <!-- 🔙 Back to Income Screen -->
+          <button class="secondary back-btn" onclick="showSavingsScreen('income')">
+            ⬅ Back
           </button>
         </div>
 
-        <div id="sourceDetails"></div>
+        <!-- 🔹 Source Details Container (Dynamic Content) -->
+        <div id="sourceDetails">
+          <!-- Detailed transactions & summary will be rendered here -->
+        </div>
+
       </div>
-    </section>
-    <section id="income" class="screen">
-      <div class="card">
-        <h3>💰 Income Sources</h3>
-        <div id="incomeList"></div>
-      </div>
+
     </section>
     <!-- ================= SETTINGS ================= -->
     <section id="settings" class="screen">

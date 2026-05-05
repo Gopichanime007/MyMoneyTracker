@@ -1,3 +1,6 @@
+document.addEventListener("DOMContentLoaded", () => {
+    console.log("DOM ready ✅");
+});
 // =========================
 // 🚀 INIT
 // =========================
@@ -12,6 +15,11 @@ window.addEventListener("load", function () {
     loadPersonOptions();
     renderCategoryList();
     renderPersonList();
+    setTimeout(() => {
+        loadSavings();
+    }, 50);
+
+    renderSavingsHistory(getSavings());
 
     let theme = localStorage.getItem("theme") || "#4caf50";
     document.documentElement.style.setProperty("--theme", theme);
@@ -327,27 +335,47 @@ function formatMonth(monthKey) {
 
 // Calculates totals and updates savings dashboard UI
 function loadSavings() {
-    let data = getSavings();
 
-    let total = data.reduce((sum, t) => sum + t.amount, 0);
+    let data = getSavings() || [];
 
-    let allocated = data
+    let periodKey = typeof getActivePeriodKey === "function"
+        ? getActivePeriodKey()
+        : null;
+
+    let now = new Date();
+    let currentMonth = now.toISOString().slice(0, 7);
+
+    // 🔥 MERGED FILTER (period + fallback)
+    let filtered = data.filter(t => {
+        if (periodKey) {
+            return (
+                t.periodKey === periodKey ||
+                (!t.periodKey && t.monthKey === currentMonth)
+            );
+        }
+        return t.monthKey === currentMonth;
+    });
+
+    // 🔥 CALCULATIONS
+    let total = filtered.reduce((sum, t) => sum + t.amount, 0);
+
+    let allocated = filtered
         .filter(t => t.type === "budget_allocation")
         .reduce((sum, t) => sum + Math.abs(t.amount), 0);
 
     let available = total;
 
+    // 🔥 UI UPDATE
     document.getElementById("savingsBalance").innerText = 'Rs. ' + total;
-
 
     let allocatedEl = document.getElementById("allocatedToBudget");
     if (allocatedEl) allocatedEl.innerText = 'Rs. ' + allocated;
 
-
     let availableEl = document.getElementById("availableBalance");
     if (availableEl) availableEl.innerText = 'Rs. ' + available;
 
-    renderSavingsHistory(data);
+    // 🔥 HISTORY
+    renderSavingsHistory(filtered);
 }
 
 // =========================
@@ -437,7 +465,19 @@ function renderSavingsHistory(data) {
 // =========================
 // Returns all income entries (used as available sources)
 function getAvailableSources() {
-    return getSavings().filter(t => t.type === "income");
+    let data = getSavings() || [];
+
+    let periodKey = typeof getActivePeriodKey === "function"
+        ? getActivePeriodKey()
+        : null;
+
+    let now = new Date();
+    let currentMonth = now.toISOString().slice(0, 7);
+
+    return data.filter(t => {
+        if (periodKey) return t.type === "income" && t.periodKey === periodKey;
+        return t.type === "income" && t.monthKey === currentMonth;
+    });
 }
 // Loads income sources into dropdown with remaining balance
 // function loadSourceOptions() {
@@ -476,63 +516,57 @@ function getAvailableSources() {
 //     });
 // }
 function loadSourceOptions({
-    showAll = true,          // 🔥 all months or current month
-    includeUsed = true       // 🔥 show fully used sources or not
+    showAll = true,
+    includeUsed = true
 } = {}) {
 
     let select = document.getElementById("sourceSelect");
     if (!select) return;
 
-    let data = getSavings();
+    let data = getSavings() || [];
 
-    let currentMonth = new Date().toISOString().slice(0, 7);
+    let periodKey = typeof getActivePeriodKey === "function"
+        ? getActivePeriodKey()
+        : null;
 
-    // =========================
-    // 📦 GET SOURCES
-    // =========================
-    let sources = data.filter(t => t.type === "income");
+    let now = new Date();
+    let currentMonth = now.toISOString().slice(0, 7);
 
-    // =========================
-    // 📅 FILTER BY MONTH (OPTIONAL)
-    // =========================
-    if (!showAll) {
-        sources = sources.filter(s => s.monthKey === currentMonth);
-    }
+    // 🔥 FILTER BASE
+    let scoped = data.filter(t => {
+        if (periodKey) return t.periodKey === periodKey;
+        return t.monthKey === currentMonth;
+    });
+
+    let sources = scoped.filter(t => t.type === "income");
 
     select.innerHTML = "<option value=''>Select Source</option>";
 
     if (!sources.length) {
         let option = document.createElement("option");
-        option.value = "";
         option.textContent = "No sources available";
         select.appendChild(option);
         return;
     }
 
-    // =========================
-    // 🔄 BUILD OPTIONS
-    // =========================
     sources.forEach(s => {
 
-        let used = data
+        let used = scoped
             .filter(t => String(t.sourceId) === String(s.id))
             .reduce((sum, t) => sum + Math.abs(t.amount), 0);
 
         let remaining = s.amount - used;
 
-        // ❌ skip used sources if needed
         if (!includeUsed && remaining <= 0) return;
 
         let option = document.createElement("option");
         option.value = s.id;
 
-        let monthLabel = formatMonth(s.monthKey);
-
         let status = remaining <= 0
             ? "Used"
             : `₹${remaining} left`;
 
-        option.textContent = `${s.note || "Income"} (${monthLabel}) — ${status}`;
+        option.textContent = `${s.note || "Income"} — ${status}`;
 
         select.appendChild(option);
     });
@@ -568,84 +602,132 @@ function setTodayDate() {
 let filteredSavingsData = [];
 // Filters savings data by time (today, week, month, all) and updates UI
 function handleSavingsFilter(type) {
-    let data = getSavings();
-    let now = new Date();
+    let data = getSavings() || [];
 
-    // 🆕 CUSTOM PERIOD
+    // =========================
+    // 🧠 GET ACTIVE PERIOD
+    // =========================
     let period = typeof getActiveBudgetPeriod === "function"
         ? getActiveBudgetPeriod()
         : null;
 
-    let start = period ? new Date(period.start) : null;
-    let end = period ? new Date(period.end || new Date()) : null;
+    let periodKey = typeof getActivePeriodKey === "function"
+        ? getActivePeriodKey()
+        : null;
 
-    // 🔥 TODAY
+    let now = new Date();
+
+    // =========================
+    // 🧱 BASE FILTER (CORE RULE)
+    // =========================
+    let baseData = data.filter(t => {
+
+        // 🔥 PRIORITY → PERIOD
+        if (periodKey) {
+            return t.periodKey === periodKey;
+        }
+
+        // ⚠️ FALLBACK → MONTH
+        let currentMonth = now.toISOString().slice(0, 7);
+        return t.monthKey === currentMonth;
+    });
+
+    // =========================
+    // 🧠 HELPER: SAFE DATE
+    // =========================
+    function getSafeDate(d) {
+        if (!d) return null;
+        let parsed = new Date(d);
+        return isNaN(parsed) ? null : parsed;
+    }
+
+    // =========================
+    // 🎯 FILTER TYPES
+    // =========================
+
+    // 🔥 TODAY (within period)
     if (type === "today") {
 
-        let today = new Date();
-        today.setHours(0, 0, 0, 0);
+        let start = new Date();
+        start.setHours(0, 0, 0, 0);
 
-        let endOfDay = new Date(today);
-        endOfDay.setHours(23, 59, 59, 999);
+        let end = new Date();
+        end.setHours(23, 59, 59, 999);
 
-        filteredSavingsData = data.filter(t => {
-            let d = new Date(t.date);
-
-            if (period && (d < start || d > end)) return false;
-
-            return d >= today && d <= endOfDay;
+        filteredSavingsData = baseData.filter(t => {
+            let d = getSafeDate(t.date);
+            if (!d) return false;
+            return d >= start && d <= end;
         });
     }
+
+    // 🔥 WEEK (last 7 days, inside period)
     else if (type === "week") {
-        let weekStart = new Date(now);
-        weekStart.setDate(now.getDate() - 6);
-        weekStart.setHours(0, 0, 0, 0);
 
-        let weekEnd = new Date(now);
-        weekEnd.setHours(23, 59, 59, 999);
+        let start = new Date(now);
+        start.setDate(now.getDate() - 6);
+        start.setHours(0, 0, 0, 0);
 
+        let end = new Date(now);
+        end.setHours(23, 59, 59, 999);
+
+        // 🧠 Clamp to period if exists
         if (period) {
-            if (weekStart < start) weekStart = new Date(start);
-            if (weekEnd > end) weekEnd = new Date(end);
+            let pStart = getSafeDate(period.start);
+            let pEnd = getSafeDate(period.end) || new Date();
+
+            if (pStart && start < pStart) start = pStart;
+            if (pEnd && end > pEnd) end = pEnd;
         }
 
-        filteredSavingsData = data.filter(t => {
-            let d = new Date(t.date);
-            return d >= weekStart && d <= weekEnd;
+        filteredSavingsData = baseData.filter(t => {
+            let d = getSafeDate(t.date);
+            if (!d) return false;
+            return d >= start && d <= end;
         });
     }
+
+    // 🔥 MONTH (FULL PERIOD, not calendar)
     else if (type === "month") {
-        if (period) {
 
-            let s = new Date(start);
-            let e = new Date(end);
+        // 💡 IMPORTANT:
+        // Since baseData already filtered by periodKey,
+        // we just return it directly
 
-            s.setHours(0, 0, 0, 0);
-            e.setHours(23, 59, 59, 999);
-
-            filteredSavingsData = data.filter(t => {
-                let d = new Date(t.date);
-                return d >= s && d <= e;
-            });
-
-        } else {
-
-            let currentMonth = new Date().toISOString().slice(0, 7);
-
-            filteredSavingsData = data.filter(t => t.monthKey === currentMonth);
-        }
+        filteredSavingsData = [...baseData];
     }
+
+    // 🔥 ALL
     else {
-        filteredSavingsData = data;
+        filteredSavingsData = [...baseData];
     }
 
+    // =========================
+    // 📊 UPDATE UI
+    // =========================
     renderSavingsHistory(filteredSavingsData);
     loadSavingsGraph(filteredSavingsData);
 }
-
 // Generates income vs expense chart using filtered or full data
 function loadSavingsGraph(data) {
-    let d = data || getSavings();
+
+    let periodKey = typeof getActivePeriodKey === "function"
+        ? getActivePeriodKey()
+        : null;
+
+    let now = new Date();
+    let currentMonth = now.toISOString().slice(0, 7);
+
+    let d = data;
+
+    if (!d) {
+        let all = getSavings() || [];
+
+        d = all.filter(t => {
+            if (periodKey) return t.periodKey === periodKey;
+            return t.monthKey === currentMonth;
+        });
+    }
 
     let income = 0;
     let expense = 0;
@@ -674,28 +756,51 @@ function loadSavingsGraph(data) {
 
 // Switches between different UI screens (home, graph, income, details)
 function showSavingsScreen(id) {
-    // Switch screens
+    console.log("Switching to:", id);
+
+    // 🔹 Reset all screens
     document.querySelectorAll(".screen").forEach(s =>
         s.classList.remove("active")
     );
 
-    document.getElementById(id).classList.add("active");
-
-    // 🔥 FIX: update nav active button
-    document.querySelectorAll(".nav button").forEach(btn => {
-        btn.classList.remove("active");
-    });
-
-    let activeBtn = document.querySelector(`.nav button[data-screen="${id}"]`);
-    if (activeBtn) activeBtn.classList.add("active");
-
-    // Existing logic
-    if (id === "graph") {
-        loadSavingsGraph(filteredSavingsData.length ? filteredSavingsData : getSavings());
+    const screen = document.getElementById(id);
+    if (!screen) {
+        console.error("Screen NOT found:", id);
+        return;
     }
 
-    if (id === "income") {
-        renderIncomeList();
+    screen.classList.add("active");
+    window.scrollTo(0, 0);
+
+    // 🔹 Clear only details content
+    if (id === "details") {
+        const container = document.getElementById("sourceDetails");
+        if (container) container.innerHTML = "";
+    }
+
+    // 🔹 Nav highlight (kept from first version)
+    document.querySelectorAll(".nav button").forEach(btn =>
+        btn.classList.remove("active")
+    );
+
+    const activeBtn = document.querySelector(`.nav button[data-screen="${id}"]`);
+    if (activeBtn) activeBtn.classList.add("active");
+
+    // 🔹 Controlled rendering
+    switch (id) {
+
+        case "income":
+            renderIncomeList();
+            break;
+
+        case "graph":
+            // 🔥 use scoped data (fixed)
+            loadSavingsGraph(
+                filteredSavingsData.length
+                    ? filteredSavingsData
+                    : getScopedSavings()
+            );
+            break;
     }
 }
 
@@ -706,7 +811,7 @@ function getSourceSummary(sourceId) {
     let income = data.find(t => String(t.id) === String(sourceId));
     if (!income) return null;
 
-    let outgoing = data.filter(t => String(t.sourceId) === income.id);
+    let outgoing = data.filter(t => String(t.sourceId) === String(income.id));
 
     let totalOutgoing = outgoing.reduce(
         (sum, t) => t.amount < 0 ? sum + Math.abs(t.amount) : sum,
@@ -724,128 +829,158 @@ function getSourceSummary(sourceId) {
 
 // Displays detailed breakdown of a selected income source
 function renderSourceDetails(sourceId) {
-    let data = getSavings();
 
-    let income = data.find(t => String(t.id) === String(sourceId));
-    if (!income) return;
+    // 🔥 SINGLE SOURCE OF TRUTH
+    let scoped = getScopedSavings();
 
-    let related = data.filter(t => String(t.sourceId) === income.id);
+    let incomeId = String(sourceId);
 
-    // 🔴 USED (only negative)
+    // 🎯 FIND INCOME
+    let income = scoped.find(t => String(t.id) === incomeId);
+
+    let container = document.getElementById("sourceDetails");
+    if (!container) return;
+
+    // ❌ NOT FOUND
+    if (!income) {
+        container.innerHTML = `
+            <div style="padding:16px;">
+                <p style="color:#888;">No data found for this source ❌</p>
+            </div>
+        `;
+        return;
+    }
+
+    // 🔗 RELATED TRANSACTIONS
+    let related = scoped.filter(t => String(t.sourceId) === incomeId);
+
+    // 🧮 CALCULATIONS
     let used = related
         .filter(t => t.amount < 0)
         .reduce((sum, t) => sum + Math.abs(t.amount), 0);
 
-    // 🟢 CREDITED (only positive)
     let credited = related
         .filter(t => t.amount > 0)
         .reduce((sum, t) => sum + t.amount, 0);
 
     let remaining = income.amount - used + credited;
 
-    let container = document.getElementById("sourceDetails");
-    if (!container) return;
-
-    // 🔥 ENTRIES
+    // 📜 BUILD ENTRIES
     let entriesHTML = "";
 
     if (!related.length) {
-        entriesHTML = `<p style="margin-top:10px;">No entries</p>`;
+        entriesHTML = `<p style="color:#888;">No transactions yet</p>`;
     } else {
-        related.forEach(e => {
-            let color = e.amount < 0 ? "#ff5252" : "#4caf50";
+        related.slice().reverse().forEach(t => {
+
+            let color = t.amount < 0 ? "#ff5252" : "#4caf50";
+
+            let labelMap = {
+                transfer: "🔁 Transfer",
+                budget_allocation: "📦 Budget",
+                income: "💰 Income"
+            };
+
+            let label = labelMap[t.type] || t.type;
 
             entriesHTML += `
-                <div class="expense-item">
+                <div style="
+                    display:flex;
+                    justify-content:space-between;
+                    padding:8px 0;
+                    border-bottom:1px solid #eee;
+                ">
                     <div>
-                        <strong>${e.note || e.person || "Entry"}</strong><br>
-                        <small>${new Date(e.date).toLocaleString()}</small>
+                        <strong>${t.note || t.person || "Entry"}</strong><br>
+                        <small style="color:#777;">
+                            ${label} • ${new Date(t.date).toLocaleString()}
+                        </small>
                     </div>
+
                     <div style="color:${color}; font-weight:600;">
-                        Rs. ${Math.abs(e.amount)}
+                        ₹${Math.abs(t.amount)}
                     </div>
                 </div>
             `;
         });
     }
 
-    // 🎨 CLEAN LIGHT UI
+    // 📦 FINAL UI
     container.innerHTML = `
-        <div class="card" style="
-            border-radius:16px;
-            padding:16px;
-            background:#f7f7f7;
-            box-shadow: 0 8px 20px rgba(0,0,0,0.08);
-        ">
 
-            <!-- HEADER -->
-            <div style="display:flex; justify-content:space-between; align-items:center;">
-                <div>
-                    <h3 style="margin:0;">${income.note || "Income"}</h3>
-                </div>
+    <h3 style="margin-bottom:8px;">
+        ${income.note || "Income"}
+    </h3>
 
-                <button onclick="showSavingsScreen('income')" style="
-                    background:#eee;
-                    border:none;
-                    padding:6px 12px;
-                    border-radius:8px;
-                    cursor:pointer;
-                ">
-                    ← Back
-                </button>
-            </div>
+    <div class="summary">
 
-            <!-- SUMMARY -->
-            <div style="margin-top:14px; display:grid; grid-template-columns:1fr 1fr; gap:10px;">
-                
-                <div style="background:white; padding:10px; border-radius:10px;">
-                    <small>Income</small>
-                    <div>Rs. ${income.amount}</div>
-                </div>
-
-                <div style="background:white; padding:10px; border-radius:10px;">
-                    <small>Used</small>
-                    <div style="color:#ff5252;">Rs. ${used}</div>
-                </div>
-
-                <div style="background:white; padding:10px; border-radius:10px;">
-                    <small>Credited</small>
-                    <div style="color:#4caf50;">Rs. ${credited}</div>
-                </div>
-
-                <div style="background:white; padding:10px; border-radius:10px;">
-                    <small>Remaining</small>
-                    <div style="color:#4caf50;">Rs. ${remaining}</div>
-                </div>
-
-            </div>
-
-            <hr style="margin:16px 0;">
-
-            <!-- ENTRIES -->
-            <h4>Entries</h4>
-
-            ${entriesHTML}
-
+        <div class="box">
+            <small>Total</small>
+            <div>${formatCurrency(income.amount)}</div>
         </div>
-    `;
+
+        <div class="box">
+            <small>Used</small>
+            <div class="red">${formatCurrency(used)}</div>
+        </div>
+
+    </div>
+
+    <div class="summary">
+
+        <div class="box success">
+            <small>Credited</small>
+            <div>${formatCurrency(credited)}</div>
+        </div>
+
+        <div class="box success">
+            <small>Remaining</small>
+            <div>${formatCurrency(remaining)}</div>
+        </div>
+
+    </div>
+
+    <hr style="margin:12px 0;">
+
+    <h4>Transactions</h4>
+    ${entriesHTML}
+`;
 }
 
 // Renders all income entries and allows navigation to detailed view
 function renderIncomeList() {
-    let data = getSavings();
-    let incomes = data.filter(t => t.type === "income");
+
+    let data = getSavings() || [];
+
+    let periodKey = typeof getActivePeriodKey === "function"
+        ? getActivePeriodKey()
+        : null;
+
+    let now = new Date();
+    let currentMonth = now.toISOString().slice(0, 7);
+
+    // 🔥 CONSISTENT PERIOD FILTER
+    let scoped = data.filter(t => {
+        if (periodKey) return t.periodKey === periodKey;
+        return t.monthKey === currentMonth;
+    });
+
+    let incomes = scoped.filter(t => t.type === "income");
 
     let container = document.getElementById("incomeList");
     if (!container) return;
 
     container.innerHTML = "";
 
+    if (!incomes.length) {
+        container.innerHTML = `<p style="color:#888;">No income sources yet</p>`;
+        return;
+    }
+
     incomes.slice().reverse().forEach(i => {
 
-        // 🔥 CALCULATE USED
-        let used = data
-            .filter(t => String(t.sourceId) === i.id && t.amount < 0)
+        let used = scoped
+            .filter(t => String(t.sourceId) === String(i.id) && t.amount < 0)
             .reduce((sum, t) => sum + Math.abs(t.amount), 0);
 
         let remaining = i.amount - used;
@@ -855,47 +990,43 @@ function renderIncomeList() {
 
         let date = new Date(i.date);
 
-        // 📅 Month + Year (from old version)
         let monthYear = date.toLocaleString("en-IN", {
             month: "short",
             year: "numeric"
         });
 
-        // 🏷 Name logic
         let name = i.note || `${monthYear} Income`;
 
-        // 🔥 Status text (merged logic)
-        let statusText = "";
-        let statusClass = "";
+        let statusText = remaining <= 0
+            ? "❌ All used"
+            : `₹${remaining} left`;
 
-        if (remaining <= 0) {
-            statusText = "❌ All used";
-            statusClass = "red";
-        } else {
-            statusText = `₹${remaining} left`;
-            statusClass = "green";
-        }
+        let statusClass = remaining <= 0 ? "red" : "green";
 
         div.innerHTML = `
-      <div class="income-left">
-        <strong>${name}</strong>
-        <small>${monthYear}</small>
-      </div>
+            <div class="income-left">
+                <strong>${name}</strong>
+                <small>${monthYear}</small>
+            </div>
 
-      <div class="income-right">
-        <span class="amount">₹${i.amount}</span>
-        <span class="remaining ${statusClass}">
-          ${statusText}
-        </span>
-      </div>
-    `;
+            <div class="income-right">
+                <span class="amount">₹${i.amount}</span>
+                <span class="remaining ${statusClass}">
+                    ${statusText}
+                </span>
+            </div>
+        `;
 
-        // 🔥 CLICK → DETAILS
-        div.style.cursor = "pointer";
-        div.onclick = () => {
+        // 🔥 CLEAN CLICK FLOW (NO RACE CONDITION)
+        div.addEventListener("click", () => {
+            let id = String(i.id);
+
             showSavingsScreen("details");
-            renderSourceDetails(i.id);
-        };
+
+            requestAnimationFrame(() => {
+                renderSourceDetails(id);
+            });
+        });
 
         container.appendChild(div);
     });
@@ -956,28 +1087,28 @@ function applySavingsDateFilter() {
     let from = document.getElementById("sFromDate").value;
     let to = document.getElementById("sToDate").value;
 
-    let data = getSavings();
+    let data = getSavings() || [];
 
-    filteredSavingsData = data.filter(t => {
+    let periodKey = typeof getActivePeriodKey === "function"
+        ? getActivePeriodKey()
+        : null;
 
+    let now = new Date();
+    let currentMonth = now.toISOString().slice(0, 7);
+
+    // 🔥 BASE FILTER
+    let base = data.filter(t => {
+        if (periodKey) return t.periodKey === periodKey;
+        return t.monthKey === currentMonth;
+    });
+
+    filteredSavingsData = base.filter(t => {
         let d = new Date(t.date).toISOString().slice(0, 10);
 
-        // Only FROM
-        if (from && !to) {
-            return d === from;
-        }
+        if (from && !to) return d === from;
+        if (!from && to) return d <= to;
+        if (from && to) return d >= from && d <= to;
 
-        // Only TO
-        if (!from && to) {
-            return d <= to;
-        }
-
-        // BOTH
-        if (from && to) {
-            return d >= from && d <= to;
-        }
-
-        // NONE
         return true;
     });
 
@@ -1560,4 +1691,24 @@ window.addEventListener("DOMContentLoaded", function () {
 */
 function goToBudgetPeriods() {
     window.location.href = "../pages/budgetperiod.html";
+}
+function getScopedSavings() {
+    let data = getSavings() || [];
+
+    let periodKey = typeof getActivePeriodKey === "function"
+        ? getActivePeriodKey()
+        : null;
+
+    let now = new Date();
+    let currentMonth = now.toISOString().slice(0, 7);
+
+    return data.filter(t => {
+        if (periodKey) {
+            return (
+                t.periodKey === periodKey ||
+                (!t.periodKey && t.monthKey === currentMonth)
+            );
+        }
+        return t.monthKey === currentMonth;
+    });
 }

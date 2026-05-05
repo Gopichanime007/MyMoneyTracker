@@ -247,6 +247,7 @@ body {
   margin: 0;
   font-family: 'Poppins', sans-serif;
   background: linear-gradient(135deg, #f3f6fb, #e6ebf2);
+  overflow-y: auto;
 }
 
 * {
@@ -258,6 +259,7 @@ body {
   max-width: 420px;
   margin: auto;
   padding: 14px;
+  min-height: 100vh;
 }
 
 /* HEADER */
@@ -453,6 +455,20 @@ select {
   display: flex;
   justify-content: space-between;
   align-items: center;
+
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.card-header h3 {
+  margin: 0;
+  font-size: 18px;
+
+  white-space: nowrap;
+  /* 🔥 prevents breaking */
+  overflow: hidden;
+  text-overflow: ellipsis;
+  /* optional */
 }
 
 /* =========================
@@ -613,25 +629,55 @@ select {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 12px;
-  margin-bottom: 10px;
-  background: #fff;
-  border-radius: 12px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+
+  padding: 14px 16px;
+  margin-bottom: 12px;
+
+  border-radius: 16px;
+  background: #ffffff;
+
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.06);
+  transition: 0.2s ease;
+}
+
+.income-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 10px 22px rgba(0, 0, 0, 0.08);
 }
 
 .income-left strong {
-  font-size: 14px;
+  font-size: 15px;
+  color: #222;
 }
 
 .income-left small {
-  display: block;
-  color: #777;
-  font-size: 11px;
+  font-size: 12px;
+  color: #888;
 }
 
-.income-right {
-  text-align: right;
+.income-right .amount {
+  font-size: 15px;
+  font-weight: 600;
+  color: #222;
+}
+
+.remaining {
+  display: inline-block;
+  margin-top: 4px;
+  padding: 4px 8px;
+
+  font-size: 11px;
+  border-radius: 999px;
+}
+
+.remaining.green {
+  background: #e6f7ec;
+  color: #1b9e4b;
+}
+
+.remaining.red {
+  background: #ffeaea;
+  color: #d93025;
 }
 
 .amount {
@@ -639,11 +685,7 @@ select {
   font-weight: bold;
 }
 
-.remaining {
-  font-size: 12px;
-}
-
-.green {
+s .green {
   color: #4caf50;
 }
 
@@ -721,4 +763,36 @@ select {
   --space-sm: 8px;
   --space-md: 12px;
   --space-lg: 18px;
+}
+
+.secondary {
+  background: #f1f3f6;
+  color: #333;
+
+  border: none;
+  padding: 6px 12px;
+
+  border-radius: 10px;
+
+  font-size: 12px;
+  font-weight: 500;
+
+  cursor: pointer;
+
+  width: auto;
+  /* 🔥 IMPORTANT */
+  white-space: nowrap;
+
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.05);
+}
+
+.secondary:hover {
+  transform: translateY(-1px);
+}
+
+.back-btn {
+  background: #f3f4f6;
+  padding: 6px 10px;
+  border-radius: 999px;
+  font-size: 12px;
 }

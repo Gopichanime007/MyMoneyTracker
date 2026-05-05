@@ -1,3 +1,4 @@
+const isSavingsPage = window.location.pathname.includes("savings");
 let currentFilteredExpenses = [];
 // =========================
 // 💱 CURRENCY CORE SYSTEM
@@ -470,6 +471,10 @@ function resetForm() {
 
 // ✅ ALWAYS RUN FOOTER (independent)
 window.addEventListener("load", function () {
+    if (isSavingsPage) {
+        console.log("🚫 script.js blocked on savings page");
+        return;
+    }
     try {
         injectGlobalFooter();
 
