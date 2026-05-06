@@ -34,6 +34,7 @@ window.addEventListener("load", function () {
     loadPersonOptions();
     renderCategoryList();
     renderPersonList();
+    loadSettlementOptions();
     setTimeout(() => {
         loadSavings();
     }, 50);
@@ -222,7 +223,84 @@ function addSavings() {
 
         data.push(entry);
     }
+    // =========================
+    // 💸 SETTLEMENT / RETURN
+    // =========================
+    else if (type === "settlement") {
 
+        const settlementSelect =
+            document.getElementById("settlementSelect");
+
+        const transferId =
+            String(settlementSelect?.value || "");
+
+        if (!transferId) {
+
+            showToast(
+                "Select pending transfer ❗",
+                "warning"
+            );
+
+            return;
+        }
+
+        // 🔥 find original transfer
+        let originalTransfer = data.find(
+            t => String(t.id) === transferId
+        );
+
+        if (!originalTransfer) {
+
+            showToast(
+                "Original transfer not found ❗",
+                "error"
+            );
+
+            return;
+        }
+        // 🔥 prevent over settlement
+        let alreadySettled = data
+            .filter(s =>
+                s.type === "settlement" &&
+                String(s.linkedTransactionId) === String(originalTransfer.id)
+            )
+            .reduce((sum, s) => sum + Math.abs(s.amount), 0);
+
+        let pending =
+            Math.abs(originalTransfer.amount) - alreadySettled;
+
+        if (amount > pending) {
+
+            showToast(
+                `Only ₹${pending} pending ❗`,
+                "warning"
+            );
+
+            return;
+        }
+
+        const entry = createSavingsEntry({
+
+            type: "settlement",
+
+            amount: Math.abs(amount),
+
+            sourceId: originalTransfer.sourceId,
+
+            person: originalTransfer.person,
+
+            entity,
+            payment,
+            note,
+
+            date
+        });
+
+        // 🔥 link settlement
+        entry.linkedTransactionId = originalTransfer.id;
+
+        data.push(entry);
+    }
     // =========================
     // 📦 BUDGET ALLOCATION
     // =========================
@@ -381,16 +459,16 @@ function loadSavings() {
     let dailyEl = document.getElementById("dailyBudget");
     if (dailyEl) dailyEl.innerText = "₹ " + daily.toFixed(2);
     // 🔥 MERGED FILTER (period + fallback)
-    let filtered = data.filter(t => {
-        if (periodKey) {
-            return (
-                t.periodKey === periodKey ||
-                (!t.periodKey && t.monthKey === currentMonth)
-            );
-        }
-        return t.monthKey === currentMonth;
-    });
-
+    // let filtered = data.filter(t => {
+    //     if (periodKey) {
+    //         return (
+    //             t.periodKey === periodKey ||
+    //             (!t.periodKey && t.monthKey === currentMonth)
+    //         );
+    //     }
+    //     return t.monthKey === currentMonth;
+    // });
+    let filtered = [...data];
     // 🔥 CALCULATIONS
     let total = filtered.reduce((sum, t) => sum + t.amount, 0);
 
@@ -465,7 +543,8 @@ function renderSavingsHistory(data) {
         let labelMap = {
             income: "💰 Income",
             transfer: "🔁 Transfer",
-            budget_allocation: "📦 Budget"
+            budget_allocation: "📦 Budget",
+            settlement: "💸 Settlement"
         };
 
         let label = labelMap[t.type] || t.type;
@@ -576,11 +655,11 @@ function loadSourceOptions({
     let currentMonth = now.toISOString().slice(0, 7);
 
     // 🔥 FILTER BASE
-    let scoped = data.filter(t => {
-        if (periodKey) return t.periodKey === periodKey;
-        return t.monthKey === currentMonth;
-    });
-
+    // let scoped = data.filter(t => {
+    //     if (periodKey) return t.periodKey === periodKey;
+    //     return t.monthKey === currentMonth;
+    // });
+    let scoped = [...data];
     let sources = scoped.filter(t => t.type === "income");
 
     select.innerHTML = "<option value=''>Select Source</option>";
@@ -664,12 +743,27 @@ function handleSavingsFilter(type) {
     // =========================
     // 🧱 BASE DATA (PERIOD FIRST)
     // =========================
-    let baseData = data.filter(t => {
-        if (periodKey) return t.periodKey === periodKey;
+    let baseData;
 
-        let currentMonth = now.toISOString().slice(0, 7);
-        return t.monthKey === currentMonth;
-    });
+    // 🔥 TRUE ALL DATA
+    if (type === "all") {
+
+        baseData = [...data];
+
+    } else {
+
+        // normal scoped filtering
+        baseData = data.filter(t => {
+
+            if (periodKey) {
+                return t.periodKey === periodKey;
+            }
+
+            let currentMonth = now.toISOString().slice(0, 7);
+
+            return t.monthKey === currentMonth;
+        });
+    }
 
     // =========================
     // 🧠 SAFE DATE PARSER
@@ -922,7 +1016,8 @@ function renderSourceDetails(sourceId) {
             let labelMap = {
                 transfer: "🔁 Transfer",
                 budget_allocation: "📦 Budget",
-                income: "💰 Income"
+                income: "💰 Income",
+                settlement: "💸 Settlement"
             };
 
             let label = labelMap[t.type] || t.type;
@@ -1003,25 +1098,23 @@ function renderIncomeList() {
     let now = new Date();
     let currentMonth = now.toISOString().slice(0, 7);
 
-    // 🔥 CONSISTENT PERIOD FILTER
-    let scoped = data.filter(t => {
-        if (periodKey) return t.periodKey === periodKey;
-        return t.monthKey === currentMonth;
-    });
+    // 🔥 GLOBAL SOURCES
+    let scoped = [...data];
 
-    let incomes = scoped.filter(t => t.type === "income");
+    // all income sources from all periods
+    let sources = scoped.filter(t => t.type === "income");
 
     let container = document.getElementById("incomeList");
     if (!container) return;
 
     container.innerHTML = "";
 
-    if (!incomes.length) {
+    if (!sources.length) {
         container.innerHTML = `<p style="color:#888;">No income sources yet</p>`;
         return;
     }
 
-    incomes.slice().reverse().forEach(i => {
+    sources.slice().reverse().forEach(i => {
 
         let used = scoped
             .filter(t => String(t.sourceId) === String(i.id) && t.amount < 0)
@@ -1083,31 +1176,39 @@ function closeSavingsModal() {
 
 // Controls UI fields based on selected type (income / transfer / budget)
 function handleSavingsTypeChange() {
+
     let type = document.getElementById("sType").value;
 
     let source = document.getElementById("sourceWrapper");
     let budget = document.getElementById("budgetConfig");
     let personField = document.getElementById("personWrapper");
+    let settlement = document.getElementById("settlementWrapper");
 
-    // 👤 PERSON
+    // reset
+    source.style.display = "none";
+    budget.style.display = "none";
+    personField.style.display = "none";
+    settlement.style.display = "none";
+
+    // 🔁 TRANSFER
     if (type === "transfer") {
+
+        source.style.display = "block";
         personField.style.display = "block";
-    } else {
-        personField.style.display = "none";
     }
 
-    // 🔗 SOURCE + BUDGET
-    if (type === "transfer") {
-        source.style.display = "block";
-        budget.style.display = "none";
+    // 📦 BUDGET
+    else if (type === "withdraw_budget") {
 
-    } else if (type === "withdraw_budget") {
         source.style.display = "block";
-        budget.style.display = "none";
+    }
 
-    } else {
-        source.style.display = "none";
-        budget.style.display = "none";
+    // 💸 SETTLEMENT
+    else if (type === "settlement") {
+
+        settlement.style.display = "block";
+
+        loadSettlementOptions();
     }
 }
 
@@ -1830,4 +1931,52 @@ function getDailyBudget() {
     if (!days) return 0;
 
     return total / days;
+}
+
+
+function loadSettlementOptions() {
+
+    let select = document.getElementById("settlementSelect");
+
+    if (!select) return;
+
+    let data = getSavings() || [];
+
+    select.innerHTML =
+        "<option value=''>Select Pending Transfer</option>";
+
+    // 🔥 only transfers
+    let transfers = data.filter(t => t.type === "transfer");
+
+    transfers.forEach(t => {
+
+        // total settled against this transfer
+        let settled = data
+            .filter(s =>
+                s.type === "settlement" &&
+                String(s.linkedTransactionId) === String(t.id)
+            )
+            .reduce((sum, s) => sum + Math.abs(s.amount), 0);
+
+        let original = Math.abs(t.amount);
+
+        let pending = original - settled;
+
+        // skip fully settled
+        if (pending <= 0) return;
+
+        let option = document.createElement("option");
+
+        option.value = t.id;
+
+        option.textContent =
+            `${t.person || "Unknown"} — ${t.note || "Transfer"} — ₹${pending} pending`;
+
+        // 🔥 metadata
+        option.dataset.sourceId = t.sourceId;
+        option.dataset.person = t.person || "";
+        option.dataset.pending = pending;
+
+        select.appendChild(option);
+    });
 }

@@ -61,6 +61,7 @@
           <option value="income">Add Savings</option>
           <option value="withdraw_budget">Move to Budget</option>
           <option value="transfer">Transfer</option>
+          <option value="settlement">Settlement / Return</option>
         </select>
 
         <!-- BASIC INFO -->
@@ -70,6 +71,13 @@
         <div id="personWrapper">
           <label>Person</label>
           <select id="sPerson"></select>
+        </div>
+        <div id="settlementWrapper" style="display:none;">
+          <label>Pending Transfer</label>
+
+          <select id="settlementSelect">
+            <option value="">Select Pending Transfer</option>
+          </select>
         </div>
 
         <input type="text" id="sNote" placeholder="Purpose / Note">
