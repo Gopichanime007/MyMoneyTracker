@@ -152,27 +152,30 @@ function addSavings() {
     }
 
     // =========================
-    // 📅 DATE HANDLING
+    // 📅 DATE HANDLING (FIXED)
     // =========================
-    let selectedDate;
+    let date;
 
     if (!dateInput) {
-        selectedDate = new Date();
-    } else {
-        let inputDate = new Date(dateInput);
-        let today = new Date();
 
-        if (inputDate.toDateString() === today.toDateString()) {
-            selectedDate = new Date(); // now
+        // current exact datetime
+        date = new Date().toISOString();
+
+    } else {
+
+        let todayStr = new Date().toISOString().split("T")[0];
+
+        // today's transaction → keep current time
+        if (dateInput === todayStr) {
+
+            date = new Date().toISOString();
+
         } else {
-            selectedDate = new Date(inputDate);
-            selectedDate.setHours(23, 59, 59, 999); // EOD
+
+            // preserve exact selected date
+            date = `${dateInput}T12:00:00`;
         }
     }
-
-    const date = new Date(
-        selectedDate.getTime() - selectedDate.getTimezoneOffset() * 60000
-    ).toISOString();
 
     let data = getSavings();
 
@@ -249,20 +252,18 @@ function addSavings() {
             payment,
             note,
             date,
-            person: "Self" // ✅ enforced
+            person: "Self"
         });
 
         data.push(entry);
 
-        // 🔥 update budget AFTER push
         createOrUpdateBudget(budgetId, entry);
     }
 
     // =========================
     // 💾 SAVE + UI
     // =========================
-    console.log("Selected Date:", selectedDate);
-    console.log("ISO Date:", date);
+    console.log("Final Date:", date);
 
     saveSavings(data);
     loadSavings();
