@@ -105,6 +105,10 @@ function saveBudget() {
   let start = document.getElementById("bpStartDate").value;
   let end = document.getElementById("bpEndDate").value;
   let status = document.getElementById("bpStatus").value;
+  let extraDays = parseInt(document.getElementById("bpExtraDays").value || 0);
+
+  // 🔥 FIX HERE
+  extraDays = Math.max(0, extraDays);
 
   if (!start) {
     alert("Select start date");
@@ -122,8 +126,8 @@ function saveBudget() {
     id: Date.now(),
     start: start,
     end: end || null,   // 🔥 always defined (stable)
-    status: status
-    // ❌ removed stored "spent"
+    status: status,
+    extraDays: extraDays
   });
 
   saveData(data);
@@ -163,6 +167,7 @@ function openDetails(id) {
     <p><strong>Budget:</strong> ${formatCurrency(budgetAmount)}</p>
     <p><strong>Spent:</strong> ${formatCurrency(spent)}</p>
     <p><strong>Status:</strong> ${d.status}</p>
+    <p><strong>Extra Days:</strong> ${d.extraDays || 0}</p>
   `;
 
   document.getElementById("detailsModal").classList.add("show");
@@ -197,6 +202,22 @@ function format(date) {
   return new Date(date).toLocaleDateString("en-IN", { day: "numeric", month: "short" });
 }
 
+// function calculateEndDate() {
+
+//   let start = document.getElementById("bpStartDate").value;
+//   let duration = parseInt(document.getElementById("bpDuration").value || 30);
+
+//   if (!start) return;
+
+//   let d = new Date(start);
+
+//   // 🔥 Fix: avoid +1 day bug
+//   d.setDate(d.getDate() + duration - 1);
+
+//   document.getElementById("bpEndDate").value =
+//     d.toISOString().split("T")[0];
+// }
+
 function calculateEndDate() {
 
   let start = document.getElementById("bpStartDate").value;
@@ -206,13 +227,15 @@ function calculateEndDate() {
 
   let d = new Date(start);
 
-  // 🔥 Fix: avoid +1 day bug
+  // ✅ base calculation
   d.setDate(d.getDate() + duration - 1);
+
+  // 🔥 NEW: adjust to Monday if weekend
+  d = adjustToNextMonday(d);
 
   document.getElementById("bpEndDate").value =
     d.toISOString().split("T")[0];
 }
-
 function goToHome() {
   window.location.href = "../index.html"; // adjust path if needed
 }
@@ -242,4 +265,20 @@ function closeBudget(id) {
 
   saveData(data);
   render();
+}
+
+function adjustToNextMonday(date) {
+  let d = new Date(date);
+  let day = d.getDay(); // 0=Sun, 6=Sat
+
+  if (day === 6) {
+    // Saturday → Monday
+    d.setDate(d.getDate() + 2);
+  }
+  else if (day === 0) {
+    // Sunday → Monday
+    d.setDate(d.getDate() + 1);
+  }
+
+  return d;
 }

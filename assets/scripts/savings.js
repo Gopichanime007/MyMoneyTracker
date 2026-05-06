@@ -1,5 +1,9 @@
 document.addEventListener("DOMContentLoaded", () => {
-    console.log("DOM ready ✅");
+    try {
+        console.log("DOM ready ✅");
+    } catch (e) {
+        console.error("Init error:", e);
+    }
 });
 
 // 🔥 FIX MODAL CLOSE (SAFE CLICK ONLY ON BACKDROP)
@@ -129,41 +133,46 @@ function createSavingsEntry({
 // =========================
 // Handles adding income, transfer, or budget allocation into savings ledger
 function addSavings() {
-    let type = document.getElementById("sType").value;
-    let amount = Number(document.getElementById("sAmount").value);
-    let note = document.getElementById("sNote").value;
-    let dateInput = document.getElementById("sDate").value;
-    let entity = document.getElementById("sEntity").value;
-    let payment = document.getElementById("sPayment").value;
 
-    let period = document.getElementById("budgetPeriod")?.value;
-    let budgetDate = document.getElementById("budgetDate")?.value;
+    // =========================
+    // 📥 INPUTS
+    // =========================
+    const type = document.getElementById("sType").value;
+    const amount = Number(document.getElementById("sAmount").value);
+    const note = document.getElementById("sNote").value;
+    const dateInput = document.getElementById("sDate").value;
+    const entity = document.getElementById("sEntity").value;
+    const payment = document.getElementById("sPayment").value;
+    const sourceSelect = document.getElementById("sourceSelect");
+    const personSelect = document.getElementById("sPerson");
 
     if (!amount || amount <= 0) {
         showToast("Enter valid amount ❗", "warning");
         return;
     }
 
+    // =========================
+    // 📅 DATE HANDLING
+    // =========================
     let selectedDate;
 
     if (!dateInput) {
-        // ✅ No date → current time
         selectedDate = new Date();
     } else {
         let inputDate = new Date(dateInput);
         let today = new Date();
 
         if (inputDate.toDateString() === today.toDateString()) {
-            // ✅ TODAY → current time
-            selectedDate = new Date();
+            selectedDate = new Date(); // now
         } else {
-            // ✅ PAST → END OF DAY (EOD)
             selectedDate = new Date(inputDate);
-            selectedDate.setHours(23, 59, 59, 999);
+            selectedDate.setHours(23, 59, 59, 999); // EOD
         }
     }
 
-    let date = selectedDate.toISOString();
+    const date = new Date(
+        selectedDate.getTime() - selectedDate.getTimezoneOffset() * 60000
+    ).toISOString();
 
     let data = getSavings();
 
@@ -171,7 +180,8 @@ function addSavings() {
     // 💰 INCOME
     // =========================
     if (type === "income") {
-        let entry = createSavingsEntry({
+
+        const entry = createSavingsEntry({
             type: "income",
             amount: Math.abs(amount),
             entity,
@@ -188,19 +198,18 @@ function addSavings() {
     // =========================
     else if (type === "transfer") {
 
-        let person = document.getElementById("sPerson").value;
-        let sourceId = String(document.getElementById("sourceSelect").value);
-
+        const sourceId = String(sourceSelect?.value || "");
+        const person = personSelect?.value || null;
 
         if (!sourceId) {
             showToast("Select source ❗", "warning");
             return;
         }
 
-        let entry = createSavingsEntry({
+        const entry = createSavingsEntry({
             type: "transfer",
             amount: -Math.abs(amount),
-            sourceId, // ✅ FIX
+            sourceId,
             person,
             entity,
             payment,
@@ -216,38 +225,45 @@ function addSavings() {
     // =========================
     else if (type === "withdraw_budget") {
 
-        let sourceId = String(document.getElementById("sourceSelect").value);
-
-        if (!budgetDate) {
-            showToast("Select budget date ❗", "warning");
-            return;
-        }
+        const sourceId = String(sourceSelect?.value || "");
 
         if (!sourceId) {
             showToast("Select source ❗", "warning");
             return;
         }
 
-        let budgetId = generateBudgetId(period, budgetDate);
+        const periodKey =
+            typeof getActivePeriodKey === "function"
+                ? getActivePeriodKey()
+                : null;
 
-        // ✅ create/update budget
-        let entry = createSavingsEntry({
+        const fallbackMonth = date.slice(0, 7);
+
+        const budgetId = `budget_${periodKey || fallbackMonth}_${sourceId}`;
+
+        const entry = createSavingsEntry({
             type: "budget_allocation",
             amount: -Math.abs(amount),
             sourceId,
             entity,
             payment,
             note,
-            date
+            date,
+            person: "Self" // ✅ enforced
         });
 
-        // 🔥 Correct call
-        data.push(entry);   // 🔥 FIRST push
+        data.push(entry);
 
-        createOrUpdateBudget(budgetId, entry);   // 🔥 THEN calculate
+        // 🔥 update budget AFTER push
+        createOrUpdateBudget(budgetId, entry);
     }
+
+    // =========================
+    // 💾 SAVE + UI
+    // =========================
     console.log("Selected Date:", selectedDate);
-    console.log("ISO Date:", selectedDate.toISOString());
+    console.log("ISO Date:", date);
+
     saveSavings(data);
     loadSavings();
     loadSourceOptions();
@@ -359,7 +375,10 @@ function loadSavings() {
 
     let now = new Date();
     let currentMonth = now.toISOString().slice(0, 7);
+    let daily = getDailyBudget();
 
+    let dailyEl = document.getElementById("dailyBudget");
+    if (dailyEl) dailyEl.innerText = "₹ " + daily.toFixed(2);
     // 🔥 MERGED FILTER (period + fallback)
     let filtered = data.filter(t => {
         if (periodKey) {
@@ -437,7 +456,7 @@ function renderSavingsHistory(data) {
 
     data.slice().reverse().forEach((t, index) => {
 
-        let realIndex = data.length - 1 - index; // 🔥 FIX INDEX
+        // let realIndex = data.length - 1 - index; // 🔥 FIX INDEX
 
         let div = document.createElement("div");
         div.className = "expense-item";
@@ -452,25 +471,33 @@ function renderSavingsHistory(data) {
         let color = t.amount < 0 ? "red" : "green";
 
         div.innerHTML = `
-        <div>
-    <strong>${t.note || t.person || "Entry"}</strong><br>
-    <small>
-        ${label} • ${t.sourceName || t.note || t.entity || "-"} • ${t.paymentType || t.payment || "-"} • 
-        ${new Date(t.date).toLocaleString()}
-    </small>
-</div>
+    <div>
+        <strong>${t.note || t.person || "Entry"}</strong><br>
+        <small>
+            ${label} • ${t.sourceName || t.note || t.entity || "-"} • ${t.paymentType || t.payment || "-"} • 
+            ${new Date(t.date).toLocaleString()}
+        </small>
+    </div>
 
-        <div style="display:flex; align-items:center; gap:10px;">
-            <span style="color:${color}; font-weight:600;">
-                ₹${Math.abs(t.amount)}
-            </span>
+    <div style="display:flex; align-items:center; gap:10px;">
+        <span style="color:${color}; font-weight:600;">
+            ₹${Math.abs(t.amount)}
+        </span>
 
-            <button onclick="deleteSavings(${realIndex})" 
-                    style="background:none; border:none; cursor:pointer; font-size:16px;">
-                🗑
-            </button>
-        </div>
-        `;
+        <button class="delete-btn"
+                style="background:none; border:none; cursor:pointer; font-size:16px;">
+            🗑
+        </button>
+    </div>
+`;
+
+        // 🔥 attach event
+        let btn = div.querySelector(".delete-btn");
+
+        btn.addEventListener("click", (e) => {
+            e.stopPropagation();
+            deleteSavings(t.id);
+        });
 
         container.appendChild(div);
     });
@@ -567,7 +594,7 @@ function loadSourceOptions({
     sources.forEach(s => {
 
         let used = scoped
-            .filter(t => String(t.sourceId) === String(s.id))
+            .filter(t => String(t.sourceId) === String(s.id) && t.amount < 0)
             .reduce((sum, t) => sum + Math.abs(t.amount), 0);
 
         let remaining = s.amount - used;
@@ -1075,7 +1102,7 @@ function handleSavingsTypeChange() {
 
     } else if (type === "withdraw_budget") {
         source.style.display = "block";
-        budget.style.display = "block";
+        budget.style.display = "none";
 
     } else {
         source.style.display = "none";
@@ -1412,35 +1439,67 @@ function hexToRgb(hex) {
 // ❌ DELETE SAVINGS ENTRY
 // =========================
 // Removes a savings transaction by index
-function deleteSavings(index) {
+function deleteSavings(id) {
+
     let data = getSavings();
 
-    data.splice(index, 1);
+    let entry = data.find(e => e.id == id);
+
+    if (!entry) return;
+
+    // 🔥 remove by ID (not index)
+    data = data.filter(e => e.id != id);
 
     saveSavings(data);
 
-    loadSavings(); // refresh UI
+    // 🔥 adjust budget
+    if (entry.type === "budget_allocation") {
+        adjustBudgetAfterDelete(entry);
+    }
+
+    loadSavings();
 
     showToast("Deleted successfully 🗑", "success");
 }
+function adjustBudgetAfterDelete(entry) {
 
+    let budgets = JSON.parse(localStorage.getItem("budgets")) || [];
 
-function handleBudgetPeriodChange() {
+    let periodKey = entry.periodKey;
+    let fallbackMonth = entry.monthKey;
 
-    let period = document.getElementById("budgetPeriod").value;
-    let input = document.getElementById("budgetDate");
+    let budget = budgets.find(b =>
+        b.entity === entry.entity &&
+        (
+            (periodKey && b.periodKey === periodKey) ||
+            (!periodKey && b.monthKey === fallbackMonth)
+        )
+    );
 
-    if (period === "month") {
-        input.type = "month";
-    } else {
-        input.type = "date";
+    if (budget) {
+        budget.totalAllocated -= Math.abs(entry.amount);
+
+        if (budget.totalAllocated < 0) {
+            budget.totalAllocated = 0;
+        }
     }
 
-    // ✅ auto set today if empty
-    if (!input.value) {
-        input.valueAsDate = new Date();
-    }
+    localStorage.setItem("budgets", JSON.stringify(budgets));
 }
+
+
+// function handleBudgetPeriodChange() {
+//     let input = document.getElementById("budgetDate");
+//     if (!input) return;
+
+//     let period = document.getElementById("budgetPeriod").value;
+
+//     input.type = period === "month" ? "month" : "date";
+
+//     if (!input.value) {
+//         input.valueAsDate = new Date();
+//     }
+// }
 
 function generateBudgetId(period, date) {
 
@@ -1647,7 +1706,7 @@ function confirmAddPerson() {
     let input = document.getElementById("newPersonInput");
     let name = input.value.trim();
 
-    if (!name) return;
+    //if (!name) return;
 
     let persons = getPersons();
 
@@ -1677,7 +1736,7 @@ window.addEventListener("DOMContentLoaded", function () {
                 openAddPersonModal();
             }
 
-            if (!name) return;
+            //if (!name) return;
 
             let persons = getPersons();
 
@@ -1727,4 +1786,47 @@ function getScopedSavings() {
         }
         return t.monthKey === currentMonth;
     });
+}
+
+function getActiveBudgetPeriodFull() {
+    let data = JSON.parse(localStorage.getItem("bp")) || [];
+    return data.find(d => d.status === "active") || null;
+}
+
+function getEffectiveDays() {
+
+    let period = getActiveBudgetPeriodFull();
+    if (!period) return 0;
+
+    let start = new Date(period.start);
+    let end = new Date(period.end);
+
+    let diff = end - start;
+
+    let days = Math.floor(diff / (1000 * 60 * 60 * 24)) + 1;
+
+    let extra = period.extraDays || 0;
+
+    return days + extra;
+}
+
+function getDailyBudget() {
+
+    let budgets = JSON.parse(localStorage.getItem("budgets")) || [];
+
+    let periodKey = typeof getActivePeriodKey === "function"
+        ? getActivePeriodKey()
+        : null;
+
+    if (!periodKey) return 0;
+
+    let periodBudgets = budgets.filter(b => b.periodKey === periodKey);
+
+    let total = periodBudgets.reduce((sum, b) => sum + (b.totalAllocated || 0), 0);
+
+    let days = getEffectiveDays();
+
+    if (!days) return 0;
+
+    return total / days;
 }

@@ -42,6 +42,11 @@
     <section id="home" class="screen active">
       <div class="card">
         <h3>Dashboard</h3>
+        <div class="headline-wrapper">
+          <div id="headlineText" class="headline-text">
+            Loading insights...
+          </div>
+        </div>
 
         <div class="dashboard-grid">
 
@@ -181,6 +186,25 @@
 
         <button type="button" class="primary" onclick="saveBudget()">Save</button>
       </div>
+      <!-- ================= SMART INSIGHTS ================= -->
+      <div class="budget-insights">
+
+        <div class="insight-card success">
+          <small>Saved Today</small>
+          <h4 id="savedToday">₹0</h4>
+        </div>
+
+        <div class="insight-card info">
+          <small>Week Efficiency</small>
+          <h4 id="savedWeek">₹0</h4>
+        </div>
+
+        <div class="insight-card premium">
+          <small>Period Efficiency</small>
+          <h4 id="savedPeriod">₹0</h4>
+        </div>
+
+      </div>
     </section>
 
     <!-- ================= GRAPH ================= -->
@@ -257,15 +281,6 @@
           Your Categories <span id="catArrow">></span>
         </h4>
 
-        <!-- Modal -->
-        <div id="categoryModal" class="modal">
-          <div class="modal-content">
-            <h3>Your Categories</h3>
-            <div id="categoryList"></div>
-            <button type="button" class="secondary" onclick="closeCategoryModal()">Close</button>
-          </div>
-        </div>
-
         <!-- Backup -->
         <h4>Backup & Restore</h4>
         <div class="btn-group">
@@ -275,16 +290,7 @@
           <!-- <button class="secondary" onclick="runMigration()"> 🔄 Fix Old Data </button> -->
           <button class="secondary" onclick="openConfirm()">🗑 Reset App</button>
         </div>
-        <div id="confirmModal" class="modal" style="display:none;">
-          <div class="modal-content">
-            <h3>Clear all app data?</h3>
 
-            <div class="modal-actions">
-              <button class="secondary" onclick="closeConfirm()">Cancel</button>
-              <button class="primary" onclick="confirmReset()">OK</button>
-            </div>
-          </div>
-        </div>
         <!-- <h4>💸 Loans / Recoveries</h4>
         <div id="loanSummary"></div>
       </div>
@@ -324,6 +330,14 @@
 
     </div>
   </div>
+  <!-- Modal -->
+  <div id="categoryModal" class="modal">
+    <div class="modal-content">
+      <h3>Your Categories</h3>
+      <div id="categoryList"></div>
+      <button type="button" class="secondary" onclick="closeCategoryModal()">Close</button>
+    </div>
+  </div>
   <div id="backupModal" class="modal">
     <div class="modal-content">
 
@@ -360,6 +374,34 @@
       <div class="modal-actions">
         <button class="secondary" onclick="closeImportModal()">Cancel</button>
         <button class="primary" onclick="importData()">Import</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="splitModal" class="modal">
+    <div class="modal-box">
+
+      <div class="modal-header">
+        <h3>Confirm Allocation</h3>
+      </div>
+
+      <div class="modal-body" id="splitDetails"></div>
+
+      <div class="modal-actions">
+        <button onclick="closeSplitModal()">Cancel</button>
+        <button class="primary" onclick="confirmSplit()">Confirm</button>
+      </div>
+
+    </div>
+  </div>
+
+  <div id="confirmModal" class="modal" style="display:none;">
+    <div class="modal-content">
+      <h3>Clear all app data?</h3>
+
+      <div class="modal-actions">
+        <button class="secondary" onclick="closeConfirm()">Cancel</button>
+        <button class="primary" onclick="confirmReset()">OK</button>
       </div>
     </div>
   </div>
