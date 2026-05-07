@@ -3237,19 +3237,28 @@ function groupData(expenses, type, now, customRange = null) {
         }
     });
 
+    // // =========================
+    // // 📉 CUMULATIVE BUDGET LINE
+    // // =========================
+    // let remainingBudget =
+    //     getTotalBudget();
+
+    // Object.values(map).forEach(day => {
+
+    //     day.budget =
+    //         remainingBudget;
+
+    //     remainingBudget -=
+    //         day.exp;
+    // });
     // =========================
-    // 📉 CUMULATIVE BUDGET LINE
+    // 📏 FIXED BUDGET LINE
     // =========================
-    let remainingBudget =
-        getTotalBudget();
+    let fixedBudget = getDailyLimit();
 
     Object.values(map).forEach(day => {
 
-        day.budget =
-            remainingBudget;
-
-        remainingBudget -=
-            day.exp;
+        day.budget = fixedBudget;
     });
 
     return Object.values(map);
@@ -4551,45 +4560,49 @@ function closeSplitModal() {
 
 function updateBudgetEfficiency() {
 
-    let dailyLimit =
-        getDailyLimit();
+    let dailyLimit = getDailyLimit();
 
     let expenses =
         filterByActivePeriod(
             getExpenses()
         );
 
-    // =========================
-    // 📅 TODAY
-    // =========================
     let now = new Date();
 
-    let start = new Date(now);
+    // =========================
+    // 📅 TODAY RANGE
+    // =========================
+    let todayStart = new Date(now);
 
-    start.setHours(0, 0, 0, 0);
+    todayStart.setHours(0, 0, 0, 0);
 
-    let end = new Date(now);
+    let todayEnd = new Date(now);
 
-    end.setHours(23, 59, 59, 999);
+    todayEnd.setHours(23, 59, 59, 999);
 
+    // =========================
+    // 💰 TODAY SPENT
+    // =========================
     let todaySpent = expenses
         .filter(e => {
 
             if (e.amount >= 0)
                 return false;
 
-            let d =
-                new Date(e.date);
+            let d = new Date(e.date);
 
-            return d >= start &&
-                d <= end;
+            return d >= todayStart &&
+                d <= todayEnd;
 
         })
-        .reduce((s, e) =>
-            s + Math.abs(e.amount), 0);
+        .reduce(
+            (s, e) =>
+                s + Math.abs(e.amount),
+            0
+        );
 
     // =========================
-    // 💰 SAVED TODAY
+    // 💎 TODAY EFFICIENCY
     // =========================
     let savedToday =
         Math.max(
@@ -4598,7 +4611,7 @@ function updateBudgetEfficiency() {
         );
 
     // =========================
-    // 📊 WEEK SAVED
+    // 📅 WEEK START
     // =========================
     let weekStart = new Date(now);
 
@@ -4608,53 +4621,120 @@ function updateBudgetEfficiency() {
 
     weekStart.setHours(0, 0, 0, 0);
 
-    let weekSpent = expenses
-        .filter(e => {
+    // =========================
+    // 💎 WEEK EFFICIENCY
+    // =========================
+    let weekSaved = 0;
 
-            if (e.amount >= 0)
-                return false;
+    let currentDay =
+        new Date(weekStart);
 
-            let d =
-                new Date(e.date);
+    while (currentDay <= now) {
 
-            return d >= weekStart &&
-                d <= end;
+        let dayStart =
+            new Date(currentDay);
 
-        })
-        .reduce((s, e) =>
-            s + Math.abs(e.amount), 0);
+        dayStart.setHours(0, 0, 0, 0);
 
-    let weekExpected =
-        dailyLimit * 7;
+        let dayEnd =
+            new Date(currentDay);
 
-    let weekSaved =
-        Math.max(
-            0,
-            weekExpected - weekSpent
+        dayEnd.setHours(
+            23, 59, 59, 999
         );
+
+        let spent = expenses
+            .filter(e => {
+
+                if (e.amount >= 0)
+                    return false;
+
+                let d =
+                    new Date(e.date);
+
+                return d >= dayStart &&
+                    d <= dayEnd;
+
+            })
+            .reduce(
+                (s, e) =>
+                    s + Math.abs(e.amount),
+                0
+            );
+
+        weekSaved +=
+            Math.max(
+                0,
+                dailyLimit - spent
+            );
+
+        currentDay.setDate(
+            currentDay.getDate() + 1
+        );
+    }
 
     // =========================
-    // 🧠 PERIOD SAVED
+    // 💎 PERIOD EFFICIENCY
     // =========================
-    let budgets =
-        filterBudgetsByActivePeriod(
-            getBudgets()
-        );
+    let period =
+        getActiveBudgetPeriod();
 
-    let totalBudget = budgets
-        .reduce((s, b) =>
-            s + (b.totalAllocated || 0), 0);
+    let periodSaved = 0;
 
-    let totalSpent = expenses
-        .filter(e => e.amount < 0)
-        .reduce((s, e) =>
-            s + Math.abs(e.amount), 0);
+    if (period) {
 
-    let periodSaved =
-        Math.max(
-            0,
-            totalBudget - totalSpent
-        );
+        let current =
+            new Date(period.start);
+
+        let end =
+            new Date(period.end);
+
+        while (current <= end) {
+
+            let dayStart =
+                new Date(current);
+
+            dayStart.setHours(
+                0, 0, 0, 0
+            );
+
+            let dayEnd =
+                new Date(current);
+
+            dayEnd.setHours(
+                23, 59, 59, 999
+            );
+
+            let spent = expenses
+                .filter(e => {
+
+                    if (e.amount >= 0)
+                        return false;
+
+                    let d =
+                        new Date(e.date);
+
+                    return d >= dayStart &&
+                        d <= dayEnd;
+
+                })
+                .reduce(
+                    (s, e) =>
+                        s + Math.abs(e.amount),
+                    0
+                );
+
+            periodSaved +=
+                Math.max(
+                    0,
+                    dailyLimit - spent
+                );
+
+            current.setDate(
+                current.getDate() + 1
+            );
+        }
+    }
 
     // =========================
     // 🎯 UI
@@ -4684,6 +4764,7 @@ function updateBudgetEfficiency() {
         formatCurrency(periodSaved)
     );
 }
+
 function normalizeDate(date) {
 
     let d = new Date(date);
