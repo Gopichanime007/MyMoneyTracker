@@ -1,3 +1,4 @@
+// Savings Module Start savings.js
 document.addEventListener("DOMContentLoaded", () => {
     try {
         console.log("DOM ready ✅");
@@ -1980,3 +1981,5 @@ function loadSettlementOptions() {
         select.appendChild(option);
     });
 }
+
+// Savings Module End Savings.js

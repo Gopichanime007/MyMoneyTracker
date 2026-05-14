@@ -1,3 +1,4 @@
+// Budget Expense Module Start script.js
 const isSavingsPage = window.location.pathname.includes("savings");
 let currentFilteredExpenses = [];
 // =========================
@@ -4399,7 +4400,7 @@ function handleExpenseSave(amount) {
         let availableB =
             (b.totalAllocated || 0) - spentB;
 
-        return availableB - availableA;
+        return availableA - availableB;
     });
 
     // =========================
@@ -4810,3 +4811,5 @@ function buildSmartExpenseDate(rawDate) {
 
     return selected.toISOString();
 }
+
+// Budget Expense Module END script.js
