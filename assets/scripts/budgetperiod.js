@@ -836,11 +836,6 @@ function openDetails(id) {
     <p><strong>Budget:</strong> ${formatCurrency(budgetAmount)}</p>
     <p><strong>Spent:</strong> ${formatCurrency(spent)}</p>
     <p><strong>Status:</strong> ${d.status}</p>
-//     <p>
-//   <strong>Total Duration:</strong>
-//   ${(d.duration || 0) + (d.extraDays || 0)}
-//   Days
-// </p>
 <p>
   <strong>Total Duration:</strong>
   ${Math.ceil(
