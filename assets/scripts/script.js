@@ -1455,7 +1455,10 @@ function loadHistory(list = getExpenses()) {
             container.innerHTML = `<p style="text-align:center; color:#888;">No data yet 📭</p>`;
             return;
         }
-
+        list = [...list].sort(
+            (a, b) =>
+                new Date(b.date) - new Date(a.date)
+        );
         list.forEach((e, index) => {
 
             let div = document.createElement("div");
@@ -4894,7 +4897,7 @@ function runFinancialTests() {
 
         // 1. Savings income test
         const inc = createTestExpense({ amount: 1000, type: 'income' });
-        const totalIncome = getExpenses().filter(e => e.type === 'income').reduce((s,e)=>s+Math.abs(e.amount),0);
+        const totalIncome = getExpenses().filter(e => e.type === 'income').reduce((s, e) => s + Math.abs(e.amount), 0);
         results.push({ name: 'Savings income test', ...assertEqual(totalIncome, Math.abs(inc.amount)) });
 
         // 2. Budget allocation test
@@ -4974,8 +4977,8 @@ function runFinancialTests() {
         const budgetsNow = getBudgets();
         const expensesNow = getExpenses();
         const filteredBudgets = filterBudgetsByActivePeriod(budgetsNow);
-        const tb = filteredBudgets.reduce((s,b)=>s+(b.totalAllocated||0),0);
-        const spentNow = filterByActivePeriod(expensesNow).reduce((s,e)=>s + (e.amount < 0 ? Math.abs(e.amount) : (e.type === 'recovery' ? -Math.abs(e.amount) : 0)),0);
+        const tb = filteredBudgets.reduce((s, b) => s + (b.totalAllocated || 0), 0);
+        const spentNow = filterByActivePeriod(expensesNow).reduce((s, e) => s + (e.amount < 0 ? Math.abs(e.amount) : (e.type === 'recovery' ? -Math.abs(e.amount) : 0)), 0);
         const expectedPercent = tb ? Math.min(100, (Math.max(0, spentNow) / tb) * 100) : 0;
         results.push({ name: 'Progress bar calculation test', ...assertTrue(typeof expectedPercent === 'number', 'percent computed') });
 
@@ -6167,19 +6170,19 @@ function updateBudgetEfficiency() {
         let spent = expenses
             .filter(e => {
 
-                        if (e.type !== "expense" && e.type !== "loss") return 0;
+                if (e.type !== "expense" && e.type !== "loss") return 0;
 
-                        let d = new Date(e.date);
-                        if (d < dayStart || d > dayEnd) return 0;
+                let d = new Date(e.date);
+                if (d < dayStart || d > dayEnd) return 0;
 
-                        if (Array.isArray(e.allocationTrail) && e.allocationTrail.length) {
-                            return e.allocationTrail.reduce((s, a) => s + (Number(a.amount) || 0), 0);
-                        }
+                if (Array.isArray(e.allocationTrail) && e.allocationTrail.length) {
+                    return e.allocationTrail.reduce((s, a) => s + (Number(a.amount) || 0), 0);
+                }
 
-                        return Math.abs(Number(e.amount) || 0);
-                    },
-                        0
-                    );
+                return Math.abs(Number(e.amount) || 0);
+            },
+                0
+            );
 
         weekSaved +=
             Math.max(
