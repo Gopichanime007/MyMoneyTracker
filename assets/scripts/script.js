@@ -891,6 +891,12 @@ END OF MONEY TRACKER CORE ENGINE DOCUMENTATION
 // Budget Expense Module Start script.js
 const isSavingsPage = window.location.pathname.includes("savings");
 let currentFilteredExpenses = [];
+let currentHistoryFilter = {
+
+    type: "all",
+
+    label: "All Entries"
+};
 // =========================
 // 💱 CURRENCY CORE SYSTEM
 // =========================
@@ -2111,11 +2117,26 @@ function downloadPDF() {
 
     doc.setFontSize(8); // 🔽 reduced
     doc.setTextColor(100);
-    doc.text(`Generated on: ${new Date().toLocaleString()}`, 14, 22);
-    doc.text(`Total Entries: ${dataSource.length}`, 14, 26);
+    doc.text(
+        `Generated on: ${new Date().toLocaleString()}`,
+        14,
+        22
+    );
+
+    doc.text(
+        `Filter: ${currentHistoryFilter.label}`,
+        14,
+        26
+    );
+
+    doc.text(
+        `Total Entries: ${dataSource.length}`,
+        14,
+        30
+    );
 
     doc.setTextColor(0);
-    y = 34;
+    y = 38;
 
     // =========================
     // 💰 SUMMARY CARDS
@@ -2242,56 +2263,484 @@ function downloadPDF() {
     // =========================
     // 🟣 BUDGET SUMMARY
     // =========================
-    // =========================
-    // 🟣 BUDGET SUMMARY (PERIOD BASED)
-    // =========================
-    y += 8;
 
-    doc.setDrawColor(200);
+    y += 10;
+
+    if (y > 250) {
+
+        doc.addPage();
+
+        y = 20;
+    }
+
+    // =========================
+    // 📏 DIVIDER
+    // =========================
+
+    doc.setDrawColor(220);
+
     doc.line(10, y, 200, y);
 
-    y += 6;
+    y += 8;
 
-    doc.setFontSize(11);
+
+    // =========================
+    // 🏷 TITLE
+    // =========================
+
+    doc.setFontSize(12);
+
     doc.setFont(undefined, "bold");
-    doc.text("Budget Summary (Active Period)", 14, y);
-
-    y += 5;
-    doc.setFontSize(8);
-    doc.setTextColor(120);
-    doc.text("Overview of budget vs spending", 14, y);
 
     doc.setTextColor(0);
-    y += 5;
 
-    // 🔥 PERIOD-BASED TOTALS
-    let totalBudget = getTotalBudget();
+    doc.text(
+        "Budget Summary",
+        14,
+        y
+    );
 
-    let totalSpent = dataSource
-        .filter(e => e.amount < 0)
-        .reduce((sum, e) => sum + Math.abs(e.amount), 0);
+    y += 6;
 
-    let remaining = totalBudget - totalSpent;
+    doc.setFontSize(8);
+
+    doc.setTextColor(120);
+
+    doc.text(
+        "Budget allocation and spending overview",
+        14,
+        y
+    );
+
+    y += 8;
+
+
+    // =========================
+    // 📊 TABLE HEADER
+    // =========================
+
+    const summaryCols = {
+
+        name: 15,
+
+        allocated: 90,
+
+        spent: 140,
+
+        remaining: 195
+    };
+
+    doc.setFillColor(
+        Math.max(0, r - 20),
+        Math.max(0, g - 20),
+        Math.max(0, b - 20)
+    );
+
+    doc.rect(
+        10,
+        y - 5,
+        190,
+        9,
+        "F"
+    );
+
+    doc.setTextColor(255);
 
     doc.setFont(undefined, "bold");
+
     doc.setFontSize(9);
 
-    doc.text("Total Budget:", 14, y);
-    doc.text(formatCurrencyPDF(totalBudget), 90, y);
+    doc.text(
+        "Budget",
+        summaryCols.name,
+        y + 1
+    );
 
-    y += 6;
+    doc.text(
+        "Allocated",
+        summaryCols.allocated,
+        y + 1,
+        { align: "right" }
+    );
 
-    doc.text("Total Spent:", 14, y);
-    doc.text(formatCurrencyPDF(totalSpent), 90, y);
+    doc.text(
+        "Spent",
+        summaryCols.spent,
+        y + 1,
+        { align: "right" }
+    );
 
-    y += 6;
+    doc.text(
+        "Remaining",
+        summaryCols.remaining,
+        y + 1,
+        { align: "right" }
+    );
 
-    doc.setTextColor(remaining < 0 ? 200 : 0, remaining < 0 ? 0 : 150, 0);
-    doc.text("Remaining:", 14, y);
-    doc.text(formatCurrencyPDF(remaining), 90, y);
+    y += 10;
+
+
+    // =========================
+    // 📦 BUDGET ALLOCATIONS
+    // =========================
+
+    // =========================
+    // 📦 BUDGET ENTRIES
+    // =========================
+
+    let budgets =
+        getBudgets()
+
+            .filter(b => {
+
+                // respect active PDF filter
+                return dataSource.some(
+                    e =>
+                        e.periodKey ===
+                        b.periodKey
+                );
+            });
+
+
+    // =========================
+    // 💰 TOTALS
+    // =========================
+
+    let totalBudget = 0;
+
+    let totalSpent = 0;
+
+    let totalRemaining = 0;
+
+
+    // =========================
+    // 📄 PRINT BUDGET ROWS
+    // =========================
+
+    budgets.forEach((b, index) => {
+
+        // =========================
+        // 💵 ALLOCATED
+        // =========================
+
+        let allocated =
+            Math.abs(
+                b.totalAllocated || 0
+            );
+
+        // =========================
+        // 💸 SPENT
+        // =========================
+
+        let spent =
+            dataSource
+
+                .filter(e =>
+
+                    (
+                        e.type === "expense" ||
+                        e.type === "loss"
+                    )
+
+                    &&
+
+                    e.budgetId ===
+                    b.budgetId
+                )
+
+                .reduce(
+                    (sum, e) =>
+
+                        sum +
+                        Math.abs(
+                            e.amount || 0
+                        ),
+
+                    0
+                );
+
+        // =========================
+        // 💰 RECOVERY
+        // =========================
+
+        let recovered =
+            dataSource
+
+                .filter(e =>
+
+                    e.type ===
+                    "recovery"
+
+                    &&
+
+                    e.budgetId ===
+                    b.budgetId
+                )
+
+                .reduce(
+                    (sum, e) =>
+
+                        sum +
+                        Math.abs(
+                            e.amount || 0
+                        ),
+
+                    0
+                );
+
+        // =========================
+        // 📊 REMAINING
+        // =========================
+
+        let remaining =
+            allocated -
+            spent +
+            recovered;
+
+
+        // =========================
+        // 📈 TOTALS
+        // =========================
+
+        totalBudget += allocated;
+
+        totalSpent += spent;
+
+        totalRemaining += remaining;
+
+
+        // =========================
+        // 🎨 ALT ROW BG
+        // =========================
+
+        if (index % 2 === 0) {
+
+            doc.setFillColor(
+                248,
+                248,
+                248
+            );
+
+            doc.rect(
+                10,
+                y - 4,
+                190,
+                8,
+                "F"
+            );
+        }
+
+
+        // =========================
+        // 🏷 NAME
+        // =========================
+
+        doc.setTextColor(0);
+
+        doc.setFont(
+            undefined,
+            "normal"
+        );
+
+        doc.text(
+            b.note ||
+            b.name ||
+            "Budget",
+            summaryCols.name,
+            y
+        );
+
+
+        // =========================
+        // 💵 ALLOCATED
+        // =========================
+
+        doc.setTextColor(
+            0,
+            120,
+            255
+        );
+
+        doc.text(
+            formatCurrencyPDF(
+                allocated
+            ),
+            summaryCols.allocated,
+            y,
+            { align: "right" }
+        );
+
+
+        // =========================
+        // 💸 SPENT
+        // =========================
+
+        doc.setTextColor(
+            220,
+            0,
+            0
+        );
+
+        doc.text(
+            formatCurrencyPDF(
+                spent
+            ),
+            summaryCols.spent,
+            y,
+            { align: "right" }
+        );
+
+
+        // =========================
+        // 💰 REMAINING
+        // =========================
+
+        doc.setTextColor(
+
+            remaining < 0
+                ? 220
+                : 0,
+
+            remaining < 0
+                ? 0
+                : 150,
+
+            0
+        );
+
+        doc.text(
+            formatCurrencyPDF(
+                remaining
+            ),
+            summaryCols.remaining,
+            y,
+            { align: "right" }
+        );
+
+        doc.setTextColor(0);
+
+        y += 8;
+    });
+
+
+    // =========================
+    // 📏 TOTAL DIVIDER
+    // =========================
+
+    y += 2;
+
+    doc.setDrawColor(180);
+
+    doc.line(10, y, 200, y);
+
+    y += 8;
+
+
+    // =========================
+    // 📊 TOTAL SUMMARY
+    // =========================
+
+    doc.setFont(
+        undefined,
+        "bold"
+    );
+
+
+    // =========================
+    // 💵 TOTAL BUDGET
+    // =========================
 
     doc.setTextColor(0);
 
+    doc.text(
+        "Total Budget",
+        summaryCols.name,
+        y
+    );
+
+    doc.setTextColor(
+        0,
+        120,
+        255
+    );
+
+    doc.text(
+        formatCurrencyPDF(
+            totalBudget
+        ),
+        summaryCols.allocated,
+        y,
+        { align: "right" }
+    );
+
+    y += 8;
+
+
+    // =========================
+    // 💸 TOTAL SPENT
+    // =========================
+
+    doc.setTextColor(0);
+
+    doc.text(
+        "Total Spent",
+        summaryCols.name,
+        y
+    );
+
+    doc.setTextColor(
+        220,
+        0,
+        0
+    );
+
+    doc.text(
+        formatCurrencyPDF(
+            totalSpent
+        ),
+        summaryCols.spent,
+        y,
+        { align: "right" }
+    );
+
+    y += 8;
+
+
+    // =========================
+    // 💰 TOTAL REMAINING
+    // =========================
+
+    doc.setTextColor(0);
+
+    doc.text(
+        "Remaining",
+        summaryCols.name,
+        y
+    );
+
+    doc.setTextColor(
+
+        totalRemaining < 0
+            ? 220
+            : 0,
+
+        totalRemaining < 0
+            ? 0
+            : 150,
+
+        0
+    );
+
+    doc.text(
+        formatCurrencyPDF(
+            totalRemaining
+        ),
+        summaryCols.remaining,
+        y,
+        { align: "right" }
+    );
+
+    doc.setTextColor(0);
     // =========================
     // 💾 SAVE
     // =========================
@@ -5221,29 +5670,106 @@ function runFinancialTests() {
 // }
 function handleFilter(type) {
 
+    // =========================
+    // 🧠 FILTER STATE
+    // =========================
+    currentHistoryFilter = {
+
+        type: type,
+
+        label: "All Entries"
+    };
+
+    // =========================
+    // 📅 CUSTOM PERIOD
+    // =========================
     if (type === "period") {
+
+        currentHistoryFilter = {
+
+            type: "period",
+
+            label: "Custom Period"
+        };
 
         openPeriod();
 
         return;
     }
 
+    // =========================
+    // 🏷 FILTER LABELS
+    // =========================
+    switch (type) {
+
+        case "today":
+
+            currentHistoryFilter.label =
+                "Today";
+
+            break;
+
+        case "week":
+
+            currentHistoryFilter.label =
+                "This Week";
+
+            break;
+
+        case "month":
+
+            currentHistoryFilter.label =
+                "This Month";
+
+            break;
+
+        case "all":
+
+        default:
+
+            currentHistoryFilter.label =
+                "All Entries";
+
+            break;
+    }
+
+    // =========================
+    // 📦 GET EXPENSES
+    // =========================
     let expenses =
         getExpenses();
 
+    // =========================
+    // 🔍 FILTER DATA
+    // =========================
     let filtered =
         filterDataByType(
             type,
             expenses
         );
 
+    // =========================
+    // 📜 LOAD HISTORY
+    // =========================
     loadHistory(filtered);
 
-    if (typeof loadGraph === "function") {
+    // =========================
+    // 📊 LOAD GRAPH
+    // =========================
+    if (
+        typeof loadGraph ===
+        "function"
+    ) {
 
-        loadGraph(type, filtered);
+        loadGraph(
+            type,
+            filtered
+        );
     }
 
+    // =========================
+    // 🧩 CATEGORY BREAKDOWN
+    // =========================
     if (
         typeof renderCategoryBreakdown ===
         "function"
