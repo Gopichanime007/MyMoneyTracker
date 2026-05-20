@@ -1,3 +1,756 @@
+/*
+====================================================================================================
+SAVINGS MODULE
+MASTER BUSINESS LOGIC + ANDROID MIGRATION DOCUMENTATION
+====================================================================================================
+
+MODULE PURPOSE
+----------------------------------------------------------------------------------------------------
+The Savings Module acts as:
+1. Savings Ledger System
+2. Source-based Financial Allocation Engine
+3. Budget Allocation Engine
+4. Settlement & Recovery Tracker
+5. Financial Analytics System
+
+This module is NOT a simple savings screen.
+
+It behaves like:
+----------------------------------------------------------------------------------------------------
+Mini Accounting Ledger System
+
+====================================================================================================
+HIGH LEVEL ARCHITECTURE
+====================================================================================================
+
+Savings Module
+│
+├── Income Management
+│
+├── Transfer Management
+│
+├── Settlement Management
+│
+├── Budget Allocation Management
+│
+├── Savings History
+│
+├── Source Tracking
+│
+├── Graph Analytics
+│
+├── Category Management
+│
+├── Person Management
+│
+└── PDF Export System
+
+====================================================================================================
+CORE FINANCIAL CONCEPT
+====================================================================================================
+
+The Savings Module uses:
+----------------------------------------------------------------------------------------------------
+SOURCE-BASED LEDGER ARCHITECTURE
+
+Meaning:
+----------------------------------------------------------------------------------------------------
+Every expense allocation originates from a source.
+
+Example:
+----------------------------------------------------------------------------------------------------
+
+Salary
+   ↓
+Savings Source
+   ↓
+Transfer / Budget / Settlement
+   ↓
+Tracking + Remaining Balance
+
+This architecture enables:
+----------------------------------------------------------------------------------------------------
+✔ Source tracking
+✔ Remaining calculations
+✔ Budget linking
+✔ Settlement tracking
+✔ Audit history
+✔ Financial analytics
+
+====================================================================================================
+CORE DATA FLOW
+====================================================================================================
+
+Income Entry
+│
+├── Creates Source
+│
+├── Source becomes available
+│
+└── Other transactions consume source
+
+----------------------------------------------------------------------------------------------------
+
+Transfer Entry
+│
+├── Reduces Source Balance
+│
+├── Assigns Person
+│
+└── Tracks Pending Settlement
+
+----------------------------------------------------------------------------------------------------
+
+Settlement Entry
+│
+├── Linked to Transfer
+│
+├── Recovers Amount
+│
+└── Updates Pending Balance
+
+----------------------------------------------------------------------------------------------------
+
+Budget Allocation
+│
+├── Converts Savings → Budget
+│
+├── Creates Budget Allocation
+│
+└── Updates Budget Records
+
+====================================================================================================
+APPLICATION FLOW
+====================================================================================================
+
+Page Load
+│
+├── Load Savings
+├── Load Sources
+├── Load Categories
+├── Load Persons
+├── Load Budget Years
+├── Apply Theme
+└── Render History
+
+====================================================================================================
+STORAGE ARCHITECTURE
+====================================================================================================
+
+Primary Storage:
+----------------------------------------------------------------------------------------------------
+localStorage
+
+Storage Keys:
+----------------------------------------------------------------------------------------------------
+
+savingsTransactions
+→ Main savings ledger
+
+budgets
+→ Budget allocation records
+
+categories
+→ Savings categories
+
+persons
+→ Person registry
+
+theme
+→ Dynamic theme system
+
+====================================================================================================
+ANDROID STORAGE MIGRATION
+====================================================================================================
+
+HTML / JS
+----------------------------------------------------------------------------------------------------
+localStorage
+
+Android Equivalent:
+----------------------------------------------------------------------------------------------------
+Room Database
++
+SharedPreferences
+
+----------------------------------------------------------------------------------------------------
+savingsTransactions
+→ SavingsRepository
+
+budgets
+→ BudgetRepository
+
+theme
+→ SettingsManager
+
+====================================================================================================
+ENTRY FACTORY ARCHITECTURE
+====================================================================================================
+
+createSavingsEntry()
+
+Purpose:
+----------------------------------------------------------------------------------------------------
+Creates standardized ledger entries.
+
+Responsibilities:
+----------------------------------------------------------------------------------------------------
+✔ Generates ID
+✔ Applies timestamps
+✔ Applies monthKey
+✔ Applies periodKey
+✔ Standardizes structure
+
+IMPORTANT:
+----------------------------------------------------------------------------------------------------
+ALL transactions MUST pass through this factory.
+
+Android Equivalent:
+----------------------------------------------------------------------------------------------------
+SavingsEntryFactory
+or
+SavingsManager.createEntry()
+
+====================================================================================================
+TRANSACTION TYPES
+====================================================================================================
+
+Supported Types:
+----------------------------------------------------------------------------------------------------
+
+income
+→ Adds savings source
+
+transfer
+→ Deducts money from source
+
+settlement
+→ Recovers pending transfer amount
+
+budget_allocation
+→ Allocates savings into budget
+
+====================================================================================================
+ANDROID DOMAIN MODEL
+====================================================================================================
+
+SavingsEntity
+│
+├── id
+├── type
+├── amount
+├── sourceId
+├── entity
+├── paymentType
+├── person
+├── note
+├── date
+├── monthKey
+├── periodKey
+├── createdAt
+└── updatedAt
+
+====================================================================================================
+SOURCE ARCHITECTURE
+====================================================================================================
+
+Income entries act as:
+----------------------------------------------------------------------------------------------------
+Financial Sources
+
+Meaning:
+----------------------------------------------------------------------------------------------------
+Income itself becomes a reusable financial container.
+
+Example:
+----------------------------------------------------------------------------------------------------
+
+Salary ₹50,000
+│
+├── Budget Allocation ₹20,000
+├── Transfer ₹5,000
+├── Settlement Recovery ₹1,000
+│
+└── Remaining ₹26,000
+
+====================================================================================================
+BUDGET PERIOD ARCHITECTURE
+====================================================================================================
+
+Savings module integrates with:
+----------------------------------------------------------------------------------------------------
+Budget Period Module
+
+Through:
+----------------------------------------------------------------------------------------------------
+periodKey
+
+Purpose:
+----------------------------------------------------------------------------------------------------
+Allows:
+✔ period-based savings
+✔ period-based budgets
+✔ scoped analytics
+✔ scoped calculations
+
+IMPORTANT:
+----------------------------------------------------------------------------------------------------
+Budget Period acts as:
+MASTER FINANCIAL CONTEXT
+
+====================================================================================================
+SCOPED DATA ARCHITECTURE
+====================================================================================================
+
+getScopedSavings()
+
+Purpose:
+----------------------------------------------------------------------------------------------------
+Returns ONLY savings related to:
+- active budget period
+OR
+- current month fallback
+
+This prevents:
+----------------------------------------------------------------------------------------------------
+cross-period data pollution
+
+Android Equivalent:
+----------------------------------------------------------------------------------------------------
+SavingsRepository.getScopedSavings()
+
+====================================================================================================
+LOAD SAVINGS ARCHITECTURE
+====================================================================================================
+
+loadSavings()
+
+Purpose:
+----------------------------------------------------------------------------------------------------
+Main dashboard calculation engine.
+
+Responsibilities:
+----------------------------------------------------------------------------------------------------
+✔ Total savings calculation
+✔ Allocated amount calculation
+✔ Available balance calculation
+✔ Daily budget calculation
+✔ History rendering
+
+IMPORTANT:
+----------------------------------------------------------------------------------------------------
+This function acts as:
+SAVINGS DASHBOARD CONTROLLER
+
+Android Equivalent:
+----------------------------------------------------------------------------------------------------
+SavingsDashboardManager
+
+====================================================================================================
+HISTORY ARCHITECTURE
+====================================================================================================
+
+renderSavingsHistory()
+
+Purpose:
+----------------------------------------------------------------------------------------------------
+Renders transaction history.
+
+Displays:
+----------------------------------------------------------------------------------------------------
+✔ Type
+✔ Amount
+✔ Date
+✔ Source
+✔ Payment
+✔ Person
+✔ Notes
+
+Android Equivalent:
+----------------------------------------------------------------------------------------------------
+RecyclerView Adapter
+
+Recommended:
+----------------------------------------------------------------------------------------------------
+SavingsHistoryAdapter
+
+====================================================================================================
+FILTER ARCHITECTURE
+====================================================================================================
+
+handleSavingsFilter()
+
+Supported Filters:
+----------------------------------------------------------------------------------------------------
+today
+week
+month
+period
+all
+
+Purpose:
+----------------------------------------------------------------------------------------------------
+Scoped historical analysis.
+
+Android Equivalent:
+----------------------------------------------------------------------------------------------------
+FilterManager
+or
+SavingsFilterManager
+
+====================================================================================================
+ANALYTICS ARCHITECTURE
+====================================================================================================
+
+loadSavingsGraph()
+
+Purpose:
+----------------------------------------------------------------------------------------------------
+Creates:
+Income vs Expense analytics
+
+Library:
+----------------------------------------------------------------------------------------------------
+Chart.js
+
+Android Equivalent:
+----------------------------------------------------------------------------------------------------
+MPAndroidChart
+
+Android Fragment:
+----------------------------------------------------------------------------------------------------
+SavingsAnalyticsFragment
+
+====================================================================================================
+SOURCE DETAILS ARCHITECTURE
+====================================================================================================
+
+renderSourceDetails()
+
+Purpose:
+----------------------------------------------------------------------------------------------------
+Displays:
+FULL source financial breakdown
+
+Includes:
+----------------------------------------------------------------------------------------------------
+✔ Total
+✔ Used
+✔ Credited
+✔ Remaining
+✔ Related transactions
+
+This acts like:
+----------------------------------------------------------------------------------------------------
+Mini ledger statement screen
+
+Android Equivalent:
+----------------------------------------------------------------------------------------------------
+SavingsDetailsFragment
+
+====================================================================================================
+CATEGORY ARCHITECTURE
+====================================================================================================
+
+Categories represent:
+----------------------------------------------------------------------------------------------------
+Savings ownership or grouping.
+
+Examples:
+----------------------------------------------------------------------------------------------------
+Self
+Family
+Friend
+Company
+Charity
+
+Storage:
+----------------------------------------------------------------------------------------------------
+localStorage.categories
+
+Android Equivalent:
+----------------------------------------------------------------------------------------------------
+CategoryRepository
+
+====================================================================================================
+PERSON ARCHITECTURE
+====================================================================================================
+
+Persons represent:
+----------------------------------------------------------------------------------------------------
+Transfer-related people.
+
+Used for:
+----------------------------------------------------------------------------------------------------
+✔ Borrowing
+✔ Lending
+✔ Settlements
+✔ Transfer tracking
+
+Android Equivalent:
+----------------------------------------------------------------------------------------------------
+PersonRepository
+
+====================================================================================================
+MODAL ARCHITECTURE
+====================================================================================================
+
+HTML MODAL
+----------------------------------------------------------------------------------------------------
+categoryModal
+personModal
+backupModal
+importModal
+splitModal
+
+Android Equivalent:
+----------------------------------------------------------------------------------------------------
+DialogFragment
+
+----------------------------------------------------------------------------------------------------
+HTML MODAL → ANDROID DIALOG MAPPING
+----------------------------------------------------------------------------------------------------
+
+categoryModal
+→ CategoryDialogFragment
+
+personModal
+→ PersonDialogFragment
+
+backupModal
+→ BackupDialogFragment
+
+importModal
+→ ImportDialogFragment
+
+splitModal
+→ SplitAllocationDialogFragment
+
+====================================================================================================
+PDF EXPORT ARCHITECTURE
+====================================================================================================
+
+exportSavingsPDF()
+
+Purpose:
+----------------------------------------------------------------------------------------------------
+Generates financial reports.
+
+Contains:
+----------------------------------------------------------------------------------------------------
+✔ Header
+✔ Transactions
+✔ Summary
+✔ Net balance
+
+Android Equivalent:
+----------------------------------------------------------------------------------------------------
+PdfExportManager
+
+Suggested Android Libraries:
+----------------------------------------------------------------------------------------------------
+iTextPDF
+or
+Android PdfDocument
+
+====================================================================================================
+THEME ARCHITECTURE
+====================================================================================================
+
+Theme Source:
+----------------------------------------------------------------------------------------------------
+localStorage.theme
+
+Applied Using:
+----------------------------------------------------------------------------------------------------
+CSS Variable:
+--theme
+
+Android Equivalent:
+----------------------------------------------------------------------------------------------------
+ThemeManager
+
+IMPORTANT:
+----------------------------------------------------------------------------------------------------
+NO HARDCODED COLORS
+
+Android must support:
+----------------------------------------------------------------------------------------------------
+✔ Dynamic accent colors
+✔ HEX colors
+✔ Runtime updates
+✔ Theme persistence
+
+====================================================================================================
+NAVIGATION ARCHITECTURE
+====================================================================================================
+
+showSavingsScreen()
+
+Purpose:
+----------------------------------------------------------------------------------------------------
+Internal screen router.
+
+Controls:
+----------------------------------------------------------------------------------------------------
+✔ Dashboard
+✔ Graph
+✔ Income Details
+✔ History
+
+Android Equivalent:
+----------------------------------------------------------------------------------------------------
+NavController
+or
+Fragment navigation
+
+IMPORTANT:
+----------------------------------------------------------------------------------------------------
+Each HTML screen should become:
+ONE Fragment
+
+====================================================================================================
+ANDROID MIGRATION ARCHITECTURE
+====================================================================================================
+
+Recommended Android Feature Structure:
+----------------------------------------------------------------------------------------------------
+
+features/
+└── savings/
+     ├── adapters/
+     ├── data/
+     ├── domain/
+     ├── models/
+     └── ui/
+
+====================================================================================================
+ANDROID CLASS MAPPING
+====================================================================================================
+
+HTML / JS
+----------------------------------------------------------------------------------------------------
+loadSavings()
+→ SavingsDashboardManager
+
+addSavings()
+→ SavingsManager
+
+createSavingsEntry()
+→ SavingsEntryFactory
+
+renderSavingsHistory()
+→ SavingsHistoryAdapter
+
+loadSavingsGraph()
+→ SavingsAnalyticsManager
+
+renderSourceDetails()
+→ SavingsDetailsManager
+
+====================================================================================================
+ANDROID FRAGMENT MAPPING
+====================================================================================================
+
+Savings Dashboard
+→ SavingsDashboardFragment
+
+Savings History
+→ SavingsHistoryFragment
+
+Savings Analytics
+→ SavingsAnalyticsFragment
+
+Savings Details
+→ SavingsDetailsFragment
+
+====================================================================================================
+IMPORTANT ENGINEERING RULES
+====================================================================================================
+
+1.
+DO NOT place financial calculations inside UI.
+
+2.
+Fragments should ONLY render data.
+
+3.
+Business logic belongs inside:
+- Managers
+- Domain layer
+- Repositories
+
+4.
+RecyclerView replaces:
+dynamic HTML list rendering.
+
+5.
+DialogFragment replaces:
+HTML modals.
+
+6.
+Room Database should replace:
+localStorage.
+
+7.
+ThemeManager should replace:
+CSS variables.
+
+8.
+Every transaction MUST contain:
+periodKey OR monthKey
+
+9.
+Savings must remain isolated from:
+Expense internal logic.
+
+10.
+Budget Period acts as:
+Global financial scope controller.
+
+====================================================================================================
+FUTURE SCALING CAPABILITIES
+====================================================================================================
+
+This architecture already supports:
+----------------------------------------------------------------------------------------------------
+✔ Multi-period accounting
+✔ Source accounting
+✔ Ledger tracking
+✔ Settlement workflows
+✔ Budget allocations
+✔ Analytics
+✔ PDF exports
+✔ Dynamic theming
+✔ Multi-user tracking
+
+Meaning:
+----------------------------------------------------------------------------------------------------
+The architecture is scalable enough for:
+- production Android app
+- finance SaaS
+- advanced accounting workflows
+
+====================================================================================================
+AUTHOR NOTES
+====================================================================================================
+
+Architecture Designed By:
+----------------------------------------------------------------------------------------------------
+Gopichanime 🐉
+
+Purpose:
+----------------------------------------------------------------------------------------------------
+To maintain synchronized:
+✔ HTML architecture
+✔ Android architecture
+✔ Business workflows
+✔ Financial logic
+
+====================================================================================================
+END OF SAVINGS MODULE DOCUMENTATION
+====================================================================================================
+*/
 // Savings Module Start savings.js
 document.addEventListener("DOMContentLoaded", () => {
     try {
@@ -370,14 +1123,17 @@ function createOrUpdateBudget(budgetId, entry) {
     let fallbackMonth = entry.monthKey || (entry.date ? entry.date.slice(0, 7) : null);
 
     // 🔥 Find existing budget (PERIOD-FIRST MATCH)
-    let existing = budgets.find(b =>
-        b.budgetId === budgetId &&
-        b.entity === entry.entity &&
-        (
-            (periodKey && b.periodKey === periodKey) ||
-            (!periodKey && b.monthKey === fallbackMonth)
-        )
-    );
+    // Match by generated budgetId OR legacyId OR by sourceId+period+entity (best-effort)
+    let existing = budgets.find(b => {
+        const samePeriod = periodKey ? b.periodKey === periodKey : b.monthKey === fallbackMonth;
+
+        if ((b.budgetId && b.budgetId === budgetId) || (b.legacyId && b.legacyId === budgetId)) return b.entity === entry.entity && samePeriod;
+
+        // fallback: match by source + period + entity
+        if (b.sourceId === entry.sourceId && b.entity === entry.entity && samePeriod) return true;
+
+        return false;
+    });
 
     if (existing) {
 
@@ -396,28 +1152,38 @@ function createOrUpdateBudget(budgetId, entry) {
 
     } else {
 
-        // 🔥 Create new budget (PERIOD FIRST)
-        budgets.push({
-            id: Date.now(),
-            type: "budget",
+            // 🔥 Create new budget (PERIOD FIRST)
+            // Ensure globally-unique budgetId while keeping legacy traceability
+            const uid = (typeof crypto !== "undefined" && crypto.randomUUID) ? crypto.randomUUID() : `${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
 
-            budgetId,
-            sourceId: entry.sourceId,
+            const generatedBudgetId = `budget_${periodKey || fallbackMonth}_${entry.sourceId || 'manual'}_${uid}`;
 
-            totalAllocated: Math.abs(entry.amount),
+            budgets.push({
+                id: Date.now(),
+                type: "budget",
 
-            entity: entry.entity,
+                // store generated unique id
+                budgetId: generatedBudgetId,
 
-            note: entry.note || "",
-            date: entry.date || new Date().toISOString(),
+                // preserve original id for migration/traceability if provided
+                legacyId: budgetId || null,
 
-            // 🔥 CORE CHANGE
-            periodKey: periodKey || null,
-            monthKey: periodKey ? null : fallbackMonth, // fallback only
+                sourceId: entry.sourceId,
 
-            createdAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString()
-        });
+                totalAllocated: Math.abs(entry.amount),
+
+                entity: entry.entity,
+
+                note: entry.note || "",
+                date: entry.date || new Date().toISOString(),
+
+                // 🔥 CORE CHANGE
+                periodKey: periodKey || null,
+                monthKey: periodKey ? null : fallbackMonth, // fallback only
+
+                createdAt: new Date().toISOString(),
+                updatedAt: new Date().toISOString()
+            });
     }
 
     localStorage.setItem("budgets", JSON.stringify(budgets));
@@ -970,7 +1736,7 @@ function getSourceSummary(sourceId) {
 function renderSourceDetails(sourceId) {
 
     // 🔥 SINGLE SOURCE OF TRUTH
-    let scoped = getScopedSavings();
+    let scoped = getSavings() || [];
 
     let incomeId = String(sourceId);
 
@@ -1870,25 +2636,51 @@ window.addEventListener("DOMContentLoaded", function () {
 function goToBudgetPeriods() {
     window.location.href = "../pages/budgetperiod.html";
 }
+// function getScopedSavings() {
+//     let data = getSavings() || [];
+
+//     let periodKey = typeof getActivePeriodKey === "function"
+//         ? getActivePeriodKey()
+//         : null;
+
+//     let now = new Date();
+//     let currentMonth = now.toISOString().slice(0, 7);
+
+//     return data.filter(t => {
+//         if (periodKey) {
+//             return (
+//                 t.periodKey === periodKey ||
+//                 (!t.periodKey && t.monthKey === currentMonth)
+//             );
+//         }
+//         return t.monthKey === currentMonth;
+//     });
+// }
+
 function getScopedSavings() {
+
     let data = getSavings() || [];
 
-    let periodKey = typeof getActivePeriodKey === "function"
-        ? getActivePeriodKey()
-        : null;
+    let periodKey =
+        typeof getActivePeriodKey === "function"
+            ? getActivePeriodKey()
+            : null;
 
-    let now = new Date();
-    let currentMonth = now.toISOString().slice(0, 7);
+    // 🔥 NO ACTIVE PERIOD
+    if (!periodKey) {
 
-    return data.filter(t => {
-        if (periodKey) {
-            return (
-                t.periodKey === periodKey ||
-                (!t.periodKey && t.monthKey === currentMonth)
-            );
-        }
-        return t.monthKey === currentMonth;
-    });
+        let currentMonth =
+            new Date().toISOString().slice(0, 7);
+
+        return data.filter(t =>
+            t.monthKey === currentMonth
+        );
+    }
+
+    // 🔥 ACTIVE PERIOD EXISTS
+    return data.filter(t =>
+        t.periodKey === periodKey
+    );
 }
 
 function getActiveBudgetPeriodFull() {

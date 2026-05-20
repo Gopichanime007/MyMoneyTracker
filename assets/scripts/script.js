@@ -1,3 +1,893 @@
+/*
+====================================================================================================
+MONEY TRACKER CORE ENGINE
+MASTER ARCHITECTURE + ANDROID MIGRATION DOCUMENTATION
+====================================================================================================
+
+FILE NAME
+----------------------------------------------------------------------------------------------------
+script.js
+
+ROLE
+----------------------------------------------------------------------------------------------------
+This file acts as:
+1. Core Financial Engine
+2. Application Runtime Layer
+3. Business Logic Controller
+4. Storage Management Layer
+5. Financial Calculation Engine
+6. Budget Period Runtime
+7. Graph Analytics Engine
+8. Expense Allocation System
+9. Currency Conversion Engine
+10. UI Synchronization Layer
+
+IMPORTANT:
+----------------------------------------------------------------------------------------------------
+This is NOT just a normal JavaScript file.
+
+This file behaves like:
+----------------------------------------------------------------------------------------------------
+Mini Financial Operating System
+
+inside the browser.
+
+====================================================================================================
+HIGH LEVEL APPLICATION ARCHITECTURE
+====================================================================================================
+
+Money Tracker Application
+│
+├── Dashboard Engine
+├── Expense Engine
+├── Budget Engine
+├── Budget Period Engine
+├── Savings Engine
+├── Analytics Engine
+├── Currency Engine
+├── Backup Engine
+├── Import / Export Engine
+├── Category Engine
+├── Graph Engine
+├── Theme Engine
+├── Budget Split Engine
+└── Notification Engine
+
+====================================================================================================
+ARCHITECTURE STYLE
+====================================================================================================
+
+Current HTML Architecture:
+----------------------------------------------------------------------------------------------------
+Monolithic Functional Architecture
+
+Android Migration Target:
+----------------------------------------------------------------------------------------------------
+Clean Architecture
+
+Recommended Android Layers:
+----------------------------------------------------------------------------------------------------
+
+features/
+core/
+data/
+domain/
+ui/
+repository/
+manager/
+adapter/
+
+====================================================================================================
+CORE FINANCIAL PHILOSOPHY
+====================================================================================================
+
+        let relatedBudgetIds = budgets
+            .filter(b =>
+                b.sourceId === g.sourceId &&
+                b.periodKey === g.periodKey
+            )
+            .map(b => b.budgetId);
+
+        // compute used by checking allocationTrail first, fallback to legacy budgetId
+        let used = 0;
+
+        expenses.forEach(e => {
+
+            if (Array.isArray(e.allocationTrail) && e.allocationTrail.length) {
+                e.allocationTrail.forEach(a => {
+                    if (relatedBudgetIds.includes(a.budgetId) && (e.type === 'expense' || e.type === 'loss')) {
+                        used += Number(a.amount) || 0;
+                    }
+                    if (relatedBudgetIds.includes(a.budgetId) && e.type === 'recovery') {
+                        used -= Number(a.amount) || 0;
+                    }
+                });
+            } else if (relatedBudgetIds.includes(e.budgetId) && e.amount < 0) {
+                used += Math.abs(e.amount);
+            }
+        });
+----------------------------------------------------------------------------------------------------
+ONE financial scope
+
+called:
+----------------------------------------------------------------------------------------------------
+Budget Period
+
+====================================================================================================
+CORE STORAGE ARCHITECTURE
+====================================================================================================
+
+Current Storage:
+----------------------------------------------------------------------------------------------------
+localStorage
+
+Stored Tables:
+----------------------------------------------------------------------------------------------------
+
+expenses
+budgets
+savingsTransactions
+bp
+categories
+persons
+orders
+settings
+
+====================================================================================================
+ANDROID STORAGE MIGRATION
+====================================================================================================
+
+HTML localStorage
+----------------------------------------------------------------------------------------------------
+→ SharedPreferences
+→ Room Database
+→ DataStore
+
+Recommended Android:
+----------------------------------------------------------------------------------------------------
+Room Database
+
+====================================================================================================
+DATA FLOW ARCHITECTURE
+====================================================================================================
+
+UI
+│
+├── Form Inputs
+│
+├── Business Logic
+│
+├── Storage Layer
+│
+├── Financial Calculations
+│
+├── Analytics Processing
+│
+└── UI Refresh
+
+====================================================================================================
+MAIN ENGINES
+====================================================================================================
+
+1.
+Currency Engine
+
+2.
+Expense Engine
+
+3.
+Budget Engine
+
+4.
+Budget Period Engine
+
+5.
+Dashboard Engine
+
+6.
+Analytics Engine
+
+7.
+Backup Engine
+
+8.
+Import Export Engine
+
+9.
+Split Expense Engine
+
+10.
+Budget Efficiency Engine
+
+====================================================================================================
+CURRENCY ENGINE ARCHITECTURE
+====================================================================================================
+
+Core Functions:
+----------------------------------------------------------------------------------------------------
+getCurrencyCode()
+setCurrencyCode()
+convertFromBase()
+convertToBase()
+formatCurrency()
+
+Purpose:
+----------------------------------------------------------------------------------------------------
+Supports:
+✔ Multi-currency financial tracking
+✔ Base currency storage
+✔ Dynamic UI conversion
+
+Base Currency:
+----------------------------------------------------------------------------------------------------
+INR
+
+Architecture:
+----------------------------------------------------------------------------------------------------
+All financial values stored in:
+BASE CURRENCY
+
+Display layer:
+----------------------------------------------------------------------------------------------------
+Converts values dynamically.
+
+Android Equivalent:
+----------------------------------------------------------------------------------------------------
+CurrencyManager
+CurrencyUtils
+
+====================================================================================================
+EXPENSE ENGINE ARCHITECTURE
+====================================================================================================
+
+Core Functions:
+----------------------------------------------------------------------------------------------------
+addExpense()
+deleteExpenseUI()
+handleExpenseSave()
+
+Purpose:
+----------------------------------------------------------------------------------------------------
+Handles:
+✔ Expense creation
+✔ Income creation
+✔ Expense deletion
+✔ Expense validation
+✔ Split expense allocation
+
+====================================================================================================
+EXPENSE ENTITY ARCHITECTURE
+====================================================================================================
+
+Expense Object:
+----------------------------------------------------------------------------------------------------
+
+{
+    id,
+    type,
+    amount,
+    category,
+    purpose,
+    budgetId,
+    paymentType,
+    entity,
+    date,
+    monthKey,
+    createdAt,
+    updatedAt,
+    splitId,
+    splitIndex,
+    isSplit
+}
+
+====================================================================================================
+ANDROID ENTITY MAPPING
+====================================================================================================
+
+ExpenseEntity.java
+
+Fields:
+----------------------------------------------------------------------------------------------------
+id
+type
+amount
+category
+purpose
+budgetId
+paymentType
+entity
+date
+monthKey
+createdAt
+updatedAt
+splitId
+splitIndex
+isSplit
+
+====================================================================================================
+BUDGET ENGINE ARCHITECTURE
+====================================================================================================
+
+Purpose:
+----------------------------------------------------------------------------------------------------
+Tracks:
+✔ Budget allocation
+✔ Remaining budget
+✔ Budget utilization
+✔ Budget exhaustion
+
+Core Functions:
+----------------------------------------------------------------------------------------------------
+getBudgetBalance()
+loadBudgetOptions()
+renderBudgetEntries()
+
+====================================================================================================
+BUDGET PERIOD ENGINE ARCHITECTURE
+====================================================================================================
+
+Purpose:
+----------------------------------------------------------------------------------------------------
+Controls:
+✔ Financial scope
+✔ Active accounting period
+✔ Daily budget calculations
+✔ Analytics boundaries
+
+Core Functions:
+----------------------------------------------------------------------------------------------------
+getActiveBudgetPeriod()
+getActivePeriodKey()
+filterByActivePeriod()
+filterBudgetsByActivePeriod()
+
+IMPORTANT:
+----------------------------------------------------------------------------------------------------
+ONLY ONE ACTIVE PERIOD
+
+should exist.
+
+====================================================================================================
+PERIOD KEY ARCHITECTURE
+====================================================================================================
+
+Format:
+----------------------------------------------------------------------------------------------------
+
+YYYY-MM-DD_to_YYYY-MM-DD
+
+Example:
+----------------------------------------------------------------------------------------------------
+
+2026-01-01_to_2026-01-31
+
+Purpose:
+----------------------------------------------------------------------------------------------------
+Links:
+✔ budgets
+✔ expenses
+✔ analytics
+
+to:
+ONE financial period
+
+====================================================================================================
+DASHBOARD ENGINE ARCHITECTURE
+====================================================================================================
+
+Core Function:
+----------------------------------------------------------------------------------------------------
+loadDashboard()
+
+Purpose:
+----------------------------------------------------------------------------------------------------
+Calculates:
+✔ Total budget
+✔ Total expense
+✔ Remaining budget
+✔ Daily spent
+✔ Income
+✔ Net balance
+
+Android Equivalent:
+----------------------------------------------------------------------------------------------------
+DashboardManager
+DashboardFragment
+
+====================================================================================================
+GRAPH ENGINE ARCHITECTURE
+==================================
+==================================================================
+
+Core Functions:
+----------------------------------------------------------------------------------------------------
+loadGraph()
+groupData()
+prepareChartData()
+createDatasets()
+
+Purpose:
+----------------------------------------------------------------------------------------------------
+Handles:
+✔ Daily graph
+✔ Weekly graph
+✔ Monthly graph
+✔ Custom range graph
+✔ Budget trend line
+✔ Category analytics
+
+Current Graph Library:
+----------------------------------------------------------------------------------------------------
+Chart.js
+
+Android Equivalent:
+----------------------------------------------------------------------------------------------------
+MPAndroidChart
+
+====================================================================================================
+ANALYTICS ARCHITECTURE
+====================================================================================================
+
+Analytics Includes:
+----------------------------------------------------------------------------------------------------
+✔ Category breakdown
+✔ Budget efficiency
+✔ Spending trends
+✔ Daily spending
+✔ Weekly spending
+✔ Net calculations
+
+Core Functions:
+----------------------------------------------------------------------------------------------------
+groupByCategory()
+renderCategoryBreakdown()
+updateBudgetEfficiency()
+
+====================================================================================================
+DAILY LIMIT ENGINE
+====================================================================================================
+
+Core Function:
+----------------------------------------------------------------------------------------------------
+getDailyLimit()
+
+Purpose:
+----------------------------------------------------------------------------------------------------
+Calculates:
+Allowed daily spending
+
+using:
+----------------------------------------------------------------------------------------------------
+remainingBudget / remainingDays
+
+====================================================================================================
+SMART DATE ENGINE
+====================================================================================================
+
+Core Functions:
+----------------------------------------------------------------------------------------------------
+buildSmartExpenseDate()
+normalizeDate()
+
+Purpose:
+----------------------------------------------------------------------------------------------------
+Automatically handles:
+✔ Today entries
+✔ Past entries
+✔ Future entries
+
+====================================================================================================
+SPLIT EXPENSE ENGINE
+====================================================================================================
+
+Core Functions:
+----------------------------------------------------------------------------------------------------
+prepareSplit()
+openSplitModal()
+confirmSplit()
+
+Purpose:
+----------------------------------------------------------------------------------------------------
+Automatically splits:
+ONE expense
+
+across:
+MULTIPLE budgets
+
+Example:
+----------------------------------------------------------------------------------------------------
+₹5000 expense
+
+can split into:
+----------------------------------------------------------------------------------------------------
+₹2000 from Budget A
+₹3000 from Budget B
+
+====================================================================================================
+UI SYNCHRONIZATION ARCHITECTURE
+====================================================================================================
+
+After every transaction:
+----------------------------------------------------------------------------------------------------
+ALL dependent UI updates refresh.
+
+Example:
+----------------------------------------------------------------------------------------------------
+loadDashboard()
+loadHistory()
+loadGraph()
+renderBudgetEntries()
+
+Purpose:
+----------------------------------------------------------------------------------------------------
+Keeps UI synchronized with storage.
+
+====================================================================================================
+BACKUP ENGINE ARCHITECTURE
+====================================================================================================
+
+Core Functions:
+----------------------------------------------------------------------------------------------------
+exportDataAsJSON()
+exportDataAsExcel()
+importData()
+
+Purpose:
+----------------------------------------------------------------------------------------------------
+Supports:
+✔ Full financial backup
+✔ Recovery
+✔ Migration
+✔ Device transfer
+
+====================================================================================================
+BACKUP STRUCTURE
+====================================================================================================
+
+Backup Includes:
+----------------------------------------------------------------------------------------------------
+✔ expenses
+✔ budgets
+✔ savings
+✔ orders
+✔ categories
+✔ persons
+✔ budgetPeriods
+✔ settings
+
+====================================================================================================
+IMPORT ENGINE ARCHITECTURE
+====================================================================================================
+
+Purpose:
+----------------------------------------------------------------------------------------------------
+Imports:
+✔ financial records
+✔ settings
+✔ categories
+✔ periods
+✔ budgets
+
+Validation:
+----------------------------------------------------------------------------------------------------
+Basic structure validation exists.
+
+====================================================================================================
+CATEGORY ENGINE ARCHITECTURE
+====================================================================================================
+
+Core Functions:
+----------------------------------------------------------------------------------------------------
+getCategories()
+saveCategories()
+addCategory()
+deleteCategory()
+
+Purpose:
+----------------------------------------------------------------------------------------------------
+Dynamic financial categorization system.
+
+====================================================================================================
+THEME ENGINE ARCHITECTURE
+====================================================================================================
+
+Core Functions:
+----------------------------------------------------------------------------------------------------
+changeTheme()
+applyCustomColor()
+loadTheme()
+
+Purpose:
+----------------------------------------------------------------------------------------------------
+Dynamic UI personalization.
+
+Android Equivalent:
+----------------------------------------------------------------------------------------------------
+ThemeManager
+Dynamic Material Theme
+
+====================================================================================================
+NOTIFICATION ENGINE ARCHITECTURE
+====================================================================================================
+
+Status:
+----------------------------------------------------------------------------------------------------
+Currently commented.
+
+Purpose:
+----------------------------------------------------------------------------------------------------
+Future:
+✔ Smart alerts
+✔ Budget warnings
+✔ Insights
+✔ Daily reminders
+
+Android Equivalent:
+----------------------------------------------------------------------------------------------------
+WorkManager
+Foreground Service
+Push Notifications
+
+====================================================================================================
+PDF EXPORT ARCHITECTURE
+====================================================================================================
+
+Core Function:
+----------------------------------------------------------------------------------------------------
+downloadPDF()
+
+Purpose:
+----------------------------------------------------------------------------------------------------
+Creates:
+✔ Financial reports
+✔ Budget summaries
+✔ Expense history
+
+Current Library:
+----------------------------------------------------------------------------------------------------
+jsPDF
+
+Android Equivalent:
+----------------------------------------------------------------------------------------------------
+PdfDocument
+or
+iText PDF
+
+====================================================================================================
+EXCEL EXPORT ARCHITECTURE
+====================================================================================================
+
+Core Function:
+----------------------------------------------------------------------------------------------------
+exportDataAsExcel()
+
+Purpose:
+----------------------------------------------------------------------------------------------------
+Exports:
+✔ Expenses
+✔ Budgets
+✔ Orders
+✔ Savings
+
+Current Library:
+----------------------------------------------------------------------------------------------------
+XLSX.js
+
+Android Equivalent:
+----------------------------------------------------------------------------------------------------
+Apache POI
+
+====================================================================================================
+FILTER ENGINE ARCHITECTURE
+====================================================================================================
+
+Core Functions:
+----------------------------------------------------------------------------------------------------
+handleFilter()
+applyDateFilter()
+applyPeriod()
+filterDataByType()
+
+Purpose:
+----------------------------------------------------------------------------------------------------
+Supports:
+✔ day
+✔ week
+✔ month
+✔ custom period
+
+====================================================================================================
+GRAPH DATA ARCHITECTURE
+====================================================================================================
+
+Graph Data Structure:
+----------------------------------------------------------------------------------------------------
+
+{
+    label,
+    exp,
+    inc,
+    budget
+}
+
+====================================================================================================
+SCREEN NAVIGATION ARCHITECTURE
+====================================================================================================
+
+Current:
+----------------------------------------------------------------------------------------------------
+showScreen(id)
+
+HTML Architecture:
+----------------------------------------------------------------------------------------------------
+Single Page Application Simulation
+
+Android Migration:
+----------------------------------------------------------------------------------------------------
+Fragments
++
+Navigation Component
+
+====================================================================================================
+ANDROID FRAGMENT MAPPING
+====================================================================================================
+
+Dashboard Screen
+→ DashboardFragment
+
+Expense History
+→ ExpenseHistoryFragment
+
+Budget Screen
+→ BudgetFragment
+
+Budget Details
+→ BudgetDetailsFragment
+
+Analytics
+→ AnalyticsFragment
+
+Settings
+→ SettingsFragment
+
+====================================================================================================
+ANDROID MANAGER MAPPING
+====================================================================================================
+
+script.js Section
+----------------------------------------------------------------------------------------------------
+Currency Engine
+→ CurrencyManager
+
+Expense Engine
+→ ExpenseManager
+
+Budget Engine
+→ BudgetManager
+
+Dashboard Engine
+→ DashboardManager
+
+Analytics Engine
+→ AnalyticsManager
+
+Backup Engine
+→ BackupManager
+
+====================================================================================================
+ANDROID REPOSITORY MAPPING
+====================================================================================================
+
+HTML Storage
+----------------------------------------------------------------------------------------------------
+localStorage
+
+Android Equivalent:
+----------------------------------------------------------------------------------------------------
+ExpenseRepository
+BudgetRepository
+SavingsRepository
+SettingsRepository
+
+====================================================================================================
+ANDROID ADAPTER MAPPING
+====================================================================================================
+
+Dynamic HTML Rendering
+----------------------------------------------------------------------------------------------------
+→ RecyclerView Adapter
+
+Examples:
+----------------------------------------------------------------------------------------------------
+renderBudgetEntries()
+→ BudgetAdapter
+
+loadHistory()
+→ ExpenseHistoryAdapter
+
+====================================================================================================
+IMPORTANT ENGINEERING RULES
+====================================================================================================
+
+1.
+DO NOT place business logic inside Android Fragments.
+
+2.
+Move calculations into:
+Managers / Domain Layer
+
+3.
+Move storage into:
+Repositories
+
+4.
+Move rendering into:
+RecyclerView Adapters
+
+5.
+Use:
+Room Database
+
+instead of:
+SharedPreferences
+
+for transactions.
+
+6.
+All financial calculations must remain:
+PERIOD AWARE
+
+7.
+Currency conversion should happen:
+ONLY in presentation layer
+
+8.
+Store all values in:
+BASE CURRENCY
+
+9.
+Avoid direct UI manipulation in Android.
+
+10.
+UI should observe:
+LiveData / StateFlow
+
+====================================================================================================
+FUTURE SCALING CAPABILITIES
+====================================================================================================
+
+This architecture supports:
+----------------------------------------------------------------------------------------------------
+✔ Multi-period accounting
+✔ Financial forecasting
+✔ AI insights
+✔ Loan management
+✔ Subscription budgets
+✔ Smart analytics
+✔ Enterprise finance workflows
+✔ Offline-first architecture
+
+====================================================================================================
+AUTHOR NOTES
+====================================================================================================
+
+Core Architecture Designed By:
+----------------------------------------------------------------------------------------------------
+Gopichanime 🐉
+
+Purpose:
+----------------------------------------------------------------------------------------------------
+To maintain synchronized:
+✔ HTML architecture
+✔ Android architecture
+✔ Financial domain structure
+✔ Budget period system
+✔ Analytics workflows
+
+====================================================================================================
+END OF MONEY TRACKER CORE ENGINE DOCUMENTATION
+====================================================================================================
+*/
 // Budget Expense Module Start script.js
 const isSavingsPage = window.location.pathname.includes("savings");
 let currentFilteredExpenses = [];
@@ -116,9 +1006,47 @@ function changeCurrency(code) {
 ========================= */
 
 function getExpenses() {
-
     try {
         let data = JSON.parse(localStorage.getItem("expenses")) || [];
+
+        // Migration / compatibility guards
+        data = data.map(e => {
+            // ensure object
+            e = e || {};
+
+            // preserve old data but ensure type exists
+            if (!e.type) {
+                e.type = (typeof e.amount === "number" && e.amount < 0) ? "expense" : "income";
+            }
+
+            // normalize type values to allowed set
+            if (!["expense", "income", "recovery", "loss"].includes(e.type)) {
+                // fallback mapping for legacy types
+                e.type = normalizeTransactionType(e.type) || (e.type ? String(e.type) : "expense");
+                if (!["expense", "income", "recovery", "loss"].includes(e.type)) {
+                    // last resort: derive from sign
+                    e.type = (typeof e.amount === "number" && e.amount < 0) ? "expense" : "income";
+                }
+            }
+
+            // ensure allocationTrail exists
+            if (!e.allocationTrail) e.allocationTrail = [];
+
+            // ensure sign consistency for stored amounts (legacy safety)
+            if (typeof e.amount === "number") {
+                if (e.type === "expense" || e.type === "loss") {
+                    e.amount = -Math.abs(e.amount);
+                } else {
+                    e.amount = Math.abs(e.amount);
+                }
+            } else {
+                // if missing amount, set 0
+                e.amount = 0;
+            }
+
+            return e;
+        });
+
         return data;
     } catch (err) {
         return [];
@@ -242,6 +1170,37 @@ function saveSavings(data) {
     localStorage.setItem("savingsTransactions", JSON.stringify(data));
 }
 
+function normalizeTransactionType(type) {
+
+    switch ((type || "").toLowerCase()) {
+
+        case "refund":
+        case "settlement":
+        case "deposit_return":
+            return "recovery";
+
+        case "internal_transfer":
+        case "transfer_reversal":
+            return "transfer";
+
+        case "advance_payment":
+            return "expense";
+
+        default:
+            return type;
+    }
+}
+
+// Helper: identify parent split container rows (audit-only, should be excluded from calculations)
+function isParentSplitContainer(expense) {
+    return (
+        expense &&
+        expense.isSplit === true &&
+        Array.isArray(expense.allocationTrail) &&
+        expense.allocationTrail.length > 0 &&
+        !expense.splitId
+    );
+}
 
 /* =========================
    🧠 CORE LOGIC
@@ -255,9 +1214,16 @@ function addExpense(obj) {
 
         let expenses = getExpenses();
 
-        let type =
-            obj.type ||
-            (obj.amount < 0 ? "expense" : "income");
+        // Determine type (prefer explicit, else fallback to migration by sign)
+        let type = normalizeTransactionType(obj.type || null) || null;
+        if (!type) {
+            type = (typeof obj.amount === "number" && obj.amount < 0) ? "expense" : "income";
+        }
+
+        // enforce allowed types
+        if (!["expense", "income", "recovery", "loss"].includes(type)) {
+            type = "expense";
+        }
 
         let category =
             obj.category || "Others";
@@ -265,8 +1231,17 @@ function addExpense(obj) {
         // =========================
         // 💱 BASE CONVERSION
         // =========================
-        let baseAmount =
-            convertToBase(obj.amount);
+        // Accept obj.amount as absolute value; storage sign is derived from `type`
+        let inputAmount = typeof obj.amount === "number" ? Math.abs(obj.amount) : 0;
+
+        let baseAmount = convertToBase(inputAmount);
+
+        // adjust sign for storage: expenses/loss are negative, income/recovery positive
+        if (type === "expense" || type === "loss") {
+            baseAmount = -Math.abs(baseAmount);
+        } else {
+            baseAmount = Math.abs(baseAmount);
+        }
 
         // =========================
         // 📅 SAFE DATE
@@ -329,14 +1304,18 @@ function addExpense(obj) {
             updatedAt:
                 new Date().toISOString(),
 
-            splitId:
-                obj.splitId || null,
+            splitId: obj.splitId || null,
+            splitIndex: obj.splitIndex || null,
+            isSplit: obj.isSplit || false,
+            linkedTransactionId: obj.linkedTransactionId || null,
 
-            splitIndex:
-                obj.splitIndex || null,
-
-            isSplit:
-                obj.isSplit || false
+            // deep-clone allocationTrail if provided; otherwise, if budgetId provided for expense/loss,
+            // create a single allocation entry for backward compatibility
+            allocationTrail: obj.allocationTrail && Array.isArray(obj.allocationTrail)
+                ? JSON.parse(JSON.stringify(obj.allocationTrail))
+                : ((obj.budgetId && (type === "expense" || type === "loss"))
+                    ? [{ budgetId: obj.budgetId, amount: Math.abs(baseAmount) }]
+                    : [])
         };
 
         expenses.push(newEntry);
@@ -375,14 +1354,34 @@ function addExpense(obj) {
 
 // 📊 Budget Balance
 function getBudgetBalance(budgetId) {
-    let expenses = getExpenses();
+    let expensesAll = getExpenses();
+    // Exclude parent split container rows from all financial math
+    let expenses = expensesAll.filter(e => !isParentSplitContainer(e));
 
-    let spent = expenses
-        .filter(e =>
-            e.budgetId === budgetId &&
-            e.amount < 0
-        )
-        .reduce((sum, e) => sum + Math.abs(e.amount), 0);
+    // Calculate spent for this budget using allocationTrail when present
+    let spent = 0;
+
+    expenses.forEach(e => {
+        // find contribution of this expense to the budget (from allocationTrail or legacy budgetId)
+        let contribution = 0;
+
+        if (Array.isArray(e.allocationTrail) && e.allocationTrail.length) {
+            let entry = e.allocationTrail.find(a => String(a.budgetId) === String(budgetId));
+            if (entry) contribution = Number(entry.amount) || 0;
+        } else if (String(e.budgetId) === String(budgetId)) {
+            contribution = Math.abs(Number(e.amount) || 0);
+        }
+
+        if (!contribution) return;
+
+        if (e.type === "expense" || e.type === "loss") {
+            spent += contribution;
+        } else if (e.type === "recovery") {
+            // recovery restores budget
+            spent -= contribution;
+        }
+        // income does not affect budget
+    });
 
     let budgets = getBudgets();
 
@@ -462,11 +1461,20 @@ function loadHistory(list = getExpenses()) {
             let div = document.createElement("div");
             div.className = "expense-item";
 
+            // display logic should be type-driven (not amount sign)
             let category = e.category || e.type || "Entry";
             let purpose = e.purpose ? ` • ${e.purpose}` : "";
             let title = category + purpose;
-            let amount = formatCurrency(e.amount);
-            let color = e.amount < 0 ? "#ff5252" : "#4caf50";
+
+            let isSpending = (e.type === "expense" || e.type === "loss");
+            let isRecovery = (e.type === "recovery");
+            let isIncome = (e.type === "income");
+
+            // always show absolute value and prefix sign for spending
+            let displayValue = formatCurrency(Math.abs(e.amount));
+            let amount = isSpending ? `- ${displayValue}` : displayValue;
+
+            let color = isSpending ? "#ff5252" : "#4caf50";
 
             let meta = `${e.paymentType || e.entity || e.sourceName || "-"}`;
             let date = new Date(e.date).toLocaleString("en-IN");
@@ -511,6 +1519,19 @@ function deleteExpenseUI(id) {
     try {
 
         let expenses = getExpenses();
+        // 🔥 CHECK LINKED RECOVERIES
+        let hasLinkedRecovery = expenses.some(e =>
+            e.linkedTransactionId === id
+        );
+
+        if (hasLinkedRecovery) {
+
+            showToast(
+                "Cannot delete: linked recovery exists"
+            );
+
+            return;
+        }
 
         let entry = getExpenses().find(e => String(e.id) === String(id));
 
@@ -561,6 +1582,28 @@ function handleAddExpense() {
     let type = document.getElementById("entryType")?.value;
     let paymentType = document.getElementById("paymentType")?.value;
     let budgetId = document.getElementById("budgetSelect")?.value;
+    let linkedTransactionId = document.getElementById("linkedTransaction")?.value || null;
+
+    // 🔥 RECOVERY VALIDATION
+    if (
+        type === "recovery" &&
+        linkedTransactionId
+    ) {
+
+        let remaining =
+            getRemainingAmount(
+                linkedTransactionId
+            );
+
+        if (Math.abs(amount) > remaining) {
+
+            showToast(
+                `Only ${formatCurrency(remaining)} recoverable`
+            );
+
+            return;
+        }
+    }
 
     // ✅ VALIDATION
     if (!amount) {
@@ -611,7 +1654,16 @@ function handleAddExpense() {
         return;
 
     }
-
+    addExpense({
+        amount,
+        category,
+        purpose,
+        date: selectedDate.toISOString(),
+        type,
+        paymentType,
+        budgetId,
+        linkedTransactionId
+    });
     // =========================
     // 🔄 UI UPDATES
     // =========================
@@ -668,6 +1720,40 @@ window.addEventListener("load", function () {
         loadBudgetScreen();
         loadGraph("day");
         updateBudgetEfficiency();
+        loadRecoverableTransactions();
+
+        // 🔥 RECOVERY UI TOGGLE
+        let entryType =
+            document.getElementById(
+                "entryType"
+            );
+
+        if (entryType) {
+
+            entryType.addEventListener(
+                "change",
+                function () {
+
+                    let type = this.value;
+
+                    let wrapper =
+                        document.getElementById(
+                            "linkedTransactionWrapper"
+                        );
+
+                    let isRecovery =
+                        type === "recovery";
+
+                    if (wrapper) {
+
+                        wrapper.style.display =
+                            isRecovery
+                                ? "block"
+                                : "none";
+                    }
+                }
+            );
+        }
 
         let today = new Date().toISOString().split("T")[0];
         let dateInput = document.getElementById("expenseDate");
@@ -972,6 +2058,12 @@ function getInsights() {
     let topCategory = {};
 
     data.forEach(e => {
+        // 🔥 HIDE FULLY RECOVERED
+        let remaining =
+            getRemainingAmount(e.id);
+
+        if (remaining <= 0)
+            return;
         if (!topCategory[e.category]) topCategory[e.category] = 0;
         topCategory[e.category] += Math.abs(e.amount);
     });
@@ -1311,7 +2403,8 @@ function loadBudgetOptions() {
     if (!select) return;
 
     let budgets = getBudgets();
-    let expenses = getExpenses();
+    let expensesAll = getExpenses();
+    let expenses = expensesAll.filter(e => !isParentSplitContainer(e));
 
     select.innerHTML = "";
 
@@ -1328,12 +2421,23 @@ function loadBudgetOptions() {
     filtered.forEach(b => {
 
         // 🔥 Calculate spent per budget
-        let spent = expenses
-            .filter(e =>
-                e.budgetId === b.budgetId &&
-                e.amount < 0
-            )
-            .reduce((sum, e) => sum + Math.abs(e.amount), 0);
+        let spent = 0;
+
+        expenses.forEach(e => {
+
+            if (Array.isArray(e.allocationTrail) && e.allocationTrail.length) {
+                e.allocationTrail.forEach(a => {
+                    if (String(a.budgetId) === String(b.budgetId) && (e.type === 'expense' || e.type === 'loss')) {
+                        spent += Number(a.amount) || 0;
+                    }
+                    if (String(a.budgetId) === String(b.budgetId) && e.type === 'recovery') {
+                        spent -= Number(a.amount) || 0;
+                    }
+                });
+            } else if (String(e.budgetId) === String(b.budgetId) && e.amount < 0) {
+                spent += Math.abs(e.amount);
+            }
+        });
 
         let remaining = (b.totalAllocated || 0) - spent;
 
@@ -1379,7 +2483,7 @@ function formatBudgetName(budget) {
 
         if (budget.periodKey) {
             let [start, end] = budget.periodKey.split("_to_");
-            return `${format(start)} → ${format(end)}`;
+            return `${formatDateShort(start)} → ${formatDateShort(end)}`;
         }
 
         if (budget.monthKey) {
@@ -1937,15 +3041,31 @@ function loadDashboard() {
         .reduce((sum, b) =>
             sum + (b.totalAllocated || 0), 0);
 
+    // total income only counts 'income' type
     let totalIncome = filteredExpenses
-        .filter(e => e.amount > 0)
-        .reduce((sum, e) =>
-            sum + e.amount, 0);
+        .filter(e => e.type === "income")
+        .reduce((sum, e) => sum + Math.abs(Number(e.amount) || 0), 0);
 
-    let totalSpent = filteredExpenses
-        .filter(e => e.amount < 0)
-        .reduce((sum, e) =>
-            sum + Math.abs(e.amount), 0);
+    // totalSpent aggregates expense/loss minus recoveries. If allocationTrail exists, prefer summed allocations.
+    let totalSpent = 0;
+
+    filteredExpenses.forEach(e => {
+        if (e.type === "expense" || e.type === "loss") {
+            if (Array.isArray(e.allocationTrail) && e.allocationTrail.length) {
+                totalSpent += e.allocationTrail.reduce((s, a) => s + (Number(a.amount) || 0), 0);
+            } else {
+                totalSpent += Math.abs(Number(e.amount) || 0);
+            }
+        } else if (e.type === "recovery") {
+            // recoveries reduce spent
+            // prefer allocationTrail on recovery if present, else use amount
+            if (Array.isArray(e.allocationTrail) && e.allocationTrail.length) {
+                totalSpent -= e.allocationTrail.reduce((s, a) => s + (Number(a.amount) || 0), 0);
+            } else {
+                totalSpent -= Math.abs(Number(e.amount) || 0);
+            }
+        }
+    });
 
     let remaining =
         totalBudget - totalSpent;
@@ -2171,18 +3291,37 @@ function openBudgetDetails(group) {
             )
             .map(b => b.budgetId);
 
-        related = expenses.filter(e =>
-            relatedBudgetIds.includes(e.budgetId)
-        );
+        // related: any expense that references these budgets via allocationTrail or legacy budgetId
+        related = expenses.filter(e => {
+            // skip child split rows
+            if (e && e.splitId && e.isSplit === true) return false;
+
+            if (Array.isArray(e.allocationTrail) && e.allocationTrail.length) {
+                return e.allocationTrail.some(a => relatedBudgetIds.includes(a.budgetId));
+            }
+
+            return relatedBudgetIds.includes(e.budgetId);
+        });
     }
 
-    let used = related
-        .filter(e => e.amount < 0)
-        .reduce((sum, e) => sum + Math.abs(e.amount), 0);
+    // compute used/credited considering allocationTrail
+    let used = 0;
+    let credited = 0;
 
-    let credited = related
-        .filter(e => e.amount > 0)
-        .reduce((sum, e) => sum + e.amount, 0);
+    related.forEach(e => {
+        if (Array.isArray(e.allocationTrail) && e.allocationTrail.length) {
+            e.allocationTrail.forEach(a => {
+                if (relatedBudgetIds.includes(a.budgetId)) {
+                    if (e.type === 'expense' || e.type === 'loss') used += Number(a.amount) || 0;
+                    else if (e.type === 'recovery') used -= Number(a.amount) || 0;
+                    else if (e.type === 'income') credited += Number(a.amount) || 0;
+                }
+            });
+        } else {
+            if (e.amount < 0) used += Math.abs(e.amount);
+            if (e.amount > 0) credited += e.amount;
+        }
+    });
 
     let remaining = group.totalAllocated - used + credited;
 
@@ -2938,16 +4077,36 @@ function filterDataByType(
 // =========================
 // Converts list → category totals
 function groupByCategory(data) {
+    // Exclude parent split container rows from aggregation
+    data = Array.isArray(data) ? data.filter(e => !isParentSplitContainer(e)) : [];
+
     let map = {};
 
     data.forEach(e => {
-        if (e.amount < 0) {
-            let cat = e.category || "Other";
+        // Determine category for grouping. For recoveries, prefer original's category.
+        let cat = e.category || "Other";
 
-            if (!map[cat]) map[cat] = 0;
-
-            map[cat] += Math.abs(e.amount);
+        if (e.type === "recovery" && e.linkedTransactionId) {
+            let orig = getExpenses().find(o => String(o.id) === String(e.linkedTransactionId));
+            if (orig && orig.category) cat = orig.category;
         }
+
+        if (!map[cat]) map[cat] = 0;
+
+        // Expense / Loss => increases spending
+        if (e.type === "expense" || e.type === "loss") {
+            map[cat] += Math.abs(Number(e.amount) || 0);
+        }
+
+        // Recovery => reduces spending (restores)
+        else if (e.type === "recovery") {
+            map[cat] -= Math.abs(Number(e.amount) || 0);
+        }
+    });
+
+    // prevent negatives
+    Object.keys(map).forEach(k => {
+        map[k] = Math.max(0, map[k]);
     });
 
     return map;
@@ -2970,7 +4129,7 @@ function renderCategoryBreakdown(map) {
         return;
     }
 
-    let entries = Object.entries(map);
+    let entries = Object.entries(map || {});
 
     if (!entries.length) {
         container.innerHTML = "<p>No data</p>";
@@ -2984,9 +4143,12 @@ function renderCategoryBreakdown(map) {
         div.style.justifyContent = "space-between";
         div.style.padding = "6px 0";
 
+        // ensure non-negative display
+        let amount = Math.max(0, Number(amt) || 0);
+
         div.innerHTML = `
             <span>${cat}</span>
-            <strong>${formatCurrency(amt)}</strong>
+            <strong>${formatCurrency(amount)}</strong>
         `;
 
         container.appendChild(div);
@@ -2994,6 +4156,10 @@ function renderCategoryBreakdown(map) {
 }
 
 function groupData(expenses, type, now, customRange = null) {
+
+    // Exclude parent split container rows from aggregation
+    let expensesAll = Array.isArray(expenses) ? expenses : [];
+    expenses = expensesAll.filter(e => !isParentSplitContainer(e));
 
     now = new Date();
 
@@ -3038,12 +4204,13 @@ function groupData(expenses, type, now, customRange = null) {
             let hour = d.getHours();
 
             if (e.amount < 0) {
-
                 map[hour].exp += Math.abs(e.amount);
-
             } else {
-
-                map[hour].inc += e.amount;
+                if (e.type === "recovery") {
+                    map[hour].exp -= Math.abs(e.amount);
+                } else {
+                    map[hour].inc += e.amount;
+                }
             }
         });
 
@@ -3231,10 +4398,16 @@ function groupData(expenses, type, now, customRange = null) {
 
         }
 
-        // INCOME
         else {
 
-            map[key].inc += e.amount;
+            if (e.type === "recovery") {
+
+                map[key].exp -= Math.abs(e.amount);
+
+            } else {
+
+                map[key].inc += e.amount;
+            }
         }
     });
 
@@ -3282,6 +4455,71 @@ function groupData(expenses, type, now, customRange = null) {
 //     return map;
 // }
 
+function loadRecoverableTransactions() {
+
+    let select =
+        document.getElementById("linkedTransaction");
+
+    if (!select) return;
+
+    let expenses = getExpenses();
+
+    select.innerHTML =
+        `<option value="">
+        Select linked transaction
+    </option>`;
+
+    expenses
+        .filter(e => e.type === "expense")
+        .filter(e => getRemainingAmount(e.id) > 0)
+        .forEach(e => {
+
+            let option =
+                document.createElement("option");
+
+            option.value = e.id;
+
+            let remaining =
+                getRemainingAmount(e.id);
+
+            option.textContent =
+                `${e.purpose || e.category}
+(${formatCurrency(remaining)} left)`;
+
+            select.appendChild(option);
+        });
+}
+
+function getNetLoss(id) {
+
+    let expenses =
+        getExpenses();
+
+    let original =
+        expenses.find(
+            e => e.id === id
+        );
+
+    if (!original)
+        return 0;
+
+    let recovered =
+        expenses
+            .filter(e =>
+                e.linkedTransactionId === id &&
+                e.type === "recovery"
+            )
+            .reduce(
+                (sum, e) =>
+                    sum + e.amount,
+                0
+            );
+
+    return Math.max(
+        0,
+        Math.abs(original.amount) - recovered
+    );
+}
 
 function getLoanSummary() {
     let expenses = getExpenses();
@@ -3302,7 +4540,7 @@ function getLoanSummary() {
             loans[e.entity].given += Math.abs(e.amount);
         }
 
-        if (e.amount > 0 && e.category === "Recovery") {
+        if (e.type === "recovery") {
             loans[e.entity].received += e.amount;
         }
     });
@@ -3489,7 +4727,8 @@ function applyHex() {
 function updateProgressBar() {
 
     let budgets = getBudgets();
-    let expenses = getExpenses();
+    let expensesAll = getExpenses();
+    let expenses = expensesAll.filter(e => !isParentSplitContainer(e));
 
     let filteredBudgets = filterBudgetsByActivePeriod(budgets);
 
@@ -3499,8 +4738,20 @@ function updateProgressBar() {
     let filtered = filterByActivePeriod(expenses);
 
     let totalSpent = filtered
-        .filter(e => e.amount < 0)
-        .reduce((sum, e) => sum + Math.abs(e.amount), 0);
+        .reduce((sum, e) => {
+            if (e.amount < 0) {
+                return sum + Math.abs(e.amount);
+            }
+
+            if (e.type === "recovery") {
+                return sum - Math.abs(e.amount);
+            }
+
+            return sum;
+        }, 0);
+
+    totalSpent =
+        Math.max(0, totalSpent);
 
     let percent = totalBudget
         ? (totalSpent / totalBudget) * 100
@@ -3541,6 +4792,224 @@ function injectGlobalFooter() {
     `;
 
     document.querySelector(".app")?.appendChild(footer);
+}
+
+// =========================
+// 🔬 In-App Financial Test Runner
+// =========================
+// Helpers: backup/restore, assertions, test data creators
+const __FT_snapshot = { data: null };
+
+function backupStorage() {
+    const snap = {};
+    for (let i = 0; i < localStorage.length; i++) {
+        const k = localStorage.key(i);
+        snap[k] = localStorage.getItem(k);
+    }
+    __FT_snapshot.data = snap;
+}
+
+function restoreStorage() {
+    if (!__FT_snapshot.data) return;
+    localStorage.clear();
+    Object.keys(__FT_snapshot.data).forEach(k => {
+        localStorage.setItem(k, __FT_snapshot.data[k]);
+    });
+}
+
+function assertEqual(actual, expected) {
+    return { passed: actual === expected, expected, actual };
+}
+
+function assertTrue(cond, expectedDesc) {
+    return { passed: !!cond, expected: expectedDesc || true, actual: !!cond };
+}
+
+function createTestPeriod(startDate, endDate) {
+    const period = {
+        id: `tp_${Date.now()}`,
+        start: startDate,
+        end: endDate,
+        status: "active",
+        createdAt: new Date().toISOString()
+    };
+    localStorage.setItem("bp", JSON.stringify([period]));
+    return period;
+}
+
+function createTestBudget({ sourceId = "src_test", entity = "Test", amount = 1000, date = new Date().toISOString() } = {}) {
+    // use createOrUpdateBudget to let module generate unique id
+    const periodKey = getActivePeriodKey ? getActivePeriodKey() : null;
+
+    const fallbackMonth = date.slice(0, 7);
+
+    const legacyId = `budget_${periodKey || fallbackMonth}_${sourceId}`;
+
+    createOrUpdateBudget(legacyId, {
+        amount,
+        sourceId,
+        entity,
+        note: "test",
+        date,
+        monthKey: fallbackMonth
+    });
+
+    // find created budget by sourceId + periodKey
+    const budgets = getBudgets();
+    const found = budgets.find(b => b.sourceId === sourceId && (b.periodKey === periodKey || b.monthKey === fallbackMonth));
+    return found || null;
+}
+
+function createTestExpense({ amount = 100, type = 'expense', category = 'Test', date = new Date().toISOString(), allocationTrail = null, budgetId = null } = {}) {
+    const entry = addExpense({ amount: Math.abs(amount), type, category, date, allocationTrail, budgetId });
+    return entry;
+}
+
+function createTestRecovery({ amount = 10, linkedTransactionId = null, allocationTrail = null, date = new Date().toISOString() } = {}) {
+    const entry = addExpense({ amount: Math.abs(amount), type: 'recovery', date, linkedTransactionId, allocationTrail });
+    return entry;
+}
+
+// Run full suite
+function runFinancialTests() {
+    backupStorage();
+
+    const results = [];
+
+    try {
+        // Setup test period
+        const now = new Date();
+        const start = new Date(now);
+        start.setDate(now.getDate() - 5);
+        const end = new Date(now);
+        end.setDate(now.getDate() + 5);
+
+        createTestPeriod(start.toISOString(), end.toISOString());
+
+        // Clear core tables for isolated tests
+        localStorage.setItem('expenses', JSON.stringify([]));
+        localStorage.setItem('budgets', JSON.stringify([]));
+        localStorage.setItem('savingsTransactions', JSON.stringify([]));
+        localStorage.setItem('categories', JSON.stringify(['Test']));
+
+        // 1. Savings income test
+        const inc = createTestExpense({ amount: 1000, type: 'income' });
+        const totalIncome = getExpenses().filter(e => e.type === 'income').reduce((s,e)=>s+Math.abs(e.amount),0);
+        results.push({ name: 'Savings income test', ...assertEqual(totalIncome, Math.abs(inc.amount)) });
+
+        // 2. Budget allocation test
+        const b1 = createTestBudget({ sourceId: 'srcA', amount: 100 });
+        const exp1 = createTestExpense({ amount: 50, type: 'expense', budgetId: b1 ? b1.budgetId : null });
+        const bal1 = getBudgetBalance(b1.budgetId);
+        results.push({ name: 'Budget allocation test', ...assertEqual(bal1, (b1.totalAllocated || b1.amount) - Math.abs(exp1.amount)) });
+
+        // 3. Multi-budget split test
+        const bA = createTestBudget({ sourceId: 'A', amount: 16 });
+        const bB = createTestBudget({ sourceId: 'B', amount: 1000 });
+        const splitExpense = createTestExpense({ amount: 18, type: 'expense', allocationTrail: [{ budgetId: bA.budgetId, amount: 16 }, { budgetId: bB.budgetId, amount: 2 }] });
+        const balA = getBudgetBalance(bA.budgetId);
+        const balB = getBudgetBalance(bB.budgetId);
+        results.push({ name: 'Multi-budget split test - A', ...assertEqual(balA, (bA.totalAllocated || bA.amount) - 16) });
+        results.push({ name: 'Multi-budget split test - B', ...assertEqual(balB, (bB.totalAllocated || bB.amount) - 2) });
+
+        // 4. Recovery restoration test
+        const orig = createTestExpense({ amount: 500, type: 'expense', allocationTrail: [{ budgetId: bB.budgetId, amount: 500 }] });
+        const rec = createTestRecovery({ amount: 230, linkedTransactionId: orig.id, allocationTrail: [{ budgetId: bB.budgetId, amount: 230 }] });
+        const remaining = getRemainingAmount(orig.id);
+        results.push({ name: 'Recovery restoration test', ...assertEqual(remaining, 270) });
+
+        // 5. Over recovery prevention test
+        const over = createTestRecovery({ amount: 5000, linkedTransactionId: orig.id });
+        const remAfter = getRemainingAmount(orig.id);
+        results.push({ name: 'Over recovery prevention test', ...assertEqual(remAfter, 0) });
+
+        // 6. Period isolation test
+        // create expense outside period
+        const outsideDate = new Date(); outsideDate.setMonth(outsideDate.getMonth() - 2);
+        const outside = createTestExpense({ amount: 20, type: 'expense', date: outsideDate.toISOString() });
+        const filtered = filterByActivePeriod(getExpenses());
+        const includesOutside = filtered.some(e => String(e.id) === String(outside.id));
+        results.push({ name: 'Period isolation test', ...assertEqual(includesOutside, false) });
+
+        // 7. Budget balance test
+        const bb = createTestBudget({ sourceId: 'BB', amount: 100 });
+        const e1 = createTestExpense({ amount: 40, type: 'expense', allocationTrail: [{ budgetId: bb.budgetId, amount: 40 }] });
+        const rec2 = createTestRecovery({ amount: 10, linkedTransactionId: e1.id, allocationTrail: [{ budgetId: bb.budgetId, amount: 10 }] });
+        const balbb = getBudgetBalance(bb.budgetId);
+        results.push({ name: 'Budget balance test', ...assertEqual(balbb, (bb.totalAllocated || bb.amount) - (40 - 10)) });
+
+        // 8. Graph calculation test (groupData)
+        const gdata = groupData(getExpenses(), 'day');
+        results.push({ name: 'Graph calculation test', ...assertTrue(Array.isArray(gdata), 'groupData returns array') });
+
+        // 9. Category breakdown test
+        const catMap = groupByCategory(getExpenses());
+        results.push({ name: 'Category breakdown test', ...assertTrue(typeof catMap === 'object', 'groupByCategory returns object') });
+
+        // 10. Delete protection test
+        const expToDelete = createTestExpense({ amount: 60, type: 'expense' });
+        const recoveryLinked = createTestRecovery({ amount: 10, linkedTransactionId: expToDelete.id });
+        // attempt delete
+        deleteExpenseUI(expToDelete.id);
+        const stillExists = getExpenses().some(e => String(e.id) === String(expToDelete.id));
+        results.push({ name: 'Delete protection test', ...assertEqual(stillExists, true) });
+
+        // 11. Migration compatibility test
+        // create legacy-like entry (no type)
+        const legacy = { id: 'leg_' + Date.now(), amount: -123, date: new Date().toISOString() };
+        const raw = getExpenses(); raw.push(legacy); localStorage.setItem('expenses', JSON.stringify(raw));
+        const migrated = getExpenses().find(e => e.id === legacy.id);
+        results.push({ name: 'Migration compatibility test', ...assertTrue(migrated && migrated.type === 'expense', 'legacy entry normalized to expense') });
+
+        // 12. allocationTrail integrity test
+        const atExp = createTestExpense({ amount: 77, allocationTrail: [{ budgetId: bb.budgetId, amount: 77 }] });
+        const fetched = getExpenses().find(e => String(e.id) === String(atExp.id));
+        results.push({ name: 'allocationTrail integrity test', ...assertTrue(Array.isArray(fetched.allocationTrail) && fetched.allocationTrail.length === 1, 'allocationTrail preserved') });
+
+        // 13. Dashboard totals test
+        const totalBudget = getTotalBudget();
+        results.push({ name: 'Dashboard totals test', ...assertTrue(typeof totalBudget === 'number', 'getTotalBudget returns number') });
+
+        // 14. Progress bar calculation test
+        const budgetsNow = getBudgets();
+        const expensesNow = getExpenses();
+        const filteredBudgets = filterBudgetsByActivePeriod(budgetsNow);
+        const tb = filteredBudgets.reduce((s,b)=>s+(b.totalAllocated||0),0);
+        const spentNow = filterByActivePeriod(expensesNow).reduce((s,e)=>s + (e.amount < 0 ? Math.abs(e.amount) : (e.type === 'recovery' ? -Math.abs(e.amount) : 0)),0);
+        const expectedPercent = tb ? Math.min(100, (Math.max(0, spentNow) / tb) * 100) : 0;
+        results.push({ name: 'Progress bar calculation test', ...assertTrue(typeof expectedPercent === 'number', 'percent computed') });
+
+        // 15. Recovery reduction test
+        const oExp = createTestExpense({ amount: 200, type: 'expense' });
+        createTestRecovery({ amount: 50, linkedTransactionId: oExp.id });
+        const rem3 = getRemainingAmount(oExp.id);
+        results.push({ name: 'Recovery reduction test', ...assertEqual(rem3, 150) });
+
+    } catch (err) {
+        console.error('Tests error', err);
+        results.push({ name: 'Test runner internal error', passed: false, expected: 'no error', actual: String(err) });
+    } finally {
+        // Output results
+        console.group('Financial Engine Tests');
+        results.forEach(r => {
+            if (r.passed) console.log('%c✅ PASS', 'color:green;font-weight:bold;', r.name, r);
+            else console.warn('%c❌ FAIL', 'color:red;font-weight:bold;', r.name, r);
+        });
+        console.groupEnd();
+
+        // restore storage and refresh UI
+        restoreStorage();
+        try {
+            loadHistory();
+            loadBudgetOptions();
+            loadDashboard();
+            loadGraph();
+            renderBudgetEntries();
+        } catch (e) {
+        }
+
+        return results;
+    }
 }
 
 // // =========================
@@ -4403,41 +5872,87 @@ function handleExpenseSave(amount) {
         return availableA - availableB;
     });
 
-    // =========================
-    // ✅ CHECK SINGLE BUDGET
-    // =========================
-    let single = budgets.find(b => {
+    // // =========================
+    // // ✅ CHECK SINGLE BUDGET
+    // // =========================
+    // let single = budgets.find(b => {
 
-        let spent = expenses
-            .filter(e =>
-                e.budgetId === b.budgetId &&
-                e.amount < 0
-            )
-            .reduce((s, e) =>
-                s + Math.abs(e.amount), 0);
+    //     let spent = expenses
+    //         .filter(e =>
+    //             e.budgetId === b.budgetId &&
+    //             e.amount < 0
+    //         )
+    //         .reduce((s, e) =>
+    //             s + Math.abs(e.amount), 0);
 
-        let available =
-            (b.totalAllocated || 0) - spent;
+    //     let available =
+    //         (b.totalAllocated || 0) - spent;
 
-        return available >= amount;
-    });
+    //     return available >= amount;
+    // });
+
+    // // =========================
+    // // ✅ DIRECT SAVE
+    // // =========================
+    // if (single) {
+
+    //     addExpense({
+
+    //         amount: -Math.abs(amount),
+
+    //         budgetId: single.budgetId,
+
+    //         category,
+    //         purpose,
+    //         paymentType,
+    //         date,
+
+    //         type: "expense"
+    //     });
+
+    //     loadDashboard();
+    //     loadHistory();
+    //     loadGraph();
+    //     updateBudgetEfficiency();
+    //     renderBudgetEntries();
+    //     loadBudgetOptions();
+
+    //     showToast("Expense added");
+
+    //     resetForm();
+
+    //     return;
+    // }
+    // =========================
+    // ✅ ALWAYS SPLIT PROGRESSIVELY
+    // =========================
+    let split =
+        prepareSplit(amount, budgets);
 
     // =========================
-    // ✅ DIRECT SAVE
+    // ❌ NOT ENOUGH BUDGET
     // =========================
-    if (single) {
+    if (!split) {
+
+        showToast("Not enough total budget");
+        return;
+    }
+
+    // =========================
+    // ✅ SINGLE DIRECT ENTRY
+    // =========================
+    if (split.length === 1) {
+
+        let s = split[0];
 
         addExpense({
-
-            amount: -Math.abs(amount),
-
-            budgetId: single.budgetId,
-
+            amount: s.amount, // positive input; addExpense will normalize by type
+            budgetId: s.budget.budgetId,
+            allocationTrail: [{ budgetId: s.budget.budgetId, amount: s.amount }],
             category,
             purpose,
             paymentType,
             date,
-
             type: "expense"
         });
 
@@ -4456,10 +5971,14 @@ function handleExpenseSave(amount) {
     }
 
     // =========================
+    // 🔥 OPEN SPLIT MODAL
+    // =========================
+    openSplitModal(split);
+    // =========================
     // ✅ PREPARE SPLIT
     // =========================
-    let split =
-        prepareSplit(amount, budgets);
+    // let split =
+    //     prepareSplit(amount, budgets);
 
     // =========================
     // ❌ NOT ENOUGH BUDGET
@@ -4523,19 +6042,16 @@ function confirmSplit() {
     pendingSplit.forEach((s, index) => {
 
         addExpense({
-            amount: -Math.abs(s.amount),
-
+            amount: s.amount,
             budgetId: s.budget.budgetId,
-
+            allocationTrail: [{ budgetId: s.budget.budgetId, amount: s.amount }],
             splitId: splitId,
             splitIndex: index + 1,
             isSplit: true,
-
             category,
             purpose,
             paymentType,
             date,
-
             type: "expense"
         });
     });
@@ -4584,23 +6100,27 @@ function updateBudgetEfficiency() {
     // =========================
     // 💰 TODAY SPENT
     // =========================
-    let todaySpent = expenses
-        .filter(e => {
+    // compute today's spent using types and allocationTrail
+    let todaySpent = 0;
 
-            if (e.amount >= 0)
-                return false;
+    expenses.forEach(e => {
+        let d = new Date(e.date);
+        if (d < todayStart || d > todayEnd) return;
 
-            let d = new Date(e.date);
-
-            return d >= todayStart &&
-                d <= todayEnd;
-
-        })
-        .reduce(
-            (s, e) =>
-                s + Math.abs(e.amount),
-            0
-        );
+        if (e.type === "expense" || e.type === "loss") {
+            if (Array.isArray(e.allocationTrail) && e.allocationTrail.length) {
+                todaySpent += e.allocationTrail.reduce((s, a) => s + (Number(a.amount) || 0), 0);
+            } else {
+                todaySpent += Math.abs(Number(e.amount) || 0);
+            }
+        } else if (e.type === "recovery") {
+            if (Array.isArray(e.allocationTrail) && e.allocationTrail.length) {
+                todaySpent -= e.allocationTrail.reduce((s, a) => s + (Number(a.amount) || 0), 0);
+            } else {
+                todaySpent -= Math.abs(Number(e.amount) || 0);
+            }
+        }
+    });
 
     // =========================
     // 💎 TODAY EFFICIENCY
@@ -4647,21 +6167,19 @@ function updateBudgetEfficiency() {
         let spent = expenses
             .filter(e => {
 
-                if (e.amount >= 0)
-                    return false;
+                        if (e.type !== "expense" && e.type !== "loss") return 0;
 
-                let d =
-                    new Date(e.date);
+                        let d = new Date(e.date);
+                        if (d < dayStart || d > dayEnd) return 0;
 
-                return d >= dayStart &&
-                    d <= dayEnd;
+                        if (Array.isArray(e.allocationTrail) && e.allocationTrail.length) {
+                            return e.allocationTrail.reduce((s, a) => s + (Number(a.amount) || 0), 0);
+                        }
 
-            })
-            .reduce(
-                (s, e) =>
-                    s + Math.abs(e.amount),
-                0
-            );
+                        return Math.abs(Number(e.amount) || 0);
+                    },
+                        0
+                    );
 
         weekSaved +=
             Math.max(
@@ -4812,4 +6330,34 @@ function buildSmartExpenseDate(rawDate) {
     return selected.toISOString();
 }
 
+function getRemainingAmount(id) {
+    let expensesAll = getExpenses();
+
+    // 🔥 ORIGINAL ENTRY (lookup from full storage so parent rows remain findable)
+    let original = expensesAll.find(e => String(e.id) === String(id));
+    if (!original) return 0;
+
+    // original total value (use allocationTrail if present)
+    let originalTotal = 0;
+    if (Array.isArray(original.allocationTrail) && original.allocationTrail.length) {
+        originalTotal = original.allocationTrail.reduce((s, a) => s + (Number(a.amount) || 0), 0);
+    } else {
+        originalTotal = Math.abs(Number(original.amount) || 0);
+    }
+
+    // 🔥 TOTAL RECOVERED (exclude parent split containers from recovery sums)
+    let expenses = expensesAll.filter(e => !isParentSplitContainer(e));
+
+    let recovered = expenses
+        .filter(e => String(e.linkedTransactionId) === String(id) && e.type === "recovery")
+        .reduce((sum, e) => {
+            if (Array.isArray(e.allocationTrail) && e.allocationTrail.length) {
+                return sum + e.allocationTrail.reduce((ss, a) => ss + (Number(a.amount) || 0), 0);
+            }
+            return sum + Math.abs(Number(e.amount) || 0);
+        }, 0);
+
+    let remaining = originalTotal - recovered;
+    return Math.max(0, remaining);
+}
 // Budget Expense Module END script.js

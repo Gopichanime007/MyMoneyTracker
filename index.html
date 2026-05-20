@@ -1,4 +1,572 @@
+<!--
+====================================================================================================
+MONEY TRACKER APPLICATION
+MASTER FRONTEND ARCHITECTURE DOCUMENTATION
+====================================================================================================
 
+PROJECT TYPE
+----------------------------------------------------------------------------------------------------
+Hybrid Architecture Financial Tracking System
+
+This HTML architecture acts as:
+1. Web Application
+2. Android UI Blueprint
+3. Navigation Blueprint
+4. Business Workflow Blueprint
+5. XML Conversion Reference
+
+The purpose of this architecture is to ensure that:
+- HTML screens
+- JavaScript logic
+- Android Fragments
+- Android XML layouts
+- Android Navigation
+- Android Managers / Domain Layers
+
+all remain synchronized.
+
+====================================================================================================
+HIGH LEVEL APPLICATION FLOW
+====================================================================================================
+
+Application Structure:
+----------------------------------------------------------------------------------------------------
+
+App Shell
+│
+├── Header
+├── Navigation
+│
+├── Expense League
+│    ├── Dashboard
+│    ├── Add Expense
+│    ├── Expense History
+│    ├── Budget Management
+│    ├── Analytics
+│    ├── Budget Entries
+│    └── Budget Details
+│
+├── Settings League
+│    ├── Currency
+│    ├── Themes
+│    ├── Categories
+│    ├── Backup & Restore
+│    └── Reset
+│
+└── Modal Layer
+     ├── Date Period Modal
+     ├── Category Modal
+     ├── Backup Modal
+     ├── Import Modal
+     ├── Split Modal
+     └── Confirmation Modal
+
+====================================================================================================
+HTML ARCHITECTURE
+====================================================================================================
+
+ROOT CONTAINER
+----------------------------------------------------------------------------------------------------
+
+<div class="app">
+
+This acts as the entire application shell.
+
+Android Equivalent:
+----------------------------------------------------------------------------------------------------
+MainActivity
+or
+Activity + NavHostFragment container
+
+Responsibilities:
+----------------------------------------------------------------------------------------------------
+✔ Holds all screens
+✔ Controls navigation visibility
+✔ Global theme rendering
+✔ Application-level layout container
+
+====================================================================================================
+HEADER ARCHITECTURE
+====================================================================================================
+
+<header class="header">
+
+Purpose:
+----------------------------------------------------------------------------------------------------
+Displays application branding and top identity.
+
+Contains:
+----------------------------------------------------------------------------------------------------
+✔ Application Title
+✔ Global Toolbar Area
+
+Android Equivalent:
+----------------------------------------------------------------------------------------------------
+MaterialToolbar
+
+Responsibilities in Android:
+----------------------------------------------------------------------------------------------------
+✔ Dynamic screen title
+✔ Drawer toggle icon
+✔ Settings icon
+✔ Toolbar actions
+✔ Theme coloring
+
+====================================================================================================
+NAVIGATION ARCHITECTURE
+====================================================================================================
+
+<div class="nav">
+
+Purpose:
+----------------------------------------------------------------------------------------------------
+Controls screen switching inside the SPA architecture.
+
+Buttons:
+----------------------------------------------------------------------------------------------------
+🏠 Home
+➕ Add Expense
+📜 History
+💰 Budget
+📊 Analytics
+📦 Budget Entries
+⚙️ Settings
+
+Navigation Logic:
+----------------------------------------------------------------------------------------------------
+showScreen('home')
+showScreen('add')
+showScreen('history')
+
+This acts like a mini router.
+
+Android Equivalent:
+----------------------------------------------------------------------------------------------------
+Navigation Component
++
+DrawerLayout
++
+NavController
+
+IMPORTANT:
+----------------------------------------------------------------------------------------------------
+Android implementation SHOULD NOT use bottom navigation for scaling.
+
+Instead use:
+Drawer → League → Workflow Architecture
+
+Because the application already contains:
+- Expense workflows
+- Savings workflows
+- Budget workflows
+- Analytics workflows
+- Settings workflows
+
+which become too large for bottom navigation scaling.
+
+====================================================================================================
+SCREEN ARCHITECTURE
+====================================================================================================
+
+Every:
+----------------------------------------------------------------------------------------------------
+<section class="screen">
+
+represents:
+----------------------------------------------------------------------------------------------------
+ONE independent application screen.
+
+Android Equivalent:
+----------------------------------------------------------------------------------------------------
+ONE Fragment
+
+----------------------------------------------------------------------------------------------------
+HTML SECTION → ANDROID FRAGMENT MAPPING
+----------------------------------------------------------------------------------------------------
+
+#home
+→ DashboardFragment
+
+#add
+→ ExpenseFragment
+
+#history
+→ ExpenseHistoryFragment
+
+#budget
+→ BudgetFragment
+
+#graph
+→ AnalyticsFragment
+
+#budgets
+→ BudgetEntriesFragment
+
+#budgetDetails
+→ BudgetDetailsFragment
+
+#settings
+→ SettingsFragment
+
+====================================================================================================
+DASHBOARD ARCHITECTURE
+====================================================================================================
+
+<section id="home">
+
+Purpose:
+----------------------------------------------------------------------------------------------------
+Financial overview dashboard.
+
+Contains:
+----------------------------------------------------------------------------------------------------
+✔ Budget summary
+✔ Spent amount
+✔ Remaining balance
+✔ Today spending
+✔ Income
+✔ Net calculations
+✔ Progress tracking
+✔ Financial insights
+
+Business Logic Source:
+----------------------------------------------------------------------------------------------------
+script.js
+
+Android Architecture:
+----------------------------------------------------------------------------------------------------
+DashboardFragment
++
+DashboardManager
+
+IMPORTANT:
+----------------------------------------------------------------------------------------------------
+Dashboard screen MUST NEVER directly calculate values inside UI layer.
+
+Calculations belong inside:
+- Manager
+- Repository
+- Domain layer
+
+====================================================================================================
+ADD EXPENSE ARCHITECTURE
+====================================================================================================
+
+<section id="add">
+
+Purpose:
+----------------------------------------------------------------------------------------------------
+Expense & income creation workflow.
+
+Contains:
+----------------------------------------------------------------------------------------------------
+✔ Expense Type
+✔ Amount
+✔ Category
+✔ Purpose
+✔ Date
+✔ Budget Selection
+✔ Payment Method
+
+Primary Workflow:
+----------------------------------------------------------------------------------------------------
+saveExpense()
+
+Android Equivalent:
+----------------------------------------------------------------------------------------------------
+ExpenseFragment
+
+Business Logic:
+----------------------------------------------------------------------------------------------------
+ExpenseManager
+
+IMPORTANT:
+----------------------------------------------------------------------------------------------------
+Expense form validation should NEVER remain inside XML/UI layer.
+
+Validation belongs inside:
+- Manager
+- Validator
+- Domain layer
+
+====================================================================================================
+HISTORY ARCHITECTURE
+====================================================================================================
+
+<section id="history">
+
+Purpose:
+----------------------------------------------------------------------------------------------------
+Displays historical expense transactions.
+
+Contains:
+----------------------------------------------------------------------------------------------------
+✔ Filtering
+✔ Export
+✔ Share
+✔ History listing
+
+Filters:
+----------------------------------------------------------------------------------------------------
+- Today
+- Week
+- Month
+- Custom Period
+
+Android Equivalent:
+----------------------------------------------------------------------------------------------------
+ExpenseHistoryFragment
+
+UI Components:
+----------------------------------------------------------------------------------------------------
+RecyclerView
+NestedScrollView
+
+Business Logic:
+----------------------------------------------------------------------------------------------------
+HistoryManager
+
+====================================================================================================
+BUDGET ARCHITECTURE
+====================================================================================================
+
+<section id="budget">
+
+Purpose:
+----------------------------------------------------------------------------------------------------
+Budget planning and financial target management.
+
+Contains:
+----------------------------------------------------------------------------------------------------
+✔ Budget type
+✔ Budget amount
+✔ Budget period
+✔ Daily limit calculations
+✔ Smart savings insights
+
+Business Logic:
+----------------------------------------------------------------------------------------------------
+saveBudget()
+
+Android Equivalent:
+----------------------------------------------------------------------------------------------------
+BudgetFragment
+
+Domain Layer:
+----------------------------------------------------------------------------------------------------
+BudgetManager
+
+====================================================================================================
+ANALYTICS ARCHITECTURE
+====================================================================================================
+
+<section id="graph">
+
+Purpose:
+----------------------------------------------------------------------------------------------------
+Financial analytics visualization.
+
+Contains:
+----------------------------------------------------------------------------------------------------
+✔ Chart rendering
+✔ Category breakdown
+✔ Date filtering
+✔ Period filtering
+
+Libraries:
+----------------------------------------------------------------------------------------------------
+Chart.js
+
+Android Equivalent:
+----------------------------------------------------------------------------------------------------
+AnalyticsFragment
+
+Android Library Equivalent:
+----------------------------------------------------------------------------------------------------
+MPAndroidChart
+
+Business Layer:
+----------------------------------------------------------------------------------------------------
+AnalyticsManager
+
+====================================================================================================
+SETTINGS ARCHITECTURE
+====================================================================================================
+
+<section id="settings">
+
+Purpose:
+----------------------------------------------------------------------------------------------------
+Global application configuration management.
+
+Contains:
+----------------------------------------------------------------------------------------------------
+✔ Currency management
+✔ Theme management
+✔ HEX theme support
+✔ Category management
+✔ Backup & restore
+✔ App reset
+
+Android Equivalent:
+----------------------------------------------------------------------------------------------------
+SettingsFragment
+
+Managers:
+----------------------------------------------------------------------------------------------------
+SettingsManager
+ThemeManager
+
+IMPORTANT:
+----------------------------------------------------------------------------------------------------
+NO HARDCODED COLORS
+NO HARDCODED CURRENCY SYMBOLS
+
+Everything must use:
+----------------------------------------------------------------------------------------------------
+✔ Dynamic Theme Engine
+✔ CurrencyUtils
+✔ SharedPreferences
+✔ Runtime theme updates
+
+====================================================================================================
+MODAL ARCHITECTURE
+====================================================================================================
+
+All:
+----------------------------------------------------------------------------------------------------
+<div class="modal">
+
+represent:
+----------------------------------------------------------------------------------------------------
+temporary workflow overlays.
+
+Android Equivalent:
+----------------------------------------------------------------------------------------------------
+DialogFragment
+
+----------------------------------------------------------------------------------------------------
+HTML MODAL → ANDROID DIALOG MAPPING
+----------------------------------------------------------------------------------------------------
+
+periodModal
+→ PeriodDialogFragment
+
+categoryModal
+→ CategoryDialogFragment
+
+backupModal
+→ BackupDialogFragment
+
+importModal
+→ ImportDialogFragment
+
+splitModal
+→ SplitAllocationDialogFragment
+
+confirmModal
+→ ConfirmResetDialogFragment
+
+====================================================================================================
+SCRIPT ARCHITECTURE
+====================================================================================================
+
+script.js acts as:
+----------------------------------------------------------------------------------------------------
+Application Workflow Controller
+
+storage.js acts as:
+----------------------------------------------------------------------------------------------------
+Persistence Layer
+
+Responsibilities:
+----------------------------------------------------------------------------------------------------
+✔ Screen navigation
+✔ Financial calculations
+✔ Data persistence
+✔ Filtering
+✔ Analytics
+✔ Backup/export
+✔ Theme handling
+✔ Currency handling
+
+Android Equivalent:
+----------------------------------------------------------------------------------------------------
+Java Managers + Repositories + SharedPreferences
+
+====================================================================================================
+ANDROID MIGRATION STRATEGY
+====================================================================================================
+
+When converting HTML → Android:
+
+DO NOT directly convert:
+----------------------------------------------------------------------------------------------------
+HTML Sections → XML Screens only
+
+Instead convert:
+----------------------------------------------------------------------------------------------------
+Workflow → Fragment + Manager + Repository
+
+Correct Android Architecture:
+----------------------------------------------------------------------------------------------------
+
+Feature
+│
+├── data
+├── domain
+├── models
+├── adapters
+└── ui
+
+====================================================================================================
+IMPORTANT ENGINEERING RULES
+====================================================================================================
+
+1.
+Every HTML section becomes:
+ONE Fragment
+
+2.
+Every JavaScript workflow becomes:
+ONE Manager
+
+3.
+Every modal becomes:
+ONE DialogFragment
+
+4.
+Navigation should use:
+NavController + DrawerLayout
+
+5.
+Avoid:
+Business logic inside Fragment/UI
+
+6.
+Avoid:
+Hardcoded colors and currency symbols
+
+7.
+Use:
+Theme-aware XML colors
+
+8.
+Use:
+RecyclerView instead of repeated HTML blocks
+
+9.
+Use:
+NestedScrollView for vertical screen scalability
+
+10.
+Keep modules isolated:
+Expense must not directly manipulate Savings logic.
+
+====================================================================================================
+END OF MASTER ARCHITECTURE DOCUMENT
+====================================================================================================
+-->
 <!-- Budget Expense Module Start index.html-->
 <!DOCTYPE html>
 <html lang="en">
@@ -107,6 +675,13 @@
 
         <select id="entryType">
           <option value="expense">Expense</option>
+
+          <option value="lend">Lend</option>
+
+          <option value="recovery">Recovery</option>
+
+          <option value="transfer">Transfer</option>
+
           <option value="income">Income</option>
         </select>
 
@@ -122,7 +697,17 @@
           <option value="Google Pay">Google Pay</option>
           <option value="Bank Transfer">Bank Transfer</option>
         </select>
+        <div id="linkedTransactionWrapper" style="display:none; margin-top:10px;">
 
+          <select id="linkedTransaction">
+
+            <option value="">
+              Select linked transaction
+            </option>
+
+          </select>
+
+        </div>
         <button type="button" class="primary" onclick="saveExpense()">Save</button>
       </div>
     </section>
@@ -411,6 +996,7 @@
   <!-- SCRIPT -->
   <script src="assets/scripts/storage.js"></script>
   <script src="assets/scripts/script.js"></script>
+  <script src="tests/financial.test.js"></script>
   <script>
     document.addEventListener("DOMContentLoaded", () => {
       showScreen('home');
@@ -421,4 +1007,4 @@
 
 </html>
 
-<!-- Budget Expense Module END index.htm--> 
+<!-- Budget Expense Module END index.htm-->
