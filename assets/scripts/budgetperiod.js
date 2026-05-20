@@ -773,6 +773,7 @@ function saveBudget() {
   let end = document.getElementById("bpEndDate").value;
   let status = document.getElementById("bpStatus").value;
   let extraDays = parseInt(document.getElementById("bpExtraDays").value || 0);
+  //let duration = parseInt(document.getElementById("bpDuration").value || 30);
 
   // 🔥 FIX HERE
   extraDays = Math.max(0, extraDays);
@@ -794,6 +795,7 @@ function saveBudget() {
     start: start,
     end: end || null,   // 🔥 always defined (stable)
     status: status,
+    //duration: duration,
     extraDays: extraDays
   });
 
@@ -834,21 +836,22 @@ function openDetails(id) {
     <p><strong>Budget:</strong> ${formatCurrency(budgetAmount)}</p>
     <p><strong>Spent:</strong> ${formatCurrency(spent)}</p>
     <p><strong>Status:</strong> ${d.status}</p>
-    <p>
+//     <p>
+//   <strong>Total Duration:</strong>
+//   ${(d.duration || 0) + (d.extraDays || 0)}
+//   Days
+// </p>
+<p>
   <strong>Total Duration:</strong>
-  ${d.end
-      ? Math.ceil(
-        (
-          new Date(d.end) -
-          new Date(d.start)
-        ) / (1000 * 60 * 60 * 24)
-      ) + 1
-      : Math.ceil(
-        (
-          new Date() -
-          new Date(d.start)
-        ) / (1000 * 60 * 60 * 24)
-      ) + 1
+  ${Math.ceil(
+    (
+      new Date(
+        d.end ||
+        new Date()
+      ) -
+      new Date(d.start)
+    ) / (1000 * 60 * 60 * 24)
+  ) + 1 + (d.extraDays || 0)
     }
   Days
 </p>
