@@ -834,6 +834,24 @@ function openDetails(id) {
     <p><strong>Budget:</strong> ${formatCurrency(budgetAmount)}</p>
     <p><strong>Spent:</strong> ${formatCurrency(spent)}</p>
     <p><strong>Status:</strong> ${d.status}</p>
+    <p>
+  <strong>Total Duration:</strong>
+  ${d.end
+      ? Math.ceil(
+        (
+          new Date(d.end) -
+          new Date(d.start)
+        ) / (1000 * 60 * 60 * 24)
+      ) + 1
+      : Math.ceil(
+        (
+          new Date() -
+          new Date(d.start)
+        ) / (1000 * 60 * 60 * 24)
+      ) + 1
+    }
+  Days
+</p>
     <p><strong>Extra Days:</strong> ${d.extraDays || 0}</p>
   `;
 
