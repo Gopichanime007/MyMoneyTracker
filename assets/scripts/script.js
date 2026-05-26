@@ -340,8 +340,8 @@ function addExpense(obj) {
                 : ((obj.budgetId && (type === "expense" || type === "loss"))
                     ? [{ budgetId: obj.budgetId, amount: Math.abs(baseAmount) }]
                     : [])
-                    ,
-                    attachmentId: obj.attachmentId || null
+            ,
+            attachmentId: obj.attachmentId || null
         };
 
         expenses.push(newEntry);
@@ -479,8 +479,8 @@ function loadHistory(list = getExpenses()) {
             // left: optional thumbnail + text
             div.innerHTML = `
                 <div style="display:flex;gap:8px;align-items:center;">
-                  <div class="expense-thumb" data-attachment-id="${e.attachmentId||''}">
-                    ${e.attachmentId?'<img class="remo-attachment-thumb" src="" alt="attachment" />':''}
+                  <div class="expense-thumb" data-attachment-id="${e.attachmentId || ''}">
+                    ${e.attachmentId ? '<img class="remo-attachment-thumb" src="" alt="attachment" />' : ''}
                   </div>
                   <div>
                     <strong>${title}</strong><br>
@@ -504,25 +504,25 @@ function loadHistory(list = getExpenses()) {
 
             // after inserting, if attachment present, populate thumbnail
             if (e.attachmentId) {
-                try{
+                try {
                     const thumbEl = div.querySelector('.remo-attachment-thumb');
-                    if(thumbEl){
+                    if (thumbEl) {
                         const loader = window.reMoAttachments && window.reMoAttachments.getThumbnailUrl ? window.reMoAttachments.getThumbnailUrl : (window.reMoAttachmentsIndexed && window.reMoAttachmentsIndexed.getThumbnailUrl);
-                        if(loader){
-                            loader(e.attachmentId).then(src=>{ if(src) thumbEl.src = src; }).catch(()=>{});
+                        if (loader) {
+                            loader(e.attachmentId).then(src => { if (src) thumbEl.src = src; }).catch(() => { });
                         } else {
                             // fallback to preview via localStorage API
                             const prev = window.reMoAttachments && window.reMoAttachments.getPreview ? window.reMoAttachments.getPreview(e.attachmentId) : null;
-                            if(prev) thumbEl.src = prev;
+                            if (prev) thumbEl.src = prev;
                         }
                         // click to open full viewer
-                        thumbEl.addEventListener('click', async (ev)=>{
+                        thumbEl.addEventListener('click', async (ev) => {
                             ev.stopPropagation();
                             const loaderFull = window.reMoAttachments && window.reMoAttachments.getImageUrl ? window.reMoAttachments.getImageUrl : (window.reMoAttachmentsIndexed && window.reMoAttachmentsIndexed.getImageUrl);
-                            if(loaderFull){ const src = await loaderFull(e.attachmentId); if(src) openAttachmentViewer(src); }
+                            if (loaderFull) { const src = await loaderFull(e.attachmentId); if (src) openAttachmentViewer(src); }
                         });
                     }
-                }catch(err){console.warn('thumb render err',err)}
+                } catch (err) { console.warn('thumb render err', err) }
             }
 
             container.appendChild(div);
@@ -723,7 +723,7 @@ window.addEventListener("load", function () {
     } catch (e) {
     }
 });
-function showScreen(id) {
+window.showScreen = function showScreen(id) {
     const screens = document.querySelectorAll(".screen");
     const buttons = document.querySelectorAll(".nav button");
 
@@ -1269,11 +1269,11 @@ function downloadPDF() {
     // 💰 TOTALS
     // =========================
 
-    let totalBudget = 0;
+    //let totalBudget = 0;
 
-    let totalSpent = 0;
+    //let totalSpent = 0;
 
-    let totalRemaining = 0;
+    //let totalRemaining = 0;
 
 
     // =========================
@@ -1609,7 +1609,7 @@ function downloadPDF() {
     // =========================
     doc.save("money-tracker-report.pdf");
 }
-=== COMMENTED OLD DOWNLOAD END === */
+//=== COMMENTED OLD DOWNLOAD END === */
 
 // New PDF wrapper (calls modular PDF generator when available)
 function downloadPDF() {
@@ -1676,7 +1676,7 @@ function hexToRgb(hex) {
     `;
 
     const style = document.createElement('style');
-    style.setAttribute('data-remo-ai','1');
+    style.setAttribute('data-remo-ai', '1');
     style.appendChild(document.createTextNode(css));
     document.head.appendChild(style);
 
@@ -1684,7 +1684,7 @@ function hexToRgb(hex) {
     function createBubble() {
         const bubble = document.createElement('button');
         bubble.className = 'remo-ai-bubble';
-        bubble.setAttribute('aria-label','Open ReMo AI');
+        bubble.setAttribute('aria-label', 'Open ReMo AI');
         bubble.innerHTML = `
             <svg class="icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                 <defs>
@@ -1744,8 +1744,8 @@ function hexToRgb(hex) {
             const cat = e.category || 'Others';
             sums[cat] = (sums[cat] || 0) + Math.abs(Number(e.amount || 0));
         });
-        const entries = Object.entries(sums).sort((a,b)=>b[1]-a[1]);
-        return entries[0] ? {category:entries[0][0], amount:entries[0][1]} : null;
+        const entries = Object.entries(sums).sort((a, b) => b[1] - a[1]);
+        return entries[0] ? { category: entries[0][0], amount: entries[0][1] } : null;
     }
 
     function sumRange(expenses, periodStart, periodEnd) {
@@ -1754,94 +1754,96 @@ function hexToRgb(hex) {
             if (periodStart && d < periodStart) return false;
             if (periodEnd && d > periodEnd) return false;
             return true;
-        }).reduce((s,e)=>s+Number(e.amount||0),0);
+        }).reduce((s, e) => s + Number(e.amount || 0), 0);
     }
 
-    function formatCurrencyShort(v){
-        try{ return formatCurrencyPDF ? formatCurrencyPDF(v) : new Intl.NumberFormat('en-IN',{style:'currency',currency:'INR'}).format(v);}catch(e){return v}
+    function formatCurrencyShort(v) {
+        try { return formatCurrencyPDF ? formatCurrencyPDF(v) : new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR' }).format(v); } catch (e) { return v }
     }
 
-    function renderMessage(text, append=true) {
+    function renderMessage(text, append = true) {
         const messages = document.querySelector('.remo-messages');
-        if(!messages) return;
+        if (!messages) return;
         const el = document.createElement('div');
-        el.className='remo-msg';
+        el.className = 'remo-msg';
         el.textContent = text;
-        if(append) messages.appendChild(el);
+        if (append) messages.appendChild(el);
         messages.scrollTop = messages.scrollHeight;
     }
 
     function generateInsightIntent(intent) {
         const expenses = (window.currentFilteredExpenses && window.currentFilteredExpenses.length) ? window.currentFilteredExpenses : (typeof getExpenses === 'function' ? getExpenses() : []);
         const now = new Date();
-        function sumRangeFor(arr, start, end){ return arr.reduce((s,e)=>{
-            const d = new Date(e.date);
-            if(d>=start && d<=end) return s + Number(e.amount||0); return s;
-        },0); }
-        function topCategories(arr, start, end, limit=3){
-            const m = {};
-            arr.forEach(e=>{ const d=new Date(e.date); if(d>=start && d<=end){ const k = e.category||'Uncategorized'; m[k]=(m[k]||0)+Math.abs(Number(e.amount||0)); }});
-            return Object.keys(m).map(k=>({category:k,amount:m[k]})).sort((a,b)=>b.amount-a.amount).slice(0,limit);
+        function sumRangeFor(arr, start, end) {
+            return arr.reduce((s, e) => {
+                const d = new Date(e.date);
+                if (d >= start && d <= end) return s + Number(e.amount || 0); return s;
+            }, 0);
         }
-        if(intent === 'top-spend-week'){
-            const start = new Date(now); start.setDate(now.getDate()-7);
+        function topCategories(arr, start, end, limit = 3) {
+            const m = {};
+            arr.forEach(e => { const d = new Date(e.date); if (d >= start && d <= end) { const k = e.category || 'Uncategorized'; m[k] = (m[k] || 0) + Math.abs(Number(e.amount || 0)); } });
+            return Object.keys(m).map(k => ({ category: k, amount: m[k] })).sort((a, b) => b.amount - a.amount).slice(0, limit);
+        }
+        if (intent === 'top-spend-week') {
+            const start = new Date(now); start.setDate(now.getDate() - 7);
             const top = topCategory(expenses, start, now);
-            if(top) return `Top spending in last 7 days: ${top.category} — ${formatCurrencyShort(top.amount)}`;
+            if (top) return `Top spending in last 7 days: ${top.category} — ${formatCurrencyShort(top.amount)}`;
             return 'No expenses found in the last 7 days.';
         }
-        if(intent === 'spending-trends' || intent === 'show-spending-trends'){
-            const day7 = new Date(now); day7.setDate(now.getDate()-7);
-            const day30 = new Date(now); day30.setDate(now.getDate()-30);
-            const spend7 = Math.abs(sumRangeFor(expenses.filter(e=>Number(e.amount)<0), day7, now));
-            const spend30 = Math.abs(sumRangeFor(expenses.filter(e=>Number(e.amount)<0), day30, now));
-            const avg7 = (spend7/7)||0;
-            const avg30 = (spend30/30)||0;
+        if (intent === 'spending-trends' || intent === 'show-spending-trends') {
+            const day7 = new Date(now); day7.setDate(now.getDate() - 7);
+            const day30 = new Date(now); day30.setDate(now.getDate() - 30);
+            const spend7 = Math.abs(sumRangeFor(expenses.filter(e => Number(e.amount) < 0), day7, now));
+            const spend30 = Math.abs(sumRangeFor(expenses.filter(e => Number(e.amount) < 0), day30, now));
+            const avg7 = (spend7 / 7) || 0;
+            const avg30 = (spend30 / 30) || 0;
             const trend = avg7 > avg30 ? 'increasing' : (avg7 < avg30 ? 'decreasing' : 'stable');
             return `7-day avg ${formatCurrencyShort(avg7)}; 30-day avg ${formatCurrencyShort(avg30)} — trend ${trend}.`;
         }
-        if(intent === 'category-analysis'){
-            const start = new Date(now); start.setDate(now.getDate()-30);
+        if (intent === 'category-analysis') {
+            const start = new Date(now); start.setDate(now.getDate() - 30);
             const top = topCategories(expenses, start, now, 5);
-            if(!top.length) return 'No category data for last 30 days.';
-            return 'Top categories (30d): ' + top.map(t=>`${t.category} ${formatCurrencyShort(t.amount)}`).join(', ');
+            if (!top.length) return 'No category data for last 30 days.';
+            return 'Top categories (30d): ' + top.map(t => `${t.category} ${formatCurrencyShort(t.amount)}`).join(', ');
         }
-        if(intent === 'savings-progress'){
-            const savings = (typeof getSavings==='function')?getSavings():[];
-            const total = savings.reduce((s,x)=>s+Number(x.amount||0),0);
+        if (intent === 'savings-progress') {
+            const savings = (typeof getSavings === 'function') ? getSavings() : [];
+            const total = savings.reduce((s, x) => s + Number(x.amount || 0), 0);
             return `You have ${formatCurrencyShort(total)} in savings (${savings.length} entries).`;
         }
-        if(intent === 'end-of-day-summary'){
-            const start = new Date(now); start.setHours(0,0,0,0);
-            const end = new Date(now); end.setHours(23,59,59,999);
-            const incomes = expenses.filter(e=>Number(e.amount)>0 && new Date(e.date)>=start && new Date(e.date)<=end);
-            const outs = expenses.filter(e=>Number(e.amount)<0 && new Date(e.date)>=start && new Date(e.date)<=end);
-            const inAmt = incomes.reduce((s,e)=>s+Number(e.amount||0),0);
-            const outAmt = outs.reduce((s,e)=>s+Number(e.amount||0),0);
+        if (intent === 'end-of-day-summary') {
+            const start = new Date(now); start.setHours(0, 0, 0, 0);
+            const end = new Date(now); end.setHours(23, 59, 59, 999);
+            const incomes = expenses.filter(e => Number(e.amount) > 0 && new Date(e.date) >= start && new Date(e.date) <= end);
+            const outs = expenses.filter(e => Number(e.amount) < 0 && new Date(e.date) >= start && new Date(e.date) <= end);
+            const inAmt = incomes.reduce((s, e) => s + Number(e.amount || 0), 0);
+            const outAmt = outs.reduce((s, e) => s + Number(e.amount || 0), 0);
             return `Today: ${incomes.length} income(s) ${formatCurrencyShort(inAmt)}; ${outs.length} expense(s) ${formatCurrencyShort(Math.abs(outAmt))}.`;
         }
-        if(intent === 'savings-month'){
+        if (intent === 'savings-month') {
             const start = new Date(now.getFullYear(), now.getMonth(), 1);
-            const income = sumRange(expenses.filter(e=>Number(e.amount)>0), start, now);
-            const expense = Math.abs(sumRange(expenses.filter(e=>Number(e.amount)<0), start, now));
+            const income = sumRange(expenses.filter(e => Number(e.amount) > 0), start, now);
+            const expense = Math.abs(sumRange(expenses.filter(e => Number(e.amount) < 0), start, now));
             const saved = income - expense;
             return `This month: Income ${formatCurrencyShort(income)}, Expense ${formatCurrencyShort(expense)}, Savings ${formatCurrencyShort(saved)}`;
         }
-        if(intent === 'budget-alerts'){
-            const budgets = (typeof getBudgets==='function')?getBudgets():[];
+        if (intent === 'budget-alerts') {
+            const budgets = (typeof getBudgets === 'function') ? getBudgets() : [];
             const alerts = [];
-            budgets.forEach(b=>{
-                const allocated = Math.abs(b.totalAllocated||0);
-                const spent = expenses.filter(e=> (e.type==='expense'||e.type==='loss') && e.budgetId===b.budgetId).reduce((s,e)=>s+Math.abs(Number(e.amount||0)),0);
-                if(allocated>0 && spent/allocated >= 0.85) alerts.push(`${b.name||b.note||'Budget'} is ${Math.round((spent/allocated)*100)}% used`);
+            budgets.forEach(b => {
+                const allocated = Math.abs(b.totalAllocated || 0);
+                const spent = expenses.filter(e => (e.type === 'expense' || e.type === 'loss') && e.budgetId === b.budgetId).reduce((s, e) => s + Math.abs(Number(e.amount || 0)), 0);
+                if (allocated > 0 && spent / allocated >= 0.85) alerts.push(`${b.name || b.note || 'Budget'} is ${Math.round((spent / allocated) * 100)}% used`);
             });
-            return alerts.length?alerts.join('; '):'No budget alerts.';
+            return alerts.length ? alerts.join('; ') : 'No budget alerts.';
         }
-        if(intent === 'compare-last-month'){
+        if (intent === 'compare-last-month') {
             const thisMonthStart = new Date(now.getFullYear(), now.getMonth(), 1);
-            const lastMonthStart = new Date(now.getFullYear(), now.getMonth()-1, 1);
+            const lastMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
             const lastMonthEnd = new Date(now.getFullYear(), now.getMonth(), 0);
-            const thisSpend = Math.abs(sumRange(expenses.filter(e=>Number(e.amount)<0), thisMonthStart, now));
-            const lastSpend = Math.abs(sumRange(expenses.filter(e=>Number(e.amount)<0), lastMonthStart, lastMonthEnd));
+            const thisSpend = Math.abs(sumRange(expenses.filter(e => Number(e.amount) < 0), thisMonthStart, now));
+            const lastSpend = Math.abs(sumRange(expenses.filter(e => Number(e.amount) < 0), lastMonthStart, lastMonthEnd));
             const diff = thisSpend - lastSpend;
             return `Expense this month ${formatCurrencyShort(thisSpend)}. Last month ${formatCurrencyShort(lastSpend)}. Change ${formatCurrencyShort(diff)}.`;
         }
@@ -1849,117 +1851,117 @@ function hexToRgb(hex) {
         return "I couldn't compute that automatically. Try a quick suggestion.";
     }
 
-    function handlePreset(promptKey){
+    function handlePreset(promptKey) {
         const map = {
-            'Where did I spend most this week?':'top-spend-week',
-            'How much did I save this month?':'savings-month',
-            'Which category exceeds budget?':'budget-alerts',
-            'What changed compared to last month?':'compare-last-month',
-            'Show spending trends':'spending-trends'
+            'Where did I spend most this week?': 'top-spend-week',
+            'How much did I save this month?': 'savings-month',
+            'Which category exceeds budget?': 'budget-alerts',
+            'What changed compared to last month?': 'compare-last-month',
+            'Show spending trends': 'spending-trends'
         };
-        const intent = map[promptKey]||promptKey;
+        const intent = map[promptKey] || promptKey;
         renderMessage(promptKey);
         const reply = generateInsightIntent(intent);
-        setTimeout(()=>renderMessage(reply),200);
+        setTimeout(() => renderMessage(reply), 200);
     }
 
-    function openPanel(panel){
+    function openPanel(panel) {
         panel.classList.add('open');
         // populate chips
         const chips = panel.querySelector('[data-chips]');
-        if(chips && chips.children.length===0){
-            ['Where did I spend most this week?','How much did I save this month?','Which category exceeds budget?','What changed compared to last month?','Show spending trends'].forEach(t=>{
+        if (chips && chips.children.length === 0) {
+            ['Where did I spend most this week?', 'How much did I save this month?', 'Which category exceeds budget?', 'What changed compared to last month?', 'Show spending trends'].forEach(t => {
                 const b = document.createElement('button');
-                b.className='remo-chip';
+                b.className = 'remo-chip';
                 b.textContent = t;
-                b.onclick = ()=>handlePreset(t);
+                b.onclick = () => handlePreset(t);
                 chips.appendChild(b);
             });
         }
-        panel.querySelector('[data-messages]').innerHTML='';
+        panel.querySelector('[data-messages]').innerHTML = '';
         renderMessage('Hi — I am ReMo. I can show insights, reminders and quick actions.');
     }
 
     function init() {
-        try{
+        try {
             // load ReMo styles (lightweight)
-            if(!document.querySelector('link[data-remo-css]')){
+            if (!document.querySelector('link[data-remo-css]')) {
                 const l = document.createElement('link');
                 l.rel = 'stylesheet';
                 l.href = 'assets/styles/remo.css';
-                l.setAttribute('data-remo-css','1');
+                l.setAttribute('data-remo-css', '1');
                 document.head.appendChild(l);
             }
 
             // lazy-load attachments module (IndexedDB-backed) for offline-first attachments
-            if(!window.reMoAttachmentsIndexed && !document.querySelector('script[data-remo-attach]')){
+            if (!window.reMoAttachmentsIndexed && !document.querySelector('script[data-remo-attach]')) {
                 const s = document.createElement('script');
                 s.src = 'assets/scripts/remo/attachments.js';
-                s.setAttribute('data-remo-attach','1');
+                s.setAttribute('data-remo-attach', '1');
                 document.body.appendChild(s);
             }
 
             // schedule light daily summary notification (runs while app is open)
-            try{
+            try {
                 scheduleDailySummary(20); // 20:00 local
-            }catch(e){/* ignore */}
+            } catch (e) {/* ignore */ }
 
             const bubble = createBubble();
             const panel = createPanel();
 
-            bubble.addEventListener('click',()=>{
-                if(panel.classList.contains('open')){ panel.classList.remove('open'); }
-                else{ openPanel(panel); }
+            bubble.addEventListener('click', () => {
+                if (panel.classList.contains('open')) { panel.classList.remove('open'); }
+                else { openPanel(panel); }
             });
 
             // Send handler
-            panel.querySelector('[data-send]').addEventListener('click',()=>{
+            panel.querySelector('[data-send]').addEventListener('click', () => {
                 const input = panel.querySelector('[data-userinput]');
-                const text = (input.value||'').trim();
-                if(!text) return;
+                const text = (input.value || '').trim();
+                if (!text) return;
                 renderMessage(text);
                 // naive intent detection
                 const l = text.toLowerCase();
-                if(l.includes('food')||l.includes('where')||l.includes('most')) handlePreset('Where did I spend most this week?');
-                else if(l.includes('save')||l.includes('saving')||l.includes('how much did i save')) handlePreset('How much did I save this month?');
-                else if(l.includes('budget')||l.includes('exceed')) handlePreset('Which category exceeds budget?');
-                else if(l.includes('compare')||l.includes('changed')||l.includes('last month')) handlePreset('What changed compared to last month?');
+                if (l.includes('food') || l.includes('where') || l.includes('most')) handlePreset('Where did I spend most this week?');
+                else if (l.includes('save') || l.includes('saving') || l.includes('how much did i save')) handlePreset('How much did I save this month?');
+                else if (l.includes('budget') || l.includes('exceed')) handlePreset('Which category exceeds budget?');
+                else if (l.includes('compare') || l.includes('changed') || l.includes('last month')) handlePreset('What changed compared to last month?');
                 else {
                     // fallback: try to compute simple numeric answers
                     const reply = generateInsightIntent(text);
-                    setTimeout(()=>renderMessage(reply),200);
+                    setTimeout(() => renderMessage(reply), 200);
                 }
-                input.value='';
+                input.value = '';
             });
 
             // keyboard enter
-            panel.querySelector('[data-userinput]').addEventListener('keydown',(e)=>{
-                if(e.key==='Enter') panel.querySelector('[data-send]').click();
+            panel.querySelector('[data-userinput]').addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') panel.querySelector('[data-send]').click();
             });
 
             // gentle entrance animation
-            setTimeout(()=>bubble.style.transform='translateY(0)',100);
-        }catch(e){console.warn('ReMo init failed',e)}
+            setTimeout(() => bubble.style.transform = 'translateY(0)', 100);
+        } catch (e) { console.warn('ReMo init failed', e) }
     }
 
     // Initialize after load
-    if(document.readyState==='complete') init(); else window.addEventListener('load',init);
+    if (document.readyState === 'complete') init(); else window.addEventListener('load', init);
 
     // Attachment helper (switches to IndexedDB-backed implementation when available)
     window.reMoAttachments = window.reMoAttachmentsIndexed || {
-        storePreview: async function(transactionId, file){
-            if(!file) return null;
-            return new Promise((res,rej)=>{
+        storePreview: async function (transactionId, file) {
+            if (!file) return null;
+            return new Promise((res, rej) => {
                 const fr = new FileReader();
-                fr.onload = ()=>{
-                    try{ const key = `remo:attach:${transactionId}`; localStorage.setItem(key, fr.result); res(fr.result); }catch(err){rej(err)}
+                fr.onload = () => {
+                    try { const key = `remo:attach:${transactionId}`; localStorage.setItem(key, fr.result); res(fr.result); } catch (err) { rej(err) }
                 };
                 fr.onerror = rej;
                 fr.readAsDataURL(file);
             });
         },
-        getPreview: function(transactionId){ return localStorage.getItem(`remo:attach:${transactionId}`); },
-        remove: function(transactionId){ localStorage.removeItem(`remo:attach:${transactionId}`); }
+        getPreview: function (transactionId) { return localStorage.getItem(`remo:attach:${transactionId}`); },
+        remove: function (transactionId) { localStorage.removeItem(`remo:attach:${transactionId}`); }
     };
 
 })();
@@ -2014,12 +2016,12 @@ function setupAttachmentInputs() {
             if (!file) return;
             // show temporary preview using object URL
             // revoke previous preview url if present
-            if(expPreview && expPreview.dataset._previewUrl){ try{ URL.revokeObjectURL(expPreview.dataset._previewUrl); }catch(e){} }
+            if (expPreview && expPreview.dataset._previewUrl) { try { URL.revokeObjectURL(expPreview.dataset._previewUrl); } catch (e) { } }
             const url = URL.createObjectURL(file);
             if (expPreview) { expPreview.src = url; expPreview.dataset._previewUrl = url; expWrapper.style.display = 'block'; expRemove.style.display = 'inline'; }
-            expPreview.onclick = ()=>openAttachmentViewer(url);
+            expPreview.onclick = () => openAttachmentViewer(url);
         });
-        if (expRemove) expRemove.addEventListener('click', ()=>{ if(expPreview && expPreview.dataset._previewUrl){ try{ URL.revokeObjectURL(expPreview.dataset._previewUrl);}catch(e){} expPreview.dataset._previewUrl=''; } expInput.value = ''; if(expWrapper) expWrapper.style.display='none'; expRemove.style.display='none'; });
+        if (expRemove) expRemove.addEventListener('click', () => { if (expPreview && expPreview.dataset._previewUrl) { try { URL.revokeObjectURL(expPreview.dataset._previewUrl); } catch (e) { } expPreview.dataset._previewUrl = ''; } expInput.value = ''; if (expWrapper) expWrapper.style.display = 'none'; expRemove.style.display = 'none'; });
     }
 
     const sInput = document.getElementById('sAttachment');
@@ -2030,12 +2032,12 @@ function setupAttachmentInputs() {
         sInput.addEventListener('change', function () {
             const file = this.files && this.files[0];
             if (!file) return;
-            if(sPreview && sPreview.dataset._previewUrl){ try{ URL.revokeObjectURL(sPreview.dataset._previewUrl); }catch(e){} }
+            if (sPreview && sPreview.dataset._previewUrl) { try { URL.revokeObjectURL(sPreview.dataset._previewUrl); } catch (e) { } }
             const url = URL.createObjectURL(file);
             if (sPreview) { sPreview.src = url; sPreview.dataset._previewUrl = url; sWrapper.style.display = 'block'; sRemove.style.display = 'inline'; }
-            sPreview.onclick = ()=>openAttachmentViewer(url);
+            sPreview.onclick = () => openAttachmentViewer(url);
         });
-        if (sRemove) sRemove.addEventListener('click', ()=>{ if(sPreview && sPreview.dataset._previewUrl){ try{ URL.revokeObjectURL(sPreview.dataset._previewUrl);}catch(e){} sPreview.dataset._previewUrl=''; } sInput.value=''; if(sWrapper) sWrapper.style.display='none'; sRemove.style.display='none'; });
+        if (sRemove) sRemove.addEventListener('click', () => { if (sPreview && sPreview.dataset._previewUrl) { try { URL.revokeObjectURL(sPreview.dataset._previewUrl); } catch (e) { } sPreview.dataset._previewUrl = ''; } sInput.value = ''; if (sWrapper) sWrapper.style.display = 'none'; sRemove.style.display = 'none'; });
     }
 }
 
@@ -2043,48 +2045,48 @@ function setupAttachmentInputs() {
 if (document.readyState === 'complete') setupAttachmentInputs(); else window.addEventListener('load', setupAttachmentInputs);
 
 // Helper: store attachment from a file input element id and return attachmentId (or null)
-async function storeAttachmentFromInput(inputId){
+async function storeAttachmentFromInput(inputId) {
     const fileInput = document.getElementById(inputId);
     const file = fileInput && fileInput.files && fileInput.files[0] ? fileInput.files[0] : null;
-    if(!file) return null;
+    if (!file) return null;
     const store = window.reMoAttachments && window.reMoAttachments.storeImage ? window.reMoAttachments.storeImage : (window.reMoAttachmentsIndexed && window.reMoAttachmentsIndexed.storeImage);
-    if(!store) return null;
-    try{
+    if (!store) return null;
+    try {
         const res = await store(null, file);
         return res && res.id ? res.id : null;
-    }catch(err){
+    } catch (err) {
         console.warn('Attachment store failed', err);
         return null;
     }
 }
 
-function scheduleDailySummary(hour=20){
-    if(!('Notification' in window)) return;
-    function computeSummary(){
-        const expenses = (typeof getExpenses==='function')?getExpenses():[];
+function scheduleDailySummary(hour = 20) {
+    if (!('Notification' in window)) return;
+    function computeSummary() {
+        const expenses = (typeof getExpenses === 'function') ? getExpenses() : [];
         const now = new Date();
-        const start = new Date(now); start.setHours(0,0,0,0);
-        const end = new Date(now); end.setHours(23,59,59,999);
-        const ins = expenses.filter(e=>Number(e.amount)>0 && new Date(e.date)>=start && new Date(e.date)<=end);
-        const outs = expenses.filter(e=>Number(e.amount)<0 && new Date(e.date)>=start && new Date(e.date)<=end);
-        const inAmt = ins.reduce((s,e)=>s+Number(e.amount||0),0);
-        const outAmt = outs.reduce((s,e)=>s+Number(e.amount||0),0);
+        const start = new Date(now); start.setHours(0, 0, 0, 0);
+        const end = new Date(now); end.setHours(23, 59, 59, 999);
+        const ins = expenses.filter(e => Number(e.amount) > 0 && new Date(e.date) >= start && new Date(e.date) <= end);
+        const outs = expenses.filter(e => Number(e.amount) < 0 && new Date(e.date) >= start && new Date(e.date) <= end);
+        const inAmt = ins.reduce((s, e) => s + Number(e.amount || 0), 0);
+        const outAmt = outs.reduce((s, e) => s + Number(e.amount || 0), 0);
         return `Today: ${ins.length} incomes ${formatCurrencyShort(inAmt)} · ${outs.length} expenses ${formatCurrencyShort(Math.abs(outAmt))}`;
     }
-    function scheduleNext(){
+    function scheduleNext() {
         const now = new Date();
         const next = new Date(now);
-        next.setHours(hour,0,0,0);
-        if(next<=now) next.setDate(next.getDate()+1);
+        next.setHours(hour, 0, 0, 0);
+        if (next <= now) next.setDate(next.getDate() + 1);
         const ms = next - now;
-        setTimeout(async ()=>{
-            if(Notification.permission!=='granted'){
-                try{ await Notification.requestPermission(); }catch(e){}
+        setTimeout(async () => {
+            if (Notification.permission !== 'granted') {
+                try { await Notification.requestPermission(); } catch (e) { }
             }
-            if(Notification.permission==='granted'){
+            if (Notification.permission === 'granted') {
                 const body = computeSummary();
                 const n = new Notification('ReMo Daily Summary', { body });
-                n.onclick = ()=>window.focus();
+                n.onclick = () => window.focus();
             }
             scheduleNext();
         }, ms);
@@ -2093,29 +2095,29 @@ function scheduleDailySummary(hour=20){
 }
 
 // Cleanup orphaned attachments not referenced by any transaction
-async function cleanupOrphanAttachments(olderThanDays=30){
+async function cleanupOrphanAttachments(olderThanDays = 30) {
     const at = window.reMoAttachments || window.reMoAttachmentsIndexed;
-    if(!at || !at.listIds) return;
-    try{
+    if (!at || !at.listIds) return;
+    try {
         const ids = await at.listIds();
         const used = new Set();
-        if(typeof getExpenses === 'function') getExpenses().forEach(e=>{ if(e.attachmentId) used.add(String(e.attachmentId)); });
-        if(typeof getSavings === 'function') getSavings().forEach(s=>{ if(s.attachmentId) used.add(String(s.attachmentId)); });
-        const cutoff = Date.now() - (olderThanDays*24*60*60*1000);
-        for(const id of ids){
-            if(used.has(String(id))) continue;
+        if (typeof getExpenses === 'function') getExpenses().forEach(e => { if (e.attachmentId) used.add(String(e.attachmentId)); });
+        if (typeof getSavings === 'function') getSavings().forEach(s => { if (s.attachmentId) used.add(String(s.attachmentId)); });
+        const cutoff = Date.now() - (olderThanDays * 24 * 60 * 60 * 1000);
+        for (const id of ids) {
+            if (used.has(String(id))) continue;
             let rec = null;
-            try{ rec = await at.getRecord(id); }catch(e){}
+            try { rec = await at.getRecord(id); } catch (e) { }
             const created = rec && rec.createdAt ? Number(rec.createdAt) : null;
-            if(created && created > 0 && created < cutoff){
-                try{ await at.remove(id); console.info('Removed orphan attachment', id); }catch(e){console.warn('Failed remove orphan',id,e)}
+            if (created && created > 0 && created < cutoff) {
+                try { await at.remove(id); console.info('Removed orphan attachment', id); } catch (e) { console.warn('Failed remove orphan', id, e) }
             }
         }
-    }catch(err){ console.warn('cleanupOrphanAttachments failed',err); }
+    } catch (err) { console.warn('cleanupOrphanAttachments failed', err); }
 }
 
 // run a light cleanup on startup (non-blocking)
-setTimeout(()=>cleanupOrphanAttachments(30), 2000);
+setTimeout(() => cleanupOrphanAttachments(30), 2000);
 
 function getTotalBudget(monthKey) {
     let budgets = getBudgets();
@@ -5330,7 +5332,7 @@ function handleExpenseSave(amount, attachmentId = null) {
 
         let s = split[0];
 
-            addExpense({
+        addExpense({
             amount: s.amount, // positive input; addExpense will normalize by type
             budgetId: s.budget.budgetId,
             allocationTrail: [{ budgetId: s.budget.budgetId, amount: s.amount }],
@@ -5359,8 +5361,7 @@ function handleExpenseSave(amount, attachmentId = null) {
     // =========================
     // ✅ PREPARE SPLIT
     // =========================
-    let split =
-        prepareSplit(amount, budgets);
+    //let split =prepareSplit(amount, budgets);
 
     // =========================
     // ❌ NOT ENOUGH BUDGET
@@ -5421,7 +5422,7 @@ function confirmSplit() {
 
     let splitId = "split_" + Date.now();
 
-        pendingSplit.forEach((s, index) => {
+    pendingSplit.forEach((s, index) => {
 
         addExpense({
             amount: -Math.abs(s.amount),
@@ -5923,7 +5924,7 @@ function exportDataAsJSON() {
                 [json],
                 {
                     type:
-                    "application/json"
+                        "application/json"
                 }
             );
 
@@ -5936,8 +5937,7 @@ function exportDataAsJSON() {
         a.href = url;
 
         a.download =
-            `money-tracker-backup-${
-                getSafeDate()
+            `money-tracker-backup-${getSafeDate()
             }.json`;
 
         document.body.appendChild(a);
@@ -6043,7 +6043,7 @@ function createAutoBackup(type) {
 
             createdAt:
                 new Date()
-                .toISOString(),
+                    .toISOString(),
 
             type,
 
