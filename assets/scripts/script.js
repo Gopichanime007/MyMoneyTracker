@@ -328,14 +328,20 @@ function addExpense(obj) {
             updatedAt:
                 new Date().toISOString(),
 
-            splitId:
-                obj.splitId || null,
+            splitId: obj.splitId || null,
+            splitIndex: obj.splitIndex || null,
+            isSplit: obj.isSplit || false,
+            linkedTransactionId: obj.linkedTransactionId || null,
 
-            splitIndex:
-                obj.splitIndex || null,
-
-            isSplit:
-                obj.isSplit || false
+            // deep-clone allocationTrail if provided; otherwise, if budgetId provided for expense/loss,
+            // create a single allocation entry for backward compatibility
+            allocationTrail: obj.allocationTrail && Array.isArray(obj.allocationTrail)
+                ? JSON.parse(JSON.stringify(obj.allocationTrail))
+                : ((obj.budgetId && (type === "expense" || type === "loss"))
+                    ? [{ budgetId: obj.budgetId, amount: Math.abs(baseAmount) }]
+                    : [])
+                    ,
+                    attachmentId: obj.attachmentId || null
         };
 
         expenses.push(newEntry);
@@ -470,31 +476,54 @@ function loadHistory(list = getExpenses()) {
             let meta = `${e.paymentType || e.entity || e.sourceName || "-"}`;
             let date = new Date(e.date).toLocaleString("en-IN");
 
+            // left: optional thumbnail + text
             div.innerHTML = `
-                <div class="expense-left">
+                <div style="display:flex;gap:8px;align-items:center;">
+                  <div class="expense-thumb" data-attachment-id="${e.attachmentId||''}">
+                    ${e.attachmentId?'<img class="remo-attachment-thumb" src="" alt="attachment" />':''}
+                  </div>
+                  <div>
                     <strong>${title}</strong><br>
-
-                    <small style="color:#888;">
-                        ${meta} • ${date}
-                    </small>
+                    <small style="color:#888;">${meta} • ${date}</small>
+                  </div>
                 </div>
 
                 <div style="text-align:right;">
-                    <div style="color:${color}; font-weight:600;">
-                        ${amount}
-                    </div>
-
-                    <button class="delete-btn" onclick="deleteExpenseUI('${e.id}')" title="Delete">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-        <path d="M3 6h18"></path>
-        <path d="M8 6V4h8v2"></path>
-        <path d="M19 6l-1 14H6L5 6"></path>
-        <path d="M10 11v6"></path>
-        <path d="M14 11v6"></path>
-    </svg>
-</button>
+                    <div style="color:${color}; font-weight:600;">${amount}</div>
+                    <button class="delete-btn" onclick="deleteExpenseUI('${e.id}')" title="Delete"> 
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M3 6h18"></path>
+                        <path d="M8 6V4h8v2"></path>
+                        <path d="M19 6l-1 14H6L5 6"></path>
+                        <path d="M10 11v6"></path>
+                        <path d="M14 11v6"></path>
+                      </svg>
+                    </button>
                 </div>
             `;
+
+            // after inserting, if attachment present, populate thumbnail
+            if (e.attachmentId) {
+                try{
+                    const thumbEl = div.querySelector('.remo-attachment-thumb');
+                    if(thumbEl){
+                        const loader = window.reMoAttachments && window.reMoAttachments.getThumbnailUrl ? window.reMoAttachments.getThumbnailUrl : (window.reMoAttachmentsIndexed && window.reMoAttachmentsIndexed.getThumbnailUrl);
+                        if(loader){
+                            loader(e.attachmentId).then(src=>{ if(src) thumbEl.src = src; }).catch(()=>{});
+                        } else {
+                            // fallback to preview via localStorage API
+                            const prev = window.reMoAttachments && window.reMoAttachments.getPreview ? window.reMoAttachments.getPreview(e.attachmentId) : null;
+                            if(prev) thumbEl.src = prev;
+                        }
+                        // click to open full viewer
+                        thumbEl.addEventListener('click', async (ev)=>{
+                            ev.stopPropagation();
+                            const loaderFull = window.reMoAttachments && window.reMoAttachments.getImageUrl ? window.reMoAttachments.getImageUrl : (window.reMoAttachmentsIndexed && window.reMoAttachmentsIndexed.getImageUrl);
+                            if(loaderFull){ const src = await loaderFull(e.attachmentId); if(src) openAttachmentViewer(src); }
+                        });
+                    }
+                }catch(err){console.warn('thumb render err',err)}
+            }
 
             container.appendChild(div);
         });
@@ -551,7 +580,7 @@ function deleteExpenseUI(id) {
    ➕ FORM HANDLER
 ========================= */
 
-function handleAddExpense() {
+async function handleAddExpense() {
 
     let amount = Number(document.getElementById("amount")?.value);
     let category = document.getElementById("category")?.value;
@@ -605,12 +634,24 @@ function handleAddExpense() {
     // });
 
     if (type === "expense") {
-
-        handleExpenseSave(Math.abs(amount));
+        // handle possible attachment (store first to get attachmentId)
+        const attachmentId = await storeAttachmentFromInput('expenseAttachment');
+        await handleExpenseSave(Math.abs(amount), attachmentId);
         return;
-
     }
-
+    // non-expense flows (income, transfer etc.) may still have attachments
+    const nonExpAttachmentId = await storeAttachmentFromInput('expenseAttachment');
+    addExpense({
+        amount,
+        category,
+        purpose,
+        date: selectedDate.toISOString(),
+        type,
+        paymentType,
+        budgetId,
+        linkedTransactionId,
+        attachmentId: nonExpAttachmentId
+    });
     // =========================
     // 🔄 UI UPDATES
     // =========================
@@ -1185,22 +1226,406 @@ function downloadPDF() {
 
     y += 6;
 
-    doc.text("Total Spent:", 14, y);
-    doc.text(formatCurrencyPDF(totalSpent), 90, y);
+    doc.text(
+        "Spent",
+        summaryCols.spent,
+        y + 1,
+        { align: "right" }
+    );
 
-    y += 6;
+    doc.text(
+        "Remaining",
+        summaryCols.remaining,
+        y + 1,
+        { align: "right" }
+    );
 
-    doc.setTextColor(remaining < 0 ? 200 : 0, remaining < 0 ? 0 : 150, 0);
-    doc.text("Remaining:", 14, y);
-    doc.text(formatCurrencyPDF(remaining), 90, y);
+    y += 10;
+
+
+    // =========================
+    // 📦 BUDGET ALLOCATIONS
+    // =========================
+
+    // =========================
+    // 📦 BUDGET ENTRIES
+    // =========================
+
+    let budgets =
+        getBudgets()
+
+            .filter(b => {
+
+                // respect active PDF filter
+                return dataSource.some(
+                    e =>
+                        e.periodKey ===
+                        b.periodKey
+                );
+            });
+
+
+    // =========================
+    // 💰 TOTALS
+    // =========================
+
+    let totalBudget = 0;
+
+    let totalSpent = 0;
+
+    let totalRemaining = 0;
+
+
+    // =========================
+    // 📄 PRINT BUDGET ROWS
+    // =========================
+
+    budgets.forEach((b, index) => {
+
+        // =========================
+        // 💵 ALLOCATED
+        // =========================
+
+        let allocated =
+            Math.abs(
+                b.totalAllocated || 0
+            );
+
+        // =========================
+        // 💸 SPENT
+        // =========================
+
+        let spent =
+            dataSource
+
+                .filter(e =>
+
+                    (
+                        e.type === "expense" ||
+                        e.type === "loss"
+                    )
+
+                    &&
+
+                    e.budgetId ===
+                    b.budgetId
+                )
+
+                .reduce(
+                    (sum, e) =>
+
+                        sum +
+                        Math.abs(
+                            e.amount || 0
+                        ),
+
+                    0
+                );
+
+        // =========================
+        // 💰 RECOVERY
+        // =========================
+
+        let recovered =
+            dataSource
+
+                .filter(e =>
+
+                    e.type ===
+                    "recovery"
+
+                    &&
+
+                    e.budgetId ===
+                    b.budgetId
+                )
+
+                .reduce(
+                    (sum, e) =>
+
+                        sum +
+                        Math.abs(
+                            e.amount || 0
+                        ),
+
+                    0
+                );
+
+        // =========================
+        // 📊 REMAINING
+        // =========================
+
+        let remaining =
+            allocated -
+            spent +
+            recovered;
+
+
+        // =========================
+        // 📈 TOTALS
+        // =========================
+
+        totalBudget += allocated;
+
+        totalSpent += spent;
+
+        totalRemaining += remaining;
+
+
+        // =========================
+        // 🎨 ALT ROW BG
+        // =========================
+
+        if (index % 2 === 0) {
+
+            doc.setFillColor(
+                248,
+                248,
+                248
+            );
+
+            doc.rect(
+                10,
+                y - 4,
+                190,
+                8,
+                "F"
+            );
+        }
+
+
+        // =========================
+        // 🏷 NAME
+        // =========================
+
+        doc.setTextColor(0);
+
+        doc.setFont(
+            undefined,
+            "normal"
+        );
+
+        doc.text(
+            b.note ||
+            b.name ||
+            "Budget",
+            summaryCols.name,
+            y
+        );
+
+
+        // =========================
+        // 💵 ALLOCATED
+        // =========================
+
+        doc.setTextColor(
+            0,
+            120,
+            255
+        );
+
+        doc.text(
+            formatCurrencyPDF(
+                allocated
+            ),
+            summaryCols.allocated,
+            y,
+            { align: "right" }
+        );
+
+
+        // =========================
+        // 💸 SPENT
+        // =========================
+
+        doc.setTextColor(
+            220,
+            0,
+            0
+        );
+
+        doc.text(
+            formatCurrencyPDF(
+                spent
+            ),
+            summaryCols.spent,
+            y,
+            { align: "right" }
+        );
+
+
+        // =========================
+        // 💰 REMAINING
+        // =========================
+
+        doc.setTextColor(
+
+            remaining < 0
+                ? 220
+                : 0,
+
+            remaining < 0
+                ? 0
+                : 150,
+
+            0
+        );
+
+        doc.text(
+            formatCurrencyPDF(
+                remaining
+            ),
+            summaryCols.remaining,
+            y,
+            { align: "right" }
+        );
+
+        doc.setTextColor(0);
+
+        y += 8;
+    });
+
+
+    // =========================
+    // 📏 TOTAL DIVIDER
+    // =========================
+
+    y += 2;
+
+    doc.setDrawColor(180);
+
+    doc.line(10, y, 200, y);
+
+    y += 8;
+
+
+    // =========================
+    // 📊 TOTAL SUMMARY
+    // =========================
+
+    doc.setFont(
+        undefined,
+        "bold"
+    );
+
+
+    // =========================
+    // 💵 TOTAL BUDGET
+    // =========================
 
     doc.setTextColor(0);
 
+    doc.text(
+        "Total Budget",
+        summaryCols.name,
+        y
+    );
+
+    doc.setTextColor(
+        0,
+        120,
+        255
+    );
+
+    doc.text(
+        formatCurrencyPDF(
+            totalBudget
+        ),
+        summaryCols.allocated,
+        y,
+        { align: "right" }
+    );
+
+    y += 8;
+
+
+    // =========================
+    // 💸 TOTAL SPENT
+    // =========================
+
+    doc.setTextColor(0);
+
+    doc.text(
+        "Total Spent",
+        summaryCols.name,
+        y
+    );
+
+    doc.setTextColor(
+        220,
+        0,
+        0
+    );
+
+    doc.text(
+        formatCurrencyPDF(
+            totalSpent
+        ),
+        summaryCols.spent,
+        y,
+        { align: "right" }
+    );
+
+    y += 8;
+
+
+    // =========================
+    // 💰 TOTAL REMAINING
+    // =========================
+
+    doc.setTextColor(0);
+
+    doc.text(
+        "Remaining",
+        summaryCols.name,
+        y
+    );
+
+    doc.setTextColor(
+
+        totalRemaining < 0
+            ? 220
+            : 0,
+
+        totalRemaining < 0
+            ? 0
+            : 150,
+
+        0
+    );
+
+    doc.text(
+        formatCurrencyPDF(
+            totalRemaining
+        ),
+        summaryCols.remaining,
+        y,
+        { align: "right" }
+    );
+
+    doc.setTextColor(0);
     // =========================
     // 💾 SAVE
     // =========================
     doc.save("money-tracker-report.pdf");
 }
+=== COMMENTED OLD DOWNLOAD END === */
+
+// New PDF wrapper (calls modular PDF generator when available)
+function downloadPDF() {
+    const dataSource = (window.currentFilteredExpenses && window.currentFilteredExpenses.length) ? window.currentFilteredExpenses : (typeof getExpenses === 'function' ? getExpenses() : []);
+    if (typeof window.generatePdfReport === 'function') {
+        window.generatePdfReport({ data: dataSource });
+        return;
+    }
+
+    // Fallback to legacy simple export if new generator not available
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF();
+    doc.text('Money Tracker (legacy) - No advanced PDF engine available', 10, 20);
+    doc.save('money-tracker-report.pdf');
+}
+
 function hexToRgb(hex) {
     hex = hex.replace("#", "");
 
@@ -1216,6 +1641,481 @@ function hexToRgb(hex) {
 
     return { r, g, b };
 }
+
+// =========================
+// ReMo AI — Floating Companion
+// Lightweight UI + Insight engine (local fallback)
+// =========================
+
+(function registerReMoAI() {
+    // Inject minimal styles so no external CSS changes required
+    const css = `
+    .remo-ai-bubble{position:fixed;right:18px;bottom:78px;z-index:1200;width:56px;height:56px;border-radius:50%;display:flex;align-items:center;justify-content:center;box-shadow:0 6px 18px rgba(16,24,40,0.12);backdrop-filter:blur(6px);cursor:pointer;transition:transform .18s ease,box-shadow .18s;}
+    .remo-ai-bubble:hover{transform:translateY(-4px);box-shadow:0 10px 30px rgba(16,24,40,0.16);}
+    .remo-ai-bubble .icon{width:28px;height:28px}
+    .remo-ai-panel{position:fixed;right:12px;bottom:12px;z-index:1200;width:360px;max-height:78vh;background:var(--remo-panel-bg,#ffffff);color:var(--remo-panel-fg,#111827);border-radius:12px;box-shadow:0 20px 50px rgba(2,6,23,0.3);overflow:hidden;display:flex;flex-direction:column;transform:translateY(12px);opacity:0;pointer-events:none;transition:opacity .18s ease,transform .22s ease}
+    .remo-ai-panel.open{opacity:1;pointer-events:auto;transform:translateY(0)}
+    .remo-ai-header{padding:12px 14px;border-bottom:1px solid rgba(0,0,0,0.06);display:flex;align-items:center;gap:10px}
+    .remo-title{font-weight:700;font-size:14px}
+    .remo-sub{font-size:11px;color:rgba(0,0,0,0.5)}
+    .remo-body{padding:10px;overflow:auto;flex:1;display:flex;flex-direction:column;gap:8px}
+    .remo-chips{display:flex;flex-wrap:wrap;gap:8px}
+    .remo-chip{background:rgba(0,0,0,0.06);padding:6px 10px;border-radius:999px;font-size:12px;cursor:pointer}
+    .remo-messages{display:flex;flex-direction:column;gap:8px}
+    .remo-msg{padding:8px 10px;border-radius:8px;background:rgba(0,0,0,0.03);font-size:13px}
+    .remo-input{display:flex;gap:8px;padding:10px;border-top:1px solid rgba(0,0,0,0.06)}
+    .remo-input input{flex:1;padding:8px;border-radius:8px;border:1px solid rgba(0,0,0,0.08)}
+    .remo-send{background:var(--accent,#0ea5a4);color:#fff;padding:8px 10px;border-radius:8px;cursor:pointer}
+    .remo-attachment-thumb{width:36px;height:36px;border-radius:6px;object-fit:cover}
+    @media (prefers-color-scheme:dark){
+        .remo-ai-bubble{background:linear-gradient(180deg,#0f1724,rgba(15,23,36,0.9));}
+        .remo-ai-panel{--remo-panel-bg:#0b1220;--remo-panel-fg:#e6eef7}
+        .remo-chip{background:rgba(255,255,255,0.04)}
+        .remo-msg{background:rgba(255,255,255,0.02)}
+    }
+    `;
+
+    const style = document.createElement('style');
+    style.setAttribute('data-remo-ai','1');
+    style.appendChild(document.createTextNode(css));
+    document.head.appendChild(style);
+
+    // Create bubble
+    function createBubble() {
+        const bubble = document.createElement('button');
+        bubble.className = 'remo-ai-bubble';
+        bubble.setAttribute('aria-label','Open ReMo AI');
+        bubble.innerHTML = `
+            <svg class="icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <defs>
+                </defs>
+                <circle cx="12" cy="12" r="10" fill="url(#g)" />
+                <g fill="#fff">
+                    <path d="M8 11.5c0-2.5 2-4.5 4.5-4.5S17 9 17 11.5 15 16 12.5 16 8 14 8 11.5z" opacity=".95"/>
+                </g>
+                <defs>
+                    <linearGradient id="g" x1="0" x2="1" y1="0" y2="1">
+                        <stop offset="0" stop-color="#2b6cb0"/>
+                        <stop offset="1" stop-color="#06b6d4"/>
+                    </linearGradient>
+                </defs>
+            </svg>`;
+
+        document.body.appendChild(bubble);
+        return bubble;
+    }
+
+    // Create panel
+    function createPanel() {
+        const panel = document.createElement('div');
+        panel.className = 'remo-ai-panel';
+        panel.innerHTML = `
+            <div class="remo-ai-header">
+                <div style="width:40px;height:40px;border-radius:8px;display:flex;align-items:center;justify-content:center;background:linear-gradient(180deg,#0f1724,#0ea5a4);color:#fff">R</div>
+                <div>
+                    <div class="remo-title">ReMo AI</div>
+                    <div class="remo-sub">Your intelligent finance companion</div>
+                </div>
+            </div>
+            <div class="remo-body">
+                <div class="remo-chips" data-chips></div>
+                <div class="remo-messages" data-messages></div>
+            </div>
+            <div class="remo-input">
+                <input placeholder="Ask ReMo (e.g. 'Where did I spend most this week?')" data-userinput />
+                <button class="remo-send" data-send>Ask</button>
+            </div>
+        `;
+
+        document.body.appendChild(panel);
+        return panel;
+    }
+
+    // Lightweight insight engine
+    function topCategory(expenses, periodStart, periodEnd) {
+        const filtered = expenses.filter(e => {
+            const d = new Date(e.date);
+            if (periodStart && d < periodStart) return false;
+            if (periodEnd && d > periodEnd) return false;
+            return true;
+        });
+        const sums = {};
+        filtered.forEach(e => {
+            const cat = e.category || 'Others';
+            sums[cat] = (sums[cat] || 0) + Math.abs(Number(e.amount || 0));
+        });
+        const entries = Object.entries(sums).sort((a,b)=>b[1]-a[1]);
+        return entries[0] ? {category:entries[0][0], amount:entries[0][1]} : null;
+    }
+
+    function sumRange(expenses, periodStart, periodEnd) {
+        return expenses.filter(e => {
+            const d = new Date(e.date);
+            if (periodStart && d < periodStart) return false;
+            if (periodEnd && d > periodEnd) return false;
+            return true;
+        }).reduce((s,e)=>s+Number(e.amount||0),0);
+    }
+
+    function formatCurrencyShort(v){
+        try{ return formatCurrencyPDF ? formatCurrencyPDF(v) : new Intl.NumberFormat('en-IN',{style:'currency',currency:'INR'}).format(v);}catch(e){return v}
+    }
+
+    function renderMessage(text, append=true) {
+        const messages = document.querySelector('.remo-messages');
+        if(!messages) return;
+        const el = document.createElement('div');
+        el.className='remo-msg';
+        el.textContent = text;
+        if(append) messages.appendChild(el);
+        messages.scrollTop = messages.scrollHeight;
+    }
+
+    function generateInsightIntent(intent) {
+        const expenses = (window.currentFilteredExpenses && window.currentFilteredExpenses.length) ? window.currentFilteredExpenses : (typeof getExpenses === 'function' ? getExpenses() : []);
+        const now = new Date();
+        function sumRangeFor(arr, start, end){ return arr.reduce((s,e)=>{
+            const d = new Date(e.date);
+            if(d>=start && d<=end) return s + Number(e.amount||0); return s;
+        },0); }
+        function topCategories(arr, start, end, limit=3){
+            const m = {};
+            arr.forEach(e=>{ const d=new Date(e.date); if(d>=start && d<=end){ const k = e.category||'Uncategorized'; m[k]=(m[k]||0)+Math.abs(Number(e.amount||0)); }});
+            return Object.keys(m).map(k=>({category:k,amount:m[k]})).sort((a,b)=>b.amount-a.amount).slice(0,limit);
+        }
+        if(intent === 'top-spend-week'){
+            const start = new Date(now); start.setDate(now.getDate()-7);
+            const top = topCategory(expenses, start, now);
+            if(top) return `Top spending in last 7 days: ${top.category} — ${formatCurrencyShort(top.amount)}`;
+            return 'No expenses found in the last 7 days.';
+        }
+        if(intent === 'spending-trends' || intent === 'show-spending-trends'){
+            const day7 = new Date(now); day7.setDate(now.getDate()-7);
+            const day30 = new Date(now); day30.setDate(now.getDate()-30);
+            const spend7 = Math.abs(sumRangeFor(expenses.filter(e=>Number(e.amount)<0), day7, now));
+            const spend30 = Math.abs(sumRangeFor(expenses.filter(e=>Number(e.amount)<0), day30, now));
+            const avg7 = (spend7/7)||0;
+            const avg30 = (spend30/30)||0;
+            const trend = avg7 > avg30 ? 'increasing' : (avg7 < avg30 ? 'decreasing' : 'stable');
+            return `7-day avg ${formatCurrencyShort(avg7)}; 30-day avg ${formatCurrencyShort(avg30)} — trend ${trend}.`;
+        }
+        if(intent === 'category-analysis'){
+            const start = new Date(now); start.setDate(now.getDate()-30);
+            const top = topCategories(expenses, start, now, 5);
+            if(!top.length) return 'No category data for last 30 days.';
+            return 'Top categories (30d): ' + top.map(t=>`${t.category} ${formatCurrencyShort(t.amount)}`).join(', ');
+        }
+        if(intent === 'savings-progress'){
+            const savings = (typeof getSavings==='function')?getSavings():[];
+            const total = savings.reduce((s,x)=>s+Number(x.amount||0),0);
+            return `You have ${formatCurrencyShort(total)} in savings (${savings.length} entries).`;
+        }
+        if(intent === 'end-of-day-summary'){
+            const start = new Date(now); start.setHours(0,0,0,0);
+            const end = new Date(now); end.setHours(23,59,59,999);
+            const incomes = expenses.filter(e=>Number(e.amount)>0 && new Date(e.date)>=start && new Date(e.date)<=end);
+            const outs = expenses.filter(e=>Number(e.amount)<0 && new Date(e.date)>=start && new Date(e.date)<=end);
+            const inAmt = incomes.reduce((s,e)=>s+Number(e.amount||0),0);
+            const outAmt = outs.reduce((s,e)=>s+Number(e.amount||0),0);
+            return `Today: ${incomes.length} income(s) ${formatCurrencyShort(inAmt)}; ${outs.length} expense(s) ${formatCurrencyShort(Math.abs(outAmt))}.`;
+        }
+        if(intent === 'savings-month'){
+            const start = new Date(now.getFullYear(), now.getMonth(), 1);
+            const income = sumRange(expenses.filter(e=>Number(e.amount)>0), start, now);
+            const expense = Math.abs(sumRange(expenses.filter(e=>Number(e.amount)<0), start, now));
+            const saved = income - expense;
+            return `This month: Income ${formatCurrencyShort(income)}, Expense ${formatCurrencyShort(expense)}, Savings ${formatCurrencyShort(saved)}`;
+        }
+        if(intent === 'budget-alerts'){
+            const budgets = (typeof getBudgets==='function')?getBudgets():[];
+            const alerts = [];
+            budgets.forEach(b=>{
+                const allocated = Math.abs(b.totalAllocated||0);
+                const spent = expenses.filter(e=> (e.type==='expense'||e.type==='loss') && e.budgetId===b.budgetId).reduce((s,e)=>s+Math.abs(Number(e.amount||0)),0);
+                if(allocated>0 && spent/allocated >= 0.85) alerts.push(`${b.name||b.note||'Budget'} is ${Math.round((spent/allocated)*100)}% used`);
+            });
+            return alerts.length?alerts.join('; '):'No budget alerts.';
+        }
+        if(intent === 'compare-last-month'){
+            const thisMonthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+            const lastMonthStart = new Date(now.getFullYear(), now.getMonth()-1, 1);
+            const lastMonthEnd = new Date(now.getFullYear(), now.getMonth(), 0);
+            const thisSpend = Math.abs(sumRange(expenses.filter(e=>Number(e.amount)<0), thisMonthStart, now));
+            const lastSpend = Math.abs(sumRange(expenses.filter(e=>Number(e.amount)<0), lastMonthStart, lastMonthEnd));
+            const diff = thisSpend - lastSpend;
+            return `Expense this month ${formatCurrencyShort(thisSpend)}. Last month ${formatCurrencyShort(lastSpend)}. Change ${formatCurrencyShort(diff)}.`;
+        }
+
+        return "I couldn't compute that automatically. Try a quick suggestion.";
+    }
+
+    function handlePreset(promptKey){
+        const map = {
+            'Where did I spend most this week?':'top-spend-week',
+            'How much did I save this month?':'savings-month',
+            'Which category exceeds budget?':'budget-alerts',
+            'What changed compared to last month?':'compare-last-month',
+            'Show spending trends':'spending-trends'
+        };
+        const intent = map[promptKey]||promptKey;
+        renderMessage(promptKey);
+        const reply = generateInsightIntent(intent);
+        setTimeout(()=>renderMessage(reply),200);
+    }
+
+    function openPanel(panel){
+        panel.classList.add('open');
+        // populate chips
+        const chips = panel.querySelector('[data-chips]');
+        if(chips && chips.children.length===0){
+            ['Where did I spend most this week?','How much did I save this month?','Which category exceeds budget?','What changed compared to last month?','Show spending trends'].forEach(t=>{
+                const b = document.createElement('button');
+                b.className='remo-chip';
+                b.textContent = t;
+                b.onclick = ()=>handlePreset(t);
+                chips.appendChild(b);
+            });
+        }
+        panel.querySelector('[data-messages]').innerHTML='';
+        renderMessage('Hi — I am ReMo. I can show insights, reminders and quick actions.');
+    }
+
+    function init() {
+        try{
+            // load ReMo styles (lightweight)
+            if(!document.querySelector('link[data-remo-css]')){
+                const l = document.createElement('link');
+                l.rel = 'stylesheet';
+                l.href = 'assets/styles/remo.css';
+                l.setAttribute('data-remo-css','1');
+                document.head.appendChild(l);
+            }
+
+            // lazy-load attachments module (IndexedDB-backed) for offline-first attachments
+            if(!window.reMoAttachmentsIndexed && !document.querySelector('script[data-remo-attach]')){
+                const s = document.createElement('script');
+                s.src = 'assets/scripts/remo/attachments.js';
+                s.setAttribute('data-remo-attach','1');
+                document.body.appendChild(s);
+            }
+
+            // schedule light daily summary notification (runs while app is open)
+            try{
+                scheduleDailySummary(20); // 20:00 local
+            }catch(e){/* ignore */}
+
+            const bubble = createBubble();
+            const panel = createPanel();
+
+            bubble.addEventListener('click',()=>{
+                if(panel.classList.contains('open')){ panel.classList.remove('open'); }
+                else{ openPanel(panel); }
+            });
+
+            // Send handler
+            panel.querySelector('[data-send]').addEventListener('click',()=>{
+                const input = panel.querySelector('[data-userinput]');
+                const text = (input.value||'').trim();
+                if(!text) return;
+                renderMessage(text);
+                // naive intent detection
+                const l = text.toLowerCase();
+                if(l.includes('food')||l.includes('where')||l.includes('most')) handlePreset('Where did I spend most this week?');
+                else if(l.includes('save')||l.includes('saving')||l.includes('how much did i save')) handlePreset('How much did I save this month?');
+                else if(l.includes('budget')||l.includes('exceed')) handlePreset('Which category exceeds budget?');
+                else if(l.includes('compare')||l.includes('changed')||l.includes('last month')) handlePreset('What changed compared to last month?');
+                else {
+                    // fallback: try to compute simple numeric answers
+                    const reply = generateInsightIntent(text);
+                    setTimeout(()=>renderMessage(reply),200);
+                }
+                input.value='';
+            });
+
+            // keyboard enter
+            panel.querySelector('[data-userinput]').addEventListener('keydown',(e)=>{
+                if(e.key==='Enter') panel.querySelector('[data-send]').click();
+            });
+
+            // gentle entrance animation
+            setTimeout(()=>bubble.style.transform='translateY(0)',100);
+        }catch(e){console.warn('ReMo init failed',e)}
+    }
+
+    // Initialize after load
+    if(document.readyState==='complete') init(); else window.addEventListener('load',init);
+
+    // Attachment helper (switches to IndexedDB-backed implementation when available)
+    window.reMoAttachments = window.reMoAttachmentsIndexed || {
+        storePreview: async function(transactionId, file){
+            if(!file) return null;
+            return new Promise((res,rej)=>{
+                const fr = new FileReader();
+                fr.onload = ()=>{
+                    try{ const key = `remo:attach:${transactionId}`; localStorage.setItem(key, fr.result); res(fr.result); }catch(err){rej(err)}
+                };
+                fr.onerror = rej;
+                fr.readAsDataURL(file);
+            });
+        },
+        getPreview: function(transactionId){ return localStorage.getItem(`remo:attach:${transactionId}`); },
+        remove: function(transactionId){ localStorage.removeItem(`remo:attach:${transactionId}`); }
+    };
+
+})();
+
+// =========================
+// Attachment viewer + input wiring
+// =========================
+
+function openAttachmentViewer(src) {
+    // remove existing
+    let existing = document.getElementById('remo-attach-viewer');
+    if (existing) existing.remove();
+
+    const overlay = document.createElement('div');
+    overlay.id = 'remo-attach-viewer';
+    overlay.style.position = 'fixed';
+    overlay.style.inset = '0';
+    overlay.style.background = 'rgba(0,0,0,0.85)';
+    overlay.style.display = 'flex';
+    overlay.style.alignItems = 'center';
+    overlay.style.justifyContent = 'center';
+    overlay.style.zIndex = 1400;
+    overlay.style.cursor = 'zoom-out';
+
+    const img = document.createElement('img');
+    img.src = src;
+    img.style.maxWidth = '94%';
+    img.style.maxHeight = '94%';
+    img.style.borderRadius = '8px';
+    img.style.boxShadow = '0 20px 50px rgba(0,0,0,0.6)';
+    let zoomed = false;
+    img.addEventListener('dblclick', () => {
+        zoomed = !zoomed;
+        img.style.transform = zoomed ? 'scale(1.6)' : 'scale(1)';
+    });
+
+    overlay.addEventListener('click', () => overlay.remove());
+
+    overlay.appendChild(img);
+    document.body.appendChild(overlay);
+}
+
+function setupAttachmentInputs() {
+    // expense attachment
+    const expInput = document.getElementById('expenseAttachment');
+    const expPreview = document.getElementById('expenseAttachmentPreview');
+    const expWrapper = document.getElementById('expenseAttachmentPreviewWrapper');
+    const expRemove = document.getElementById('expenseAttachmentRemove');
+    if (expInput) {
+        expInput.addEventListener('change', async function () {
+            const file = this.files && this.files[0];
+            if (!file) return;
+            // show temporary preview using object URL
+            // revoke previous preview url if present
+            if(expPreview && expPreview.dataset._previewUrl){ try{ URL.revokeObjectURL(expPreview.dataset._previewUrl); }catch(e){} }
+            const url = URL.createObjectURL(file);
+            if (expPreview) { expPreview.src = url; expPreview.dataset._previewUrl = url; expWrapper.style.display = 'block'; expRemove.style.display = 'inline'; }
+            expPreview.onclick = ()=>openAttachmentViewer(url);
+        });
+        if (expRemove) expRemove.addEventListener('click', ()=>{ if(expPreview && expPreview.dataset._previewUrl){ try{ URL.revokeObjectURL(expPreview.dataset._previewUrl);}catch(e){} expPreview.dataset._previewUrl=''; } expInput.value = ''; if(expWrapper) expWrapper.style.display='none'; expRemove.style.display='none'; });
+    }
+
+    const sInput = document.getElementById('sAttachment');
+    const sPreview = document.getElementById('sAttachmentPreview');
+    const sWrapper = document.getElementById('sAttachmentPreviewWrapper');
+    const sRemove = document.getElementById('sAttachmentRemove');
+    if (sInput) {
+        sInput.addEventListener('change', function () {
+            const file = this.files && this.files[0];
+            if (!file) return;
+            if(sPreview && sPreview.dataset._previewUrl){ try{ URL.revokeObjectURL(sPreview.dataset._previewUrl); }catch(e){} }
+            const url = URL.createObjectURL(file);
+            if (sPreview) { sPreview.src = url; sPreview.dataset._previewUrl = url; sWrapper.style.display = 'block'; sRemove.style.display = 'inline'; }
+            sPreview.onclick = ()=>openAttachmentViewer(url);
+        });
+        if (sRemove) sRemove.addEventListener('click', ()=>{ if(sPreview && sPreview.dataset._previewUrl){ try{ URL.revokeObjectURL(sPreview.dataset._previewUrl);}catch(e){} sPreview.dataset._previewUrl=''; } sInput.value=''; if(sWrapper) sWrapper.style.display='none'; sRemove.style.display='none'; });
+    }
+}
+
+// initialize attachment inputs on DOM ready
+if (document.readyState === 'complete') setupAttachmentInputs(); else window.addEventListener('load', setupAttachmentInputs);
+
+// Helper: store attachment from a file input element id and return attachmentId (or null)
+async function storeAttachmentFromInput(inputId){
+    const fileInput = document.getElementById(inputId);
+    const file = fileInput && fileInput.files && fileInput.files[0] ? fileInput.files[0] : null;
+    if(!file) return null;
+    const store = window.reMoAttachments && window.reMoAttachments.storeImage ? window.reMoAttachments.storeImage : (window.reMoAttachmentsIndexed && window.reMoAttachmentsIndexed.storeImage);
+    if(!store) return null;
+    try{
+        const res = await store(null, file);
+        return res && res.id ? res.id : null;
+    }catch(err){
+        console.warn('Attachment store failed', err);
+        return null;
+    }
+}
+
+function scheduleDailySummary(hour=20){
+    if(!('Notification' in window)) return;
+    function computeSummary(){
+        const expenses = (typeof getExpenses==='function')?getExpenses():[];
+        const now = new Date();
+        const start = new Date(now); start.setHours(0,0,0,0);
+        const end = new Date(now); end.setHours(23,59,59,999);
+        const ins = expenses.filter(e=>Number(e.amount)>0 && new Date(e.date)>=start && new Date(e.date)<=end);
+        const outs = expenses.filter(e=>Number(e.amount)<0 && new Date(e.date)>=start && new Date(e.date)<=end);
+        const inAmt = ins.reduce((s,e)=>s+Number(e.amount||0),0);
+        const outAmt = outs.reduce((s,e)=>s+Number(e.amount||0),0);
+        return `Today: ${ins.length} incomes ${formatCurrencyShort(inAmt)} · ${outs.length} expenses ${formatCurrencyShort(Math.abs(outAmt))}`;
+    }
+    function scheduleNext(){
+        const now = new Date();
+        const next = new Date(now);
+        next.setHours(hour,0,0,0);
+        if(next<=now) next.setDate(next.getDate()+1);
+        const ms = next - now;
+        setTimeout(async ()=>{
+            if(Notification.permission!=='granted'){
+                try{ await Notification.requestPermission(); }catch(e){}
+            }
+            if(Notification.permission==='granted'){
+                const body = computeSummary();
+                const n = new Notification('ReMo Daily Summary', { body });
+                n.onclick = ()=>window.focus();
+            }
+            scheduleNext();
+        }, ms);
+    }
+    scheduleNext();
+}
+
+// Cleanup orphaned attachments not referenced by any transaction
+async function cleanupOrphanAttachments(olderThanDays=30){
+    const at = window.reMoAttachments || window.reMoAttachmentsIndexed;
+    if(!at || !at.listIds) return;
+    try{
+        const ids = await at.listIds();
+        const used = new Set();
+        if(typeof getExpenses === 'function') getExpenses().forEach(e=>{ if(e.attachmentId) used.add(String(e.attachmentId)); });
+        if(typeof getSavings === 'function') getSavings().forEach(s=>{ if(s.attachmentId) used.add(String(s.attachmentId)); });
+        const cutoff = Date.now() - (olderThanDays*24*60*60*1000);
+        for(const id of ids){
+            if(used.has(String(id))) continue;
+            let rec = null;
+            try{ rec = await at.getRecord(id); }catch(e){}
+            const created = rec && rec.createdAt ? Number(rec.createdAt) : null;
+            if(created && created > 0 && created < cutoff){
+                try{ await at.remove(id); console.info('Removed orphan attachment', id); }catch(e){console.warn('Failed remove orphan',id,e)}
+            }
+        }
+    }catch(err){ console.warn('cleanupOrphanAttachments failed',err); }
+}
+
+// run a light cleanup on startup (non-blocking)
+setTimeout(()=>cleanupOrphanAttachments(30), 2000);
 
 function getTotalBudget(monthKey) {
     let budgets = getBudgets();
@@ -1546,62 +2446,7 @@ function closePeriod() {
 //         prompt("Copy your backup manually:", json);
 //     }
 // }
-function exportDataAsJSON() {
 
-    let data = {
-        expenses: getExpenses() || [],
-        budgets: getBudgets() || [],
-        savings: getSavings() || [],
-        orders: JSON.parse(localStorage.getItem("orders")) || [],
-
-        // 🔥 NEW (IMPORTANT)
-        categories: JSON.parse(localStorage.getItem("categories")) || [],
-        persons: JSON.parse(localStorage.getItem("persons")) || [],
-        budgetPeriods: JSON.parse(localStorage.getItem("bp")) || [],
-
-        settings: {
-            theme: localStorage.getItem("theme") || "",
-            currencyCode: localStorage.getItem("currencyCode") || "INR"
-        },
-
-        meta: {
-            exportedAt: new Date().toISOString(),
-            version: "v2"
-        }
-    };
-
-    try {
-        let json = JSON.stringify(data, null, 2);
-
-        let blob = new Blob([json], { type: "application/json" });
-        let url = URL.createObjectURL(blob);
-
-        let a = document.createElement("a");
-        a.href = url;
-        a.download = `money-tracker-backup-${new Date().toISOString().slice(0, 10)}.json`;
-
-        document.body.appendChild(a);
-        a.click();
-
-        // fallback first
-        setTimeout(() => {
-            window.open(url, "_blank");
-        }, 500);
-
-        // cleanup later
-        setTimeout(() => {
-
-            document.body.removeChild(a);
-
-            URL.revokeObjectURL(url);
-
-        }, 3000);
-
-    } catch (err) {
-        let json = JSON.stringify(data, null, 2);
-        prompt("Copy your backup manually:", json);
-    }
-}
 // Imports JSON backup into localStorage
 // function importData() {
 //     let text = document.getElementById("importText").value;
@@ -2094,12 +2939,25 @@ function renderBudgetEntries() {
             )
             .map(b => b.budgetId);
 
-        let used = expenses
-            .filter(e =>
-                relatedBudgetIds.includes(e.budgetId) &&
-                e.amount < 0
-            )
-            .reduce((sum, e) => sum + Math.abs(e.amount), 0);
+        // calculate used taking allocationTrail into account
+        let used = 0;
+        expenses.forEach(e => {
+            if (Array.isArray(e.allocationTrail) && e.allocationTrail.length) {
+                e.allocationTrail.forEach(a => {
+                    if (relatedBudgetIds.includes(a.budgetId) && (e.type === 'expense' || e.type === 'loss')) {
+                        used += Number(a.amount) || 0;
+                    }
+                    if (relatedBudgetIds.includes(a.budgetId) && e.type === 'recovery') {
+                        used -= Number(a.amount) || 0;
+                    }
+                });
+            } else {
+                if (relatedBudgetIds.includes(e.budgetId)) {
+                    if (e.amount < 0) used += Math.abs(e.amount);
+                    if (e.type === 'recovery') used -= Math.abs(e.amount);
+                }
+            }
+        });
 
         let remaining = g.totalAllocated - used;
 
@@ -2114,31 +2972,69 @@ function renderBudgetEntries() {
             label = `${formatDateShort(start)} → ${formatDateShort(end)}`;
         }
 
-        let div = document.createElement("div");
-        div.className = "income-card";
+        // Responsive: render table on narrow screens
+        const isMobile = window.innerWidth && window.innerWidth <= 640;
+        if (isMobile) {
+            // create table if not exists
+            let table = container.querySelector('table.budgets-table');
+            if (!table) {
+                table = document.createElement('table');
+                table.className = 'budgets-table';
+                table.style.width = '100%';
+                table.style.borderCollapse = 'collapse';
+                table.innerHTML = `
+                    <thead>
+                        <tr style="background:#f0f0f0; text-align:left;">
+                            <th style="padding:8px;">Name</th>
+                            <th style="padding:8px;">Period</th>
+                            <th style="padding:8px; text-align:right;">Allocated</th>
+                            <th style="padding:8px; text-align:right;">Used</th>
+                            <th style="padding:8px; text-align:right;">Remaining</th>
+                        </tr>
+                    </thead>
+                    <tbody></tbody>
+                `;
+                container.appendChild(table);
+            }
 
-        div.innerHTML = `
-        <div class="budget-card">
+            const tbody = table.querySelector('tbody');
+            const row = document.createElement('tr');
+            row.innerHTML = `
+                <td style="padding:8px; border-bottom:1px solid #eee;">${name}</td>
+                <td style="padding:8px; border-bottom:1px solid #eee;">${label}</td>
+                <td style="padding:8px; border-bottom:1px solid #eee; text-align:right;">${formatCurrency(g.totalAllocated)}</td>
+                <td style="padding:8px; border-bottom:1px solid #eee; text-align:right;">${formatCurrency(used)}</td>
+                <td style="padding:8px; border-bottom:1px solid #eee; text-align:right;">${formatCurrency(remaining)}</td>
+            `;
+            row.onclick = () => openBudgetDetails(g);
+            tbody.appendChild(row);
+        } else {
+            let div = document.createElement("div");
+            div.className = "income-card";
 
-            <div class="budget-left">
-                <div class="budget-title">${name}</div>
-                <div class="budget-sub">${label}</div>
-            </div>
+            div.innerHTML = `
+            <div class="budget-card">
 
-            <div class="budget-right">
-                <div class="budget-amount">${formatCurrency(g.totalAllocated)}</div>
-                <div class="budget-status ${remaining <= 0 ? "exhausted" : "active"}">
-                    ${remaining <= 0 ? "Exhausted" : `${formatCurrency(remaining)} left`}
+                <div class="budget-left">
+                    <div class="budget-title">${name}</div>
+                    <div class="budget-sub">${label}</div>
                 </div>
+
+                <div class="budget-right">
+                    <div class="budget-amount">${formatCurrency(g.totalAllocated)}</div>
+                    <div class="budget-status ${remaining <= 0 ? "exhausted" : "active"}">
+                        ${remaining <= 0 ? "Exhausted" : `${formatCurrency(remaining)} left`}
+                    </div>
+                </div>
+
             </div>
+            `;
 
-        </div>
-        `;
+            div.style.cursor = "pointer";
+            div.onclick = () => openBudgetDetails(g);
 
-        div.style.cursor = "pointer";
-        div.onclick = () => openBudgetDetails(g);
-
-        container.appendChild(div);
+            container.appendChild(div);
+        }
     });
 }
 
@@ -4275,7 +5171,7 @@ function prepareSplit(amount, budgets) {
     return remaining > 0 ? null : result;
 }
 
-function handleExpenseSave(amount) {
+function handleExpenseSave(amount, attachmentId = null) {
 
     // =========================
     // ✅ VALIDATE
@@ -4415,19 +5311,34 @@ function handleExpenseSave(amount) {
     // =========================
     // ✅ DIRECT SAVE
     // =========================
-    if (single) {
+    let split =
+        prepareSplit(amount, budgets);
 
-        addExpense({
+    // =========================
+    // ❌ NOT ENOUGH BUDGET
+    // =========================
+    if (!split) {
 
-            amount: -Math.abs(amount),
+        showToast("Not enough total budget");
+        return;
+    }
 
-            budgetId: single.budgetId,
+    // =========================
+    // ✅ SINGLE DIRECT ENTRY
+    // =========================
+    if (split.length === 1) {
 
+        let s = split[0];
+
+            addExpense({
+            amount: s.amount, // positive input; addExpense will normalize by type
+            budgetId: s.budget.budgetId,
+            allocationTrail: [{ budgetId: s.budget.budgetId, amount: s.amount }],
             category,
             purpose,
             paymentType,
             date,
-
+            attachmentId: attachmentId || null,
             type: "expense"
         });
 
@@ -4510,7 +5421,7 @@ function confirmSplit() {
 
     let splitId = "split_" + Date.now();
 
-    pendingSplit.forEach((s, index) => {
+        pendingSplit.forEach((s, index) => {
 
         addExpense({
             amount: -Math.abs(s.amount),
@@ -4525,8 +5436,8 @@ function confirmSplit() {
             purpose,
             paymentType,
             date,
-
-            type: "expense"
+            type: "expense",
+            attachmentId: attachmentId || null
         });
     });
 
@@ -4728,4 +5639,443 @@ function buildSmartExpenseDate(rawDate) {
     selected.setHours(23, 59, 59, 999);
 
     return selected.toISOString();
+}
+
+function getRemainingAmount(id) {
+    let expensesAll = getExpenses();
+
+    // 🔥 ORIGINAL ENTRY (lookup from full storage so parent rows remain findable)
+    let original = expensesAll.find(e => String(e.id) === String(id));
+    if (!original) return 0;
+
+    // original total value (use allocationTrail if present)
+    let originalTotal = 0;
+    if (Array.isArray(original.allocationTrail) && original.allocationTrail.length) {
+        originalTotal = original.allocationTrail.reduce((s, a) => s + (Number(a.amount) || 0), 0);
+    } else {
+        originalTotal = Math.abs(Number(original.amount) || 0);
+    }
+
+    // 🔥 TOTAL RECOVERED (exclude parent split containers from recovery sums)
+    let expenses = expensesAll.filter(e => !isParentSplitContainer(e));
+
+    let recovered = expenses
+        .filter(e => String(e.linkedTransactionId) === String(id) && e.type === "recovery")
+        .reduce((sum, e) => {
+            if (Array.isArray(e.allocationTrail) && e.allocationTrail.length) {
+                return sum + e.allocationTrail.reduce((ss, a) => ss + (Number(a.amount) || 0), 0);
+            }
+            return sum + Math.abs(Number(e.amount) || 0);
+        }, 0);
+
+    let remaining = originalTotal - recovered;
+    return Math.max(0, remaining);
+}
+// Budget Expense Module END script.js
+
+
+
+
+// function exportDataAsJSON() {
+
+//     let data = {
+//         expenses: getExpenses() || [],
+//         budgets: getBudgets() || [],
+//         savings: getSavings() || [],
+//         orders: JSON.parse(localStorage.getItem("orders")) || [],
+
+//         // 🔥 NEW (IMPORTANT)
+//         categories: JSON.parse(localStorage.getItem("categories")) || [],
+//         persons: JSON.parse(localStorage.getItem("persons")) || [],
+//         budgetPeriods: JSON.parse(localStorage.getItem("bp")) || [],
+
+//         settings: {
+//             theme: localStorage.getItem("theme") || "",
+//             currencyCode: localStorage.getItem("currencyCode") || "INR"
+//         },
+
+//         meta: {
+//             exportedAt: new Date().toISOString(),
+//             version: "v2"
+//         }
+//     };
+
+//     try {
+//         let json = JSON.stringify(data, null, 2);
+
+//         let blob = new Blob([json], { type: "application/json" });
+//         let url = URL.createObjectURL(blob);
+
+//         let a = document.createElement("a");
+//         a.href = url;
+//         a.download = `money-tracker-backup-${new Date().toISOString().slice(0, 10)}.json`;
+
+//         document.body.appendChild(a);
+//         a.click();
+
+//         // fallback first
+//         setTimeout(() => {
+//             window.open(url, "_blank");
+//         }, 500);
+
+//         // cleanup later
+//         setTimeout(() => {
+
+//             document.body.removeChild(a);
+
+//             URL.revokeObjectURL(url);
+
+//         }, 3000);
+
+//     } catch (err) {
+//         let json = JSON.stringify(data, null, 2);
+//         prompt("Copy your backup manually:", json);
+//     }
+// }
+
+// // =========================
+// // 🔄 AUTO BACKUP ENGINE
+// // =========================
+
+// function startAutoBackup() {
+
+//     scheduleDailyBackup();
+//     scheduleWeeklyBackup();
+//     scheduleMonthlyBackup();
+// }
+
+// // =========================
+// // DAILY
+// // =========================
+
+// function scheduleDailyBackup() {
+
+//     const DAY_MS =
+//         24 * 60 * 60 * 1000;
+
+//     setInterval(() => {
+
+//         createAutoBackup("daily");
+
+//     }, DAY_MS);
+// }
+
+// // =========================
+// // WEEKLY
+// // =========================
+
+// function scheduleWeeklyBackup() {
+
+//     const WEEK_MS =
+//         7 * 24 * 60 * 60 * 1000;
+
+//     setInterval(() => {
+
+//         createAutoBackup("weekly");
+
+//     }, WEEK_MS);
+// }
+
+// // =========================
+// // MONTHLY
+// // =========================
+
+// function scheduleMonthlyBackup() {
+
+//     const MONTH_MS =
+//         30 * 24 * 60 * 60 * 1000;
+
+//     setInterval(() => {
+
+//         createAutoBackup("monthly");
+
+//     }, MONTH_MS);
+// }
+
+// // =========================
+// // CREATE BACKUP
+// // =========================
+
+// function createAutoBackup(type) {
+
+//     try {
+
+//         const backupData = {
+
+//             createdAt:
+//                 new Date().toISOString(),
+
+//             type,
+
+//             data: getFullAppData()
+//         };
+
+//         localStorage.setItem(
+
+//             `autoBackup_${type}`,
+
+//             JSON.stringify(backupData)
+//         );
+
+//         console.log(
+//             `✅ ${type} backup completed`
+//         );
+
+//     } catch (err) {
+
+//         console.error(
+//             `❌ ${type} backup failed`,
+//             err
+//         );
+//     }
+// }
+
+// =========================
+// 📦 GET FULL APP DATA
+// =========================
+
+function getFullAppData() {
+
+    return {
+
+        expenses:
+            getExpenses() || [],
+
+        budgets:
+            getBudgets() || [],
+
+        savings:
+            getSavings() || [],
+
+        orders:
+            JSON.parse(
+                localStorage.getItem("orders")
+            ) || [],
+
+        categories:
+            JSON.parse(
+                localStorage.getItem("categories")
+            ) || [],
+
+        persons:
+            JSON.parse(
+                localStorage.getItem("persons")
+            ) || [],
+
+        budgetPeriods:
+            JSON.parse(
+                localStorage.getItem("bp")
+            ) || [],
+
+        settings: {
+
+            theme:
+                localStorage.getItem("theme")
+                || "",
+
+            currencyCode:
+                localStorage.getItem("currencyCode")
+                || "INR"
+        },
+
+        meta: {
+
+            exportedAt:
+                new Date().toISOString(),
+
+            version:
+                "v2"
+        }
+    };
+}
+
+// =========================
+// 📅 SAFE FILE DATE
+// =========================
+
+function getSafeDate() {
+
+    return new Date()
+        .toISOString()
+        .replace(/[:.]/g, "-");
+}
+
+// =========================
+// 📤 MANUAL EXPORT
+// =========================
+
+function exportDataAsJSON() {
+
+    try {
+
+        const data =
+            getFullAppData();
+
+        const json =
+            JSON.stringify(
+                data,
+                null,
+                2
+            );
+
+        const blob =
+            new Blob(
+                [json],
+                {
+                    type:
+                    "application/json"
+                }
+            );
+
+        const url =
+            URL.createObjectURL(blob);
+
+        const a =
+            document.createElement("a");
+
+        a.href = url;
+
+        a.download =
+            `money-tracker-backup-${
+                getSafeDate()
+            }.json`;
+
+        document.body.appendChild(a);
+
+        a.click();
+
+        document.body.removeChild(a);
+
+        setTimeout(() => {
+
+            URL.revokeObjectURL(url);
+
+        }, 1000);
+
+        console.log(
+            "✅ Manual export completed"
+        );
+
+    } catch (err) {
+
+        console.error(
+            "❌ Export failed",
+            err
+        );
+    }
+}
+
+// =========================
+// 🔄 AUTO BACKUP ENGINE
+// =========================
+
+function startAutoBackup() {
+
+    checkAndCreateBackup(
+        "daily",
+        1
+    );
+
+    checkAndCreateBackup(
+        "weekly",
+        7
+    );
+
+    checkAndCreateBackup(
+        "monthly",
+        30
+    );
+}
+
+// =========================
+// 🧠 SMART BACKUP CHECK
+// =========================
+
+function checkAndCreateBackup(
+    type,
+    requiredDays
+) {
+
+    try {
+
+        const lastBackup =
+            localStorage.getItem(
+                `lastBackup_${type}`
+            );
+
+        const now =
+            Date.now();
+
+        if (!lastBackup) {
+
+            createAutoBackup(type);
+
+            return;
+        }
+
+        const diffDays =
+            (now - Number(lastBackup))
+            / (1000 * 60 * 60 * 24);
+
+        if (diffDays >= requiredDays) {
+
+            createAutoBackup(type);
+        }
+
+    } catch (err) {
+
+        console.error(
+            `❌ ${type} backup check failed`,
+            err
+        );
+    }
+}
+
+// =========================
+// 💾 CREATE AUTO BACKUP
+// =========================
+
+function createAutoBackup(type) {
+
+    try {
+
+        const backupData = {
+
+            createdAt:
+                new Date()
+                .toISOString(),
+
+            type,
+
+            data:
+                getFullAppData()
+        };
+
+        localStorage.setItem(
+
+            `autoBackup_${type}`,
+
+            JSON.stringify(
+                backupData
+            )
+        );
+
+        localStorage.setItem(
+
+            `lastBackup_${type}`,
+
+            Date.now().toString()
+        );
+
+        console.log(
+            `✅ ${type} backup completed`
+        );
+
+    } catch (err) {
+
+        console.error(
+            `❌ ${type} backup failed`,
+            err
+        );
+    }
 }

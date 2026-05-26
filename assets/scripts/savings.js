@@ -1,3 +1,757 @@
+/*
+====================================================================================================
+SAVINGS MODULE
+MASTER BUSINESS LOGIC + ANDROID MIGRATION DOCUMENTATION
+====================================================================================================
+
+MODULE PURPOSE
+----------------------------------------------------------------------------------------------------
+The Savings Module acts as:
+1. Savings Ledger System
+2. Source-based Financial Allocation Engine
+3. Budget Allocation Engine
+4. Settlement & Recovery Tracker
+5. Financial Analytics System
+
+This module is NOT a simple savings screen.
+
+It behaves like:
+----------------------------------------------------------------------------------------------------
+Mini Accounting Ledger System
+
+====================================================================================================
+HIGH LEVEL ARCHITECTURE
+====================================================================================================
+
+Savings Module
+│
+├── Income Management
+│
+├── Transfer Management
+│
+├── Settlement Management
+│
+├── Budget Allocation Management
+│
+├── Savings History
+│
+├── Source Tracking
+│
+├── Graph Analytics
+│
+├── Category Management
+│
+├── Person Management
+│
+└── PDF Export System
+
+====================================================================================================
+CORE FINANCIAL CONCEPT
+====================================================================================================
+
+The Savings Module uses:
+----------------------------------------------------------------------------------------------------
+SOURCE-BASED LEDGER ARCHITECTURE
+
+Meaning:
+----------------------------------------------------------------------------------------------------
+Every expense allocation originates from a source.
+
+Example:
+----------------------------------------------------------------------------------------------------
+
+Salary
+   ↓
+Savings Source
+   ↓
+Transfer / Budget / Settlement
+   ↓
+Tracking + Remaining Balance
+
+This architecture enables:
+----------------------------------------------------------------------------------------------------
+✔ Source tracking
+✔ Remaining calculations
+✔ Budget linking
+✔ Settlement tracking
+✔ Audit history
+✔ Financial analytics
+
+====================================================================================================
+CORE DATA FLOW
+====================================================================================================
+
+Income Entry
+│
+├── Creates Source
+│
+├── Source becomes available
+│
+└── Other transactions consume source
+
+----------------------------------------------------------------------------------------------------
+
+Transfer Entry
+│
+├── Reduces Source Balance
+│
+├── Assigns Person
+│
+└── Tracks Pending Settlement
+
+----------------------------------------------------------------------------------------------------
+
+Settlement Entry
+│
+├── Linked to Transfer
+│
+├── Recovers Amount
+│
+└── Updates Pending Balance
+
+----------------------------------------------------------------------------------------------------
+
+Budget Allocation
+│
+├── Converts Savings → Budget
+│
+├── Creates Budget Allocation
+│
+└── Updates Budget Records
+
+====================================================================================================
+APPLICATION FLOW
+====================================================================================================
+
+Page Load
+│
+├── Load Savings
+├── Load Sources
+├── Load Categories
+├── Load Persons
+├── Load Budget Years
+├── Apply Theme
+└── Render History
+
+====================================================================================================
+STORAGE ARCHITECTURE
+====================================================================================================
+
+Primary Storage:
+----------------------------------------------------------------------------------------------------
+localStorage
+
+Storage Keys:
+----------------------------------------------------------------------------------------------------
+
+savingsTransactions
+→ Main savings ledger
+
+budgets
+→ Budget allocation records
+
+categories
+→ Savings categories
+
+persons
+→ Person registry
+
+theme
+→ Dynamic theme system
+
+====================================================================================================
+ANDROID STORAGE MIGRATION
+====================================================================================================
+
+HTML / JS
+----------------------------------------------------------------------------------------------------
+localStorage
+
+Android Equivalent:
+----------------------------------------------------------------------------------------------------
+Room Database
++
+SharedPreferences
+
+----------------------------------------------------------------------------------------------------
+savingsTransactions
+→ SavingsRepository
+
+budgets
+→ BudgetRepository
+
+theme
+→ SettingsManager
+
+====================================================================================================
+ENTRY FACTORY ARCHITECTURE
+====================================================================================================
+
+createSavingsEntry()
+
+Purpose:
+----------------------------------------------------------------------------------------------------
+Creates standardized ledger entries.
+
+Responsibilities:
+----------------------------------------------------------------------------------------------------
+✔ Generates ID
+✔ Applies timestamps
+✔ Applies monthKey
+✔ Applies periodKey
+✔ Standardizes structure
+
+IMPORTANT:
+----------------------------------------------------------------------------------------------------
+ALL transactions MUST pass through this factory.
+
+Android Equivalent:
+----------------------------------------------------------------------------------------------------
+SavingsEntryFactory
+or
+SavingsManager.createEntry()
+
+====================================================================================================
+TRANSACTION TYPES
+====================================================================================================
+
+Supported Types:
+----------------------------------------------------------------------------------------------------
+
+income
+→ Adds savings source
+
+transfer
+→ Deducts money from source
+
+settlement
+→ Recovers pending transfer amount
+
+budget_allocation
+→ Allocates savings into budget
+
+====================================================================================================
+ANDROID DOMAIN MODEL
+====================================================================================================
+
+SavingsEntity
+│
+├── id
+├── type
+├── amount
+├── sourceId
+├── entity
+├── paymentType
+├── person
+├── note
+├── date
+├── monthKey
+├── periodKey
+├── createdAt
+└── updatedAt
+
+====================================================================================================
+SOURCE ARCHITECTURE
+====================================================================================================
+
+Income entries act as:
+----------------------------------------------------------------------------------------------------
+Financial Sources
+
+Meaning:
+----------------------------------------------------------------------------------------------------
+Income itself becomes a reusable financial container.
+
+Example:
+----------------------------------------------------------------------------------------------------
+
+Salary ₹50,000
+│
+├── Budget Allocation ₹20,000
+├── Transfer ₹5,000
+├── Settlement Recovery ₹1,000
+│
+└── Remaining ₹26,000
+
+====================================================================================================
+BUDGET PERIOD ARCHITECTURE
+====================================================================================================
+
+Savings module integrates with:
+----------------------------------------------------------------------------------------------------
+Budget Period Module
+
+Through:
+----------------------------------------------------------------------------------------------------
+periodKey
+
+Purpose:
+----------------------------------------------------------------------------------------------------
+Allows:
+✔ period-based savings
+✔ period-based budgets
+✔ scoped analytics
+✔ scoped calculations
+
+IMPORTANT:
+----------------------------------------------------------------------------------------------------
+Budget Period acts as:
+MASTER FINANCIAL CONTEXT
+
+====================================================================================================
+SCOPED DATA ARCHITECTURE
+====================================================================================================
+
+getScopedSavings()
+
+Purpose:
+----------------------------------------------------------------------------------------------------
+Returns ONLY savings related to:
+- active budget period
+OR
+- current month fallback
+
+This prevents:
+----------------------------------------------------------------------------------------------------
+cross-period data pollution
+
+Android Equivalent:
+----------------------------------------------------------------------------------------------------
+SavingsRepository.getScopedSavings()
+
+====================================================================================================
+LOAD SAVINGS ARCHITECTURE
+====================================================================================================
+
+loadSavings()
+
+Purpose:
+----------------------------------------------------------------------------------------------------
+Main dashboard calculation engine.
+
+Responsibilities:
+----------------------------------------------------------------------------------------------------
+✔ Total savings calculation
+✔ Allocated amount calculation
+✔ Available balance calculation
+✔ Daily budget calculation
+✔ History rendering
+
+IMPORTANT:
+----------------------------------------------------------------------------------------------------
+This function acts as:
+SAVINGS DASHBOARD CONTROLLER
+
+Android Equivalent:
+----------------------------------------------------------------------------------------------------
+SavingsDashboardManager
+
+====================================================================================================
+HISTORY ARCHITECTURE
+====================================================================================================
+
+renderSavingsHistory()
+
+Purpose:
+----------------------------------------------------------------------------------------------------
+Renders transaction history.
+
+Displays:
+----------------------------------------------------------------------------------------------------
+✔ Type
+✔ Amount
+✔ Date
+✔ Source
+✔ Payment
+✔ Person
+✔ Notes
+
+Android Equivalent:
+----------------------------------------------------------------------------------------------------
+RecyclerView Adapter
+
+Recommended:
+----------------------------------------------------------------------------------------------------
+SavingsHistoryAdapter
+
+====================================================================================================
+FILTER ARCHITECTURE
+====================================================================================================
+
+handleSavingsFilter()
+
+Supported Filters:
+----------------------------------------------------------------------------------------------------
+today
+week
+month
+period
+all
+
+Purpose:
+----------------------------------------------------------------------------------------------------
+Scoped historical analysis.
+
+Android Equivalent:
+----------------------------------------------------------------------------------------------------
+FilterManager
+or
+SavingsFilterManager
+
+====================================================================================================
+ANALYTICS ARCHITECTURE
+====================================================================================================
+
+loadSavingsGraph()
+
+Purpose:
+----------------------------------------------------------------------------------------------------
+Creates:
+Income vs Expense analytics
+
+Library:
+----------------------------------------------------------------------------------------------------
+Chart.js
+
+Android Equivalent:
+----------------------------------------------------------------------------------------------------
+MPAndroidChart
+
+Android Fragment:
+----------------------------------------------------------------------------------------------------
+SavingsAnalyticsFragment
+
+====================================================================================================
+SOURCE DETAILS ARCHITECTURE
+====================================================================================================
+
+renderSourceDetails()
+
+Purpose:
+----------------------------------------------------------------------------------------------------
+Displays:
+FULL source financial breakdown
+
+Includes:
+----------------------------------------------------------------------------------------------------
+✔ Total
+✔ Used
+✔ Credited
+✔ Remaining
+✔ Related transactions
+
+This acts like:
+----------------------------------------------------------------------------------------------------
+Mini ledger statement screen
+
+Android Equivalent:
+----------------------------------------------------------------------------------------------------
+SavingsDetailsFragment
+
+====================================================================================================
+CATEGORY ARCHITECTURE
+====================================================================================================
+
+Categories represent:
+----------------------------------------------------------------------------------------------------
+Savings ownership or grouping.
+
+Examples:
+----------------------------------------------------------------------------------------------------
+Self
+Family
+Friend
+Company
+Charity
+
+Storage:
+----------------------------------------------------------------------------------------------------
+localStorage.categories
+
+Android Equivalent:
+----------------------------------------------------------------------------------------------------
+CategoryRepository
+
+====================================================================================================
+PERSON ARCHITECTURE
+====================================================================================================
+
+Persons represent:
+----------------------------------------------------------------------------------------------------
+Transfer-related people.
+
+Used for:
+----------------------------------------------------------------------------------------------------
+✔ Borrowing
+✔ Lending
+✔ Settlements
+✔ Transfer tracking
+
+Android Equivalent:
+----------------------------------------------------------------------------------------------------
+PersonRepository
+
+====================================================================================================
+MODAL ARCHITECTURE
+====================================================================================================
+
+HTML MODAL
+----------------------------------------------------------------------------------------------------
+categoryModal
+personModal
+backupModal
+importModal
+splitModal
+
+Android Equivalent:
+----------------------------------------------------------------------------------------------------
+DialogFragment
+
+----------------------------------------------------------------------------------------------------
+HTML MODAL → ANDROID DIALOG MAPPING
+----------------------------------------------------------------------------------------------------
+
+categoryModal
+→ CategoryDialogFragment
+
+personModal
+→ PersonDialogFragment
+
+backupModal
+→ BackupDialogFragment
+
+importModal
+→ ImportDialogFragment
+
+splitModal
+→ SplitAllocationDialogFragment
+
+====================================================================================================
+PDF EXPORT ARCHITECTURE
+====================================================================================================
+
+exportSavingsPDF()
+
+Purpose:
+----------------------------------------------------------------------------------------------------
+Generates financial reports.
+
+Contains:
+----------------------------------------------------------------------------------------------------
+✔ Header
+✔ Transactions
+✔ Summary
+✔ Net balance
+
+Android Equivalent:
+----------------------------------------------------------------------------------------------------
+PdfExportManager
+
+Suggested Android Libraries:
+----------------------------------------------------------------------------------------------------
+iTextPDF
+or
+Android PdfDocument
+
+====================================================================================================
+THEME ARCHITECTURE
+====================================================================================================
+
+Theme Source:
+----------------------------------------------------------------------------------------------------
+localStorage.theme
+
+Applied Using:
+----------------------------------------------------------------------------------------------------
+CSS Variable:
+--theme
+
+Android Equivalent:
+----------------------------------------------------------------------------------------------------
+ThemeManager
+
+IMPORTANT:
+----------------------------------------------------------------------------------------------------
+NO HARDCODED COLORS
+
+Android must support:
+----------------------------------------------------------------------------------------------------
+✔ Dynamic accent colors
+✔ HEX colors
+✔ Runtime updates
+✔ Theme persistence
+
+====================================================================================================
+NAVIGATION ARCHITECTURE
+====================================================================================================
+
+showSavingsScreen()
+
+Purpose:
+----------------------------------------------------------------------------------------------------
+Internal screen router.
+
+Controls:
+----------------------------------------------------------------------------------------------------
+✔ Dashboard
+✔ Graph
+✔ Income Details
+✔ History
+
+Android Equivalent:
+----------------------------------------------------------------------------------------------------
+NavController
+or
+Fragment navigation
+
+IMPORTANT:
+----------------------------------------------------------------------------------------------------
+Each HTML screen should become:
+ONE Fragment
+
+====================================================================================================
+ANDROID MIGRATION ARCHITECTURE
+====================================================================================================
+
+Recommended Android Feature Structure:
+----------------------------------------------------------------------------------------------------
+
+features/
+└── savings/
+     ├── adapters/
+     ├── data/
+     ├── domain/
+     ├── models/
+     └── ui/
+
+====================================================================================================
+ANDROID CLASS MAPPING
+====================================================================================================
+
+HTML / JS
+----------------------------------------------------------------------------------------------------
+loadSavings()
+→ SavingsDashboardManager
+
+addSavings()
+→ SavingsManager
+
+createSavingsEntry()
+→ SavingsEntryFactory
+
+renderSavingsHistory()
+→ SavingsHistoryAdapter
+
+loadSavingsGraph()
+→ SavingsAnalyticsManager
+
+renderSourceDetails()
+→ SavingsDetailsManager
+
+====================================================================================================
+ANDROID FRAGMENT MAPPING
+====================================================================================================
+
+Savings Dashboard
+→ SavingsDashboardFragment
+
+Savings History
+→ SavingsHistoryFragment
+
+Savings Analytics
+→ SavingsAnalyticsFragment
+
+Savings Details
+→ SavingsDetailsFragment
+
+====================================================================================================
+IMPORTANT ENGINEERING RULES
+====================================================================================================
+
+1.
+DO NOT place financial calculations inside UI.
+
+2.
+Fragments should ONLY render data.
+
+3.
+Business logic belongs inside:
+- Managers
+- Domain layer
+- Repositories
+
+4.
+RecyclerView replaces:
+dynamic HTML list rendering.
+
+5.
+DialogFragment replaces:
+HTML modals.
+
+6.
+Room Database should replace:
+localStorage.
+
+7.
+ThemeManager should replace:
+CSS variables.
+
+8.
+Every transaction MUST contain:
+periodKey OR monthKey
+
+9.
+Savings must remain isolated from:
+Expense internal logic.
+
+10.
+Budget Period acts as:
+Global financial scope controller.
+
+====================================================================================================
+FUTURE SCALING CAPABILITIES
+====================================================================================================
+
+This architecture already supports:
+----------------------------------------------------------------------------------------------------
+✔ Multi-period accounting
+✔ Source accounting
+✔ Ledger tracking
+✔ Settlement workflows
+✔ Budget allocations
+✔ Analytics
+✔ PDF exports
+✔ Dynamic theming
+✔ Multi-user tracking
+
+Meaning:
+----------------------------------------------------------------------------------------------------
+The architecture is scalable enough for:
+- production Android app
+- finance SaaS
+- advanced accounting workflows
+
+====================================================================================================
+AUTHOR NOTES
+====================================================================================================
+
+Architecture Designed By:
+----------------------------------------------------------------------------------------------------
+Gopichanime 🐉
+
+Purpose:
+----------------------------------------------------------------------------------------------------
+To maintain synchronized:
+✔ HTML architecture
+✔ Android architecture
+✔ Business workflows
+✔ Financial logic
+
+====================================================================================================
+END OF SAVINGS MODULE DOCUMENTATION
+====================================================================================================
+*/
+// Savings Module Start savings.js
 document.addEventListener("DOMContentLoaded", () => {
     try {
         console.log("DOM ready ✅");
@@ -34,6 +788,7 @@ window.addEventListener("load", function () {
     loadPersonOptions();
     renderCategoryList();
     renderPersonList();
+    loadSettlementOptions();
     setTimeout(() => {
         loadSavings();
     }, 50);
@@ -124,7 +879,8 @@ function createSavingsEntry({
         periodKey: periodKey || null,    // new system
 
         createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
+        updatedAt: new Date().toISOString(),
+        attachmentId: obj.attachmentId || null
     };
 }
 
@@ -132,7 +888,7 @@ function createSavingsEntry({
 // ➕ ADD ENTRY
 // =========================
 // Handles adding income, transfer, or budget allocation into savings ledger
-function addSavings() {
+async function addSavings() {
 
     // =========================
     // 📥 INPUTS
@@ -152,30 +908,42 @@ function addSavings() {
     }
 
     // =========================
-    // 📅 DATE HANDLING
+    // 📅 DATE HANDLING (FIXED)
     // =========================
-    let selectedDate;
+    let date;
 
     if (!dateInput) {
-        selectedDate = new Date();
-    } else {
-        let inputDate = new Date(dateInput);
-        let today = new Date();
 
-        if (inputDate.toDateString() === today.toDateString()) {
-            selectedDate = new Date(); // now
+        // current exact datetime
+        date = new Date().toISOString();
+
+    } else {
+
+        let todayStr = new Date().toISOString().split("T")[0];
+
+        // today's transaction → keep current time
+        if (dateInput === todayStr) {
+
+            date = new Date().toISOString();
+
         } else {
-            selectedDate = new Date(inputDate);
-            selectedDate.setHours(23, 59, 59, 999); // EOD
+
+            // preserve exact selected date
+            date = `${dateInput}T12:00:00`;
         }
     }
 
-    const date = new Date(
-        selectedDate.getTime() - selectedDate.getTimezoneOffset() * 60000
-    ).toISOString();
-
     let data = getSavings();
 
+    // centralize attachment storage for this save flow
+    const sAttachmentId = await (window.storeAttachmentFromInput ? storeAttachmentFromInput('sAttachment') : (async ()=>{
+        const fileInput = document.getElementById('sAttachment');
+        const file = fileInput && fileInput.files && fileInput.files[0] ? fileInput.files[0] : null;
+        if(!file) return null;
+        const store = window.reMoAttachments && window.reMoAttachments.storeImage ? window.reMoAttachments.storeImage : (window.reMoAttachmentsIndexed && window.reMoAttachmentsIndexed.storeImage);
+        if(!store) return null;
+        try{ const res = await store(null,file); return res && res.id ? res.id : null; }catch(e){console.warn('Attachment save failed',e); return null; }
+    })());
     // =========================
     // 💰 INCOME
     // =========================
@@ -189,7 +957,7 @@ function addSavings() {
             note,
             date
         });
-
+        if(sAttachmentId) entry.attachmentId = sAttachmentId;
         data.push(entry);
     }
 
@@ -216,10 +984,88 @@ function addSavings() {
             note,
             date
         });
-
+        if(sAttachmentId) entry.attachmentId = sAttachmentId;
         data.push(entry);
     }
+    // =========================
+    // 💸 SETTLEMENT / RETURN
+    // =========================
+    else if (type === "settlement") {
 
+        const settlementSelect =
+            document.getElementById("settlementSelect");
+
+        const transferId =
+            String(settlementSelect?.value || "");
+
+        if (!transferId) {
+
+            showToast(
+                "Select pending transfer ❗",
+                "warning"
+            );
+
+            return;
+        }
+
+        // 🔥 find original transfer
+        let originalTransfer = data.find(
+            t => String(t.id) === transferId
+        );
+
+        if (!originalTransfer) {
+
+            showToast(
+                "Original transfer not found ❗",
+                "error"
+            );
+
+            return;
+        }
+        // 🔥 prevent over settlement
+        let alreadySettled = data
+            .filter(s =>
+                s.type === "settlement" &&
+                String(s.linkedTransactionId) === String(originalTransfer.id)
+            )
+            .reduce((sum, s) => sum + Math.abs(s.amount), 0);
+
+        let pending =
+            Math.abs(originalTransfer.amount) - alreadySettled;
+
+        if (amount > pending) {
+
+            showToast(
+                `Only ₹${pending} pending ❗`,
+                "warning"
+            );
+
+            return;
+        }
+
+        const entry = createSavingsEntry({
+
+            type: "settlement",
+
+            amount: Math.abs(amount),
+
+            sourceId: originalTransfer.sourceId,
+
+            person: originalTransfer.person,
+
+            entity,
+            payment,
+            note,
+
+            date
+        });
+
+        // 🔥 link settlement
+        entry.linkedTransactionId = originalTransfer.id;
+
+        await attachFileToEntry(entry);
+        data.push(entry);
+    }
     // =========================
     // 📦 BUDGET ALLOCATION
     // =========================
@@ -249,20 +1095,19 @@ function addSavings() {
             payment,
             note,
             date,
-            person: "Self" // ✅ enforced
+            person: "Self"
         });
 
+        await attachFileToEntry(entry);
         data.push(entry);
 
-        // 🔥 update budget AFTER push
         createOrUpdateBudget(budgetId, entry);
     }
 
     // =========================
     // 💾 SAVE + UI
     // =========================
-    console.log("Selected Date:", selectedDate);
-    console.log("ISO Date:", date);
+    console.log("Final Date:", date);
 
     saveSavings(data);
     loadSavings();
@@ -290,14 +1135,17 @@ function createOrUpdateBudget(budgetId, entry) {
     let fallbackMonth = entry.monthKey || (entry.date ? entry.date.slice(0, 7) : null);
 
     // 🔥 Find existing budget (PERIOD-FIRST MATCH)
-    let existing = budgets.find(b =>
-        b.budgetId === budgetId &&
-        b.entity === entry.entity &&
-        (
-            (periodKey && b.periodKey === periodKey) ||
-            (!periodKey && b.monthKey === fallbackMonth)
-        )
-    );
+    // Match by generated budgetId OR legacyId OR by sourceId+period+entity (best-effort)
+    let existing = budgets.find(b => {
+        const samePeriod = periodKey ? b.periodKey === periodKey : b.monthKey === fallbackMonth;
+
+        if ((b.budgetId && b.budgetId === budgetId) || (b.legacyId && b.legacyId === budgetId)) return b.entity === entry.entity && samePeriod;
+
+        // fallback: match by source + period + entity
+        if (b.sourceId === entry.sourceId && b.entity === entry.entity && samePeriod) return true;
+
+        return false;
+    });
 
     if (existing) {
 
@@ -316,28 +1164,38 @@ function createOrUpdateBudget(budgetId, entry) {
 
     } else {
 
-        // 🔥 Create new budget (PERIOD FIRST)
-        budgets.push({
-            id: Date.now(),
-            type: "budget",
+            // 🔥 Create new budget (PERIOD FIRST)
+            // Ensure globally-unique budgetId while keeping legacy traceability
+            const uid = (typeof crypto !== "undefined" && crypto.randomUUID) ? crypto.randomUUID() : `${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
 
-            budgetId,
-            sourceId: entry.sourceId,
+            const generatedBudgetId = `budget_${periodKey || fallbackMonth}_${entry.sourceId || 'manual'}_${uid}`;
 
-            totalAllocated: Math.abs(entry.amount),
+            budgets.push({
+                id: Date.now(),
+                type: "budget",
 
-            entity: entry.entity,
+                // store generated unique id
+                budgetId: generatedBudgetId,
 
-            note: entry.note || "",
-            date: entry.date || new Date().toISOString(),
+                // preserve original id for migration/traceability if provided
+                legacyId: budgetId || null,
 
-            // 🔥 CORE CHANGE
-            periodKey: periodKey || null,
-            monthKey: periodKey ? null : fallbackMonth, // fallback only
+                sourceId: entry.sourceId,
 
-            createdAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString()
-        });
+                totalAllocated: Math.abs(entry.amount),
+
+                entity: entry.entity,
+
+                note: entry.note || "",
+                date: entry.date || new Date().toISOString(),
+
+                // 🔥 CORE CHANGE
+                periodKey: periodKey || null,
+                monthKey: periodKey ? null : fallbackMonth, // fallback only
+
+                createdAt: new Date().toISOString(),
+                updatedAt: new Date().toISOString()
+            });
     }
 
     localStorage.setItem("budgets", JSON.stringify(budgets));
@@ -380,16 +1238,16 @@ function loadSavings() {
     let dailyEl = document.getElementById("dailyBudget");
     if (dailyEl) dailyEl.innerText = "₹ " + daily.toFixed(2);
     // 🔥 MERGED FILTER (period + fallback)
-    let filtered = data.filter(t => {
-        if (periodKey) {
-            return (
-                t.periodKey === periodKey ||
-                (!t.periodKey && t.monthKey === currentMonth)
-            );
-        }
-        return t.monthKey === currentMonth;
-    });
-
+    // let filtered = data.filter(t => {
+    //     if (periodKey) {
+    //         return (
+    //             t.periodKey === periodKey ||
+    //             (!t.periodKey && t.monthKey === currentMonth)
+    //         );
+    //     }
+    //     return t.monthKey === currentMonth;
+    // });
+    let filtered = [...data];
     // 🔥 CALCULATIONS
     let total = filtered.reduce((sum, t) => sum + t.amount, 0);
 
@@ -464,32 +1322,45 @@ function renderSavingsHistory(data) {
         let labelMap = {
             income: "💰 Income",
             transfer: "🔁 Transfer",
-            budget_allocation: "📦 Budget"
+            budget_allocation: "📦 Budget",
+            settlement: "💸 Settlement"
         };
 
         let label = labelMap[t.type] || t.type;
         let color = t.amount < 0 ? "red" : "green";
 
         div.innerHTML = `
-    <div>
+    <div style="display:flex;gap:8px;align-items:center;">
+      <div class="expense-thumb" data-attachment-id="${t.attachmentId||''}">
+        ${t.attachmentId?'<img class="remo-attachment-thumb" src="" alt="attachment" />':''}
+      </div>
+      <div>
         <strong>${t.note || t.person || "Entry"}</strong><br>
         <small>
             ${label} • ${t.sourceName || t.note || t.entity || "-"} • ${t.paymentType || t.payment || "-"} • 
             ${new Date(t.date).toLocaleString()}
         </small>
+      </div>
     </div>
 
     <div style="display:flex; align-items:center; gap:10px;">
-        <span style="color:${color}; font-weight:600;">
-            ₹${Math.abs(t.amount)}
-        </span>
-
-        <button class="delete-btn"
-                style="background:none; border:none; cursor:pointer; font-size:16px;">
-            🗑
-        </button>
+        <span style="color:${color}; font-weight:600;">₹${Math.abs(t.amount)}</span>
+        <button class="delete-btn" style="background:none; border:none; cursor:pointer; font-size:16px;">🗑</button>
     </div>
 `;
+
+        if (t.attachmentId) {
+            const thumbEl = div.querySelector('.remo-attachment-thumb');
+            if(thumbEl){
+                const loader = window.reMoAttachments && window.reMoAttachments.getThumbnailUrl ? window.reMoAttachments.getThumbnailUrl : (window.reMoAttachmentsIndexed && window.reMoAttachmentsIndexed.getThumbnailUrl);
+                if(loader){ loader(t.attachmentId).then(src=>{ if(src) thumbEl.src = src; }).catch(()=>{}); }
+                else {
+                    const prev = window.reMoAttachments && window.reMoAttachments.getPreview ? window.reMoAttachments.getPreview(t.attachmentId) : null;
+                    if(prev) thumbEl.src = prev;
+                }
+                thumbEl.addEventListener('click', async (e)=>{ e.stopPropagation(); const loaderFull = window.reMoAttachments && window.reMoAttachments.getImageUrl ? window.reMoAttachments.getImageUrl : (window.reMoAttachmentsIndexed && window.reMoAttachmentsIndexed.getImageUrl); if(loaderFull){ const src = await loaderFull(t.attachmentId); if(src) openAttachmentViewer(src); } });
+            }
+        }
 
         // 🔥 attach event
         let btn = div.querySelector(".delete-btn");
@@ -575,11 +1446,11 @@ function loadSourceOptions({
     let currentMonth = now.toISOString().slice(0, 7);
 
     // 🔥 FILTER BASE
-    let scoped = data.filter(t => {
-        if (periodKey) return t.periodKey === periodKey;
-        return t.monthKey === currentMonth;
-    });
-
+    // let scoped = data.filter(t => {
+    //     if (periodKey) return t.periodKey === periodKey;
+    //     return t.monthKey === currentMonth;
+    // });
+    let scoped = [...data];
     let sources = scoped.filter(t => t.type === "income");
 
     select.innerHTML = "<option value=''>Select Source</option>";
@@ -663,12 +1534,27 @@ function handleSavingsFilter(type) {
     // =========================
     // 🧱 BASE DATA (PERIOD FIRST)
     // =========================
-    let baseData = data.filter(t => {
-        if (periodKey) return t.periodKey === periodKey;
+    let baseData;
 
-        let currentMonth = now.toISOString().slice(0, 7);
-        return t.monthKey === currentMonth;
-    });
+    // 🔥 TRUE ALL DATA
+    if (type === "all") {
+
+        baseData = [...data];
+
+    } else {
+
+        // normal scoped filtering
+        baseData = data.filter(t => {
+
+            if (periodKey) {
+                return t.periodKey === periodKey;
+            }
+
+            let currentMonth = now.toISOString().slice(0, 7);
+
+            return t.monthKey === currentMonth;
+        });
+    }
 
     // =========================
     // 🧠 SAFE DATE PARSER
@@ -874,7 +1760,7 @@ function getSourceSummary(sourceId) {
 function renderSourceDetails(sourceId) {
 
     // 🔥 SINGLE SOURCE OF TRUTH
-    let scoped = getScopedSavings();
+    let scoped = getSavings() || [];
 
     let incomeId = String(sourceId);
 
@@ -921,7 +1807,8 @@ function renderSourceDetails(sourceId) {
             let labelMap = {
                 transfer: "🔁 Transfer",
                 budget_allocation: "📦 Budget",
-                income: "💰 Income"
+                income: "💰 Income",
+                settlement: "💸 Settlement"
             };
 
             let label = labelMap[t.type] || t.type;
@@ -1002,25 +1889,23 @@ function renderIncomeList() {
     let now = new Date();
     let currentMonth = now.toISOString().slice(0, 7);
 
-    // 🔥 CONSISTENT PERIOD FILTER
-    let scoped = data.filter(t => {
-        if (periodKey) return t.periodKey === periodKey;
-        return t.monthKey === currentMonth;
-    });
+    // 🔥 GLOBAL SOURCES
+    let scoped = [...data];
 
-    let incomes = scoped.filter(t => t.type === "income");
+    // all income sources from all periods
+    let sources = scoped.filter(t => t.type === "income");
 
     let container = document.getElementById("incomeList");
     if (!container) return;
 
     container.innerHTML = "";
 
-    if (!incomes.length) {
+    if (!sources.length) {
         container.innerHTML = `<p style="color:#888;">No income sources yet</p>`;
         return;
     }
 
-    incomes.slice().reverse().forEach(i => {
+    sources.slice().reverse().forEach(i => {
 
         let used = scoped
             .filter(t => String(t.sourceId) === String(i.id) && t.amount < 0)
@@ -1082,31 +1967,39 @@ function closeSavingsModal() {
 
 // Controls UI fields based on selected type (income / transfer / budget)
 function handleSavingsTypeChange() {
+
     let type = document.getElementById("sType").value;
 
     let source = document.getElementById("sourceWrapper");
     let budget = document.getElementById("budgetConfig");
     let personField = document.getElementById("personWrapper");
+    let settlement = document.getElementById("settlementWrapper");
 
-    // 👤 PERSON
+    // reset
+    source.style.display = "none";
+    budget.style.display = "none";
+    personField.style.display = "none";
+    settlement.style.display = "none";
+
+    // 🔁 TRANSFER
     if (type === "transfer") {
+
+        source.style.display = "block";
         personField.style.display = "block";
-    } else {
-        personField.style.display = "none";
     }
 
-    // 🔗 SOURCE + BUDGET
-    if (type === "transfer") {
-        source.style.display = "block";
-        budget.style.display = "none";
+    // 📦 BUDGET
+    else if (type === "withdraw_budget") {
 
-    } else if (type === "withdraw_budget") {
         source.style.display = "block";
-        budget.style.display = "none";
+    }
 
-    } else {
-        source.style.display = "none";
-        budget.style.display = "none";
+    // 💸 SETTLEMENT
+    else if (type === "settlement") {
+
+        settlement.style.display = "block";
+
+        loadSettlementOptions();
     }
 }
 
@@ -1767,25 +2660,51 @@ window.addEventListener("DOMContentLoaded", function () {
 function goToBudgetPeriods() {
     window.location.href = "../pages/budgetperiod.html";
 }
+// function getScopedSavings() {
+//     let data = getSavings() || [];
+
+//     let periodKey = typeof getActivePeriodKey === "function"
+//         ? getActivePeriodKey()
+//         : null;
+
+//     let now = new Date();
+//     let currentMonth = now.toISOString().slice(0, 7);
+
+//     return data.filter(t => {
+//         if (periodKey) {
+//             return (
+//                 t.periodKey === periodKey ||
+//                 (!t.periodKey && t.monthKey === currentMonth)
+//             );
+//         }
+//         return t.monthKey === currentMonth;
+//     });
+// }
+
 function getScopedSavings() {
+
     let data = getSavings() || [];
 
-    let periodKey = typeof getActivePeriodKey === "function"
-        ? getActivePeriodKey()
-        : null;
+    let periodKey =
+        typeof getActivePeriodKey === "function"
+            ? getActivePeriodKey()
+            : null;
 
-    let now = new Date();
-    let currentMonth = now.toISOString().slice(0, 7);
+    // 🔥 NO ACTIVE PERIOD
+    if (!periodKey) {
 
-    return data.filter(t => {
-        if (periodKey) {
-            return (
-                t.periodKey === periodKey ||
-                (!t.periodKey && t.monthKey === currentMonth)
-            );
-        }
-        return t.monthKey === currentMonth;
-    });
+        let currentMonth =
+            new Date().toISOString().slice(0, 7);
+
+        return data.filter(t =>
+            t.monthKey === currentMonth
+        );
+    }
+
+    // 🔥 ACTIVE PERIOD EXISTS
+    return data.filter(t =>
+        t.periodKey === periodKey
+    );
 }
 
 function getActiveBudgetPeriodFull() {
@@ -1830,3 +2749,53 @@ function getDailyBudget() {
 
     return total / days;
 }
+
+
+function loadSettlementOptions() {
+
+    let select = document.getElementById("settlementSelect");
+
+    if (!select) return;
+
+    let data = getSavings() || [];
+
+    select.innerHTML =
+        "<option value=''>Select Pending Transfer</option>";
+
+    // 🔥 only transfers
+    let transfers = data.filter(t => t.type === "transfer");
+
+    transfers.forEach(t => {
+
+        // total settled against this transfer
+        let settled = data
+            .filter(s =>
+                s.type === "settlement" &&
+                String(s.linkedTransactionId) === String(t.id)
+            )
+            .reduce((sum, s) => sum + Math.abs(s.amount), 0);
+
+        let original = Math.abs(t.amount);
+
+        let pending = original - settled;
+
+        // skip fully settled
+        if (pending <= 0) return;
+
+        let option = document.createElement("option");
+
+        option.value = t.id;
+
+        option.textContent =
+            `${t.person || "Unknown"} — ${t.note || "Transfer"} — ₹${pending} pending`;
+
+        // 🔥 metadata
+        option.dataset.sourceId = t.sourceId;
+        option.dataset.person = t.person || "";
+        option.dataset.pending = pending;
+
+        select.appendChild(option);
+    });
+}
+
+// Savings Module End Savings.js

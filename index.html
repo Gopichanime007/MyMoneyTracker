@@ -121,6 +121,16 @@
           <option value="Bank Transfer">Bank Transfer</option>
         </select>
 
+        </div>
+        <!-- Attachment -->
+        <label style="margin-top:8px;display:block">Attach Receipt (optional)</label>
+        <div style="display:flex;gap:8px;align-items:center;"> 
+          <input id="expenseAttachment" type="file" accept="image/*" capture="environment" style="flex:1" />
+          <button type="button" id="expenseAttachmentRemove" style="background:none;border:none;cursor:pointer;display:none">Remove</button>
+        </div>
+        <div id="expenseAttachmentPreviewWrapper" style="margin-top:8px;display:none">
+          <img id="expenseAttachmentPreview" src="" style="width:64px;height:64px;border-radius:8px;object-fit:cover;cursor:pointer" />
+        </div>
         <button type="button" class="primary" onclick="saveExpense()">Save</button>
       </div>
     </section>
