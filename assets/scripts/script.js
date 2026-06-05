@@ -2279,6 +2279,7 @@ function changeTheme(c) {
     localStorage.setItem("theme", color);
     localStorage.setItem("accentColor", color);
     document.documentElement.style.setProperty("--theme", color);
+    document.documentElement.style.setProperty("--accent-color", color);
     syncThemeSelectors();
 }
 
@@ -3904,6 +3905,15 @@ function getRuntimeDiagnostics() {
     let isAndroid = /Android/i.test(ua);
     let isWebView = /;\s?wv\)|\bwv\b|WebView|Version\/\d+\.\d+\s+Chrome\/\d+/i.test(ua);
     let hasNotification = typeof window !== "undefined" && ("Notification" in window);
+    let webShareFiles = false;
+
+    try {
+        if (typeof navigator !== "undefined" && typeof navigator.share === "function" && typeof navigator.canShare === "function" && typeof File !== "undefined") {
+            webShareFiles = !!navigator.canShare({ files: [new File(["x"], "x.txt", { type: "text/plain" })] });
+        }
+    } catch (_err) {
+        webShareFiles = false;
+    }
 
     return {
         userAgent: ua,
@@ -3915,7 +3925,8 @@ function getRuntimeDiagnostics() {
         pushManagerApi: typeof window !== "undefined" && ("PushManager" in window),
         beforeinstallprompt: beforeInstallPromptDetected || (typeof window !== "undefined" && "onbeforeinstallprompt" in window),
         downloadAttribute: "download" in document.createElement("a"),
-        showSaveFilePicker: typeof window !== "undefined" && typeof window.showSaveFilePicker === "function"
+        showSaveFilePicker: typeof window !== "undefined" && typeof window.showSaveFilePicker === "function",
+        webShareFiles
     };
 }
 
@@ -4151,6 +4162,10 @@ try {
     window.requestNotificationPermissionFromSettings = requestNotificationPermissionFromSettings;
     window.applyNotificationSettings = applyNotificationSettings;
     window.refreshSettingsPanels = refreshSettingsPanels;
+    window.changeTheme = changeTheme;
+    window.setAppearanceMode = setAppearanceMode;
+    window.loadTheme = loadTheme;
+    window.injectGlobalFooter = injectGlobalFooter;
 } catch (e) {
     // ignore non-browser contexts
 }
@@ -7155,14 +7170,17 @@ function updateProgressBar() {
 */
 
 function injectGlobalFooter() {
+    if (document.getElementById("appSignatureFooter")) return;
+
     const year = new Date().getFullYear(); // ✅ dynamic year
 
     const footer = document.createElement("div");
+    footer.id = "appSignatureFooter";
     footer.className = "app-signature";
 
     footer.innerHTML = `
-        <div>Developed by <strong>Gopichaninme</strong></div>
-        <small style="opacity:0.7;">© ${year} All rights reserved</small>
+        <div class="app-signature-title">Developed by <strong>Gopichaninme</strong></div>
+        <small class="app-signature-meta">© ${year} All rights reserved</small>
     `;
 
     document.querySelector(".app")?.appendChild(footer);
@@ -8733,11 +8751,18 @@ function getSafeDate(dateInput = new Date()) {
 
 async function downloadBlobWithBestEffort(blob, filename) {
     let runtime = getRuntimeDiagnostics();
+    let safeFilename = String(filename || "MoneyTracker_Backup.json").replace(/[\\/:*?"<>|]+/g, "_");
+
+    if (!safeFilename.endsWith(".json")) {
+        safeFilename = `${safeFilename}.json`;
+    }
 
     if (typeof window.showSaveFilePicker === "function") {
         try {
             let handle = await window.showSaveFilePicker({
-                suggestedName: filename,
+                id: "moneytracker-backups",
+                startIn: "downloads",
+                suggestedName: safeFilename,
                 types: [{
                     description: "JSON backup",
                     accept: { "application/json": [".json"] }
@@ -8746,17 +8771,33 @@ async function downloadBlobWithBestEffort(blob, filename) {
             let writable = await handle.createWritable();
             await writable.write(blob);
             await writable.close();
+            updateAutoBackupRuntimeState("Backup export used file picker with pre-filled filename.");
             return "file-picker";
         } catch (_err) {
             // continue to next fallback
         }
     }
 
+    if (runtime.isAndroid && runtime.webShareFiles && typeof navigator !== "undefined" && typeof navigator.share === "function" && typeof File !== "undefined") {
+        try {
+            const exportFile = new File([blob], safeFilename, { type: "application/json" });
+            await navigator.share({
+                title: "MoneyTracker Backup",
+                text: "MoneyTracker backup export",
+                files: [exportFile]
+            });
+            updateAutoBackupRuntimeState("Backup export used Android share sheet with generated filename.");
+            return "web-share-file";
+        } catch (_err) {
+            // continue to download attribute fallback
+        }
+    }
+
     let url = URL.createObjectURL(blob);
     let a = document.createElement("a");
     a.href = url;
-    a.download = filename || "MoneyTracker_Backup.json";
-    a.setAttribute("download", filename || "MoneyTracker_Backup.json");
+    a.download = safeFilename;
+    a.setAttribute("download", safeFilename);
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
@@ -8765,8 +8806,10 @@ async function downloadBlobWithBestEffort(blob, filename) {
         URL.revokeObjectURL(url);
     }, 1000);
 
-    if (runtime.isAndroid && runtime.isWebView && !runtime.showSaveFilePicker) {
-        showToast("Android WebView may ignore suggested filename in Save dialog", "warning");
+    if (runtime.isAndroid && runtime.isWebView && !runtime.showSaveFilePicker && !runtime.webShareFiles) {
+        updateAutoBackupRuntimeState("Android WebIntoApp runtime may ignore suggested filename in save dialog. This is a runtime limitation.");
+    } else {
+        updateAutoBackupRuntimeState("Backup export used browser download with generated filename.");
     }
 
     return "download-attribute";
@@ -8801,7 +8844,13 @@ async function exportDataAsJSON() {
 
         let safe = getSafeDate();
         let filename = safe ? `MoneyTracker_${safe}.json` : "MoneyTracker_Backup.json";
-        await downloadBlobWithBestEffort(blob, filename);
+        let method = await downloadBlobWithBestEffort(blob, filename);
+        window.__lastBackupExportStatus = {
+            filename,
+            method,
+            runtime: getRuntimeDiagnostics(),
+            generatedAt: new Date().toISOString()
+        };
         showToast(`Backup exported: ${filename}`, "success");
 
         console.log(
@@ -8881,6 +8930,42 @@ function refreshAutoBackupSettingsUI() {
 
     if (lastRun) lastRun.textContent = `Last Backup: ${formatDateTimeLabel(last)}`;
     if (nextRun) nextRun.textContent = `Next Scheduled Backup: ${next ? formatDateTimeLabel(next) : "Not available"}`;
+
+    const snapshots = ["daily", "weekly", "monthly"].filter((key) => !!localStorage.getItem(`autoBackup_${key}`)).length;
+    const retention = document.getElementById("autoBackupRetentionState");
+    if (retention) {
+        retention.textContent = `Retention: ${snapshots} snapshot bucket(s) stored locally (daily/weekly/monthly).`;
+    }
+
+    updateAutoBackupRuntimeState();
+}
+
+function updateAutoBackupRuntimeState(forcedText) {
+    const el = document.getElementById("autoBackupRuntimeState");
+    if (!el) return;
+
+    if (forcedText) {
+        el.textContent = forcedText;
+        return;
+    }
+
+    const runtime = getRuntimeDiagnostics();
+    if (runtime.showSaveFilePicker) {
+        el.textContent = "Export runtime: file picker supported (pre-filled generated filename).";
+        return;
+    }
+
+    if (runtime.isAndroid && runtime.webShareFiles) {
+        el.textContent = "Export runtime: Android share-sheet fallback available with generated filename.";
+        return;
+    }
+
+    if (runtime.isAndroid && runtime.isWebView) {
+        el.textContent = "Export runtime: Android WebIntoApp uses browser download fallback; filename prompt behavior depends on runtime.";
+        return;
+    }
+
+    el.textContent = "Export runtime: browser download attribute with generated filename.";
 }
 
 function applyAutoBackupSettings() {

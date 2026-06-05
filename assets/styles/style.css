@@ -1,5 +1,6 @@
 :root {
   --theme: #4caf50;
+  --accent-color: var(--theme);
   --bg: #f4f6fb;
   --surface: #ffffff;
   --surface-alt: #f8fafc;
@@ -25,6 +26,15 @@
 
   --theme-strong: color-mix(in srgb, var(--theme), black 16%);
   --theme-soft: color-mix(in srgb, var(--theme), white 76%);
+  --card-bg-start: var(--surface);
+  --card-bg-end: color-mix(in srgb, var(--surface), var(--accent-color) 4%);
+  --card-border: color-mix(in srgb, var(--border), var(--accent-color) 8%);
+  --control-bg: color-mix(in srgb, var(--surface), var(--accent-color) 8%);
+  --card-finish-overlay: linear-gradient(145deg, rgba(255, 255, 255, 0.2), rgba(255, 255, 255, 0.01) 58%);
+  --dash-finish-filter: saturate(1.03) contrast(1.01);
+  --footer-bg: linear-gradient(145deg, color-mix(in srgb, var(--accent-color), #111827 66%), color-mix(in srgb, var(--accent-color), #1f2937 62%));
+  --footer-text: #f8fafc;
+  --footer-muted: color-mix(in srgb, var(--footer-text), transparent 24%);
   --ok: color-mix(in srgb, var(--theme), #1f9d55 45%);
   --warn: color-mix(in srgb, var(--theme), #f59e0b 62%);
   --danger: color-mix(in srgb, var(--theme), #dc2626 68%);
@@ -34,21 +44,41 @@
 :root[data-appearance="metallic"] {
   --surface: #f7fafc;
   --surface-alt: #e2e8f0;
+  --card-bg-start: color-mix(in srgb, var(--surface), #ffffff 28%);
+  --card-bg-end: color-mix(in srgb, var(--accent-color), #cbd5e1 84%);
+  --control-bg: color-mix(in srgb, var(--surface), var(--accent-color) 11%);
+  --card-finish-overlay: linear-gradient(135deg, rgba(255, 255, 255, 0.28), rgba(255, 255, 255, 0.02) 56%);
+  --dash-finish-filter: saturate(1.12) contrast(1.04);
 }
 
 :root[data-appearance="matte"] {
   --surface: #faf7f2;
   --surface-alt: #efe6da;
+  --card-bg-start: color-mix(in srgb, var(--surface), #f6f0e7 42%);
+  --card-bg-end: color-mix(in srgb, var(--accent-color), #efe6da 90%);
+  --control-bg: color-mix(in srgb, var(--surface), #efe6da 26%);
+  --card-finish-overlay: linear-gradient(165deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.01) 62%);
+  --dash-finish-filter: saturate(0.9) contrast(0.96);
 }
 
 :root[data-appearance="glossy"] {
   --surface: #ffffff;
   --surface-alt: #f3f6ff;
+  --card-bg-start: color-mix(in srgb, var(--surface), #ffffff 36%);
+  --card-bg-end: color-mix(in srgb, var(--accent-color), #eef2ff 86%);
+  --control-bg: color-mix(in srgb, var(--surface), var(--accent-color) 10%);
+  --card-finish-overlay: linear-gradient(180deg, rgba(255, 255, 255, 0.4), rgba(255, 255, 255, 0.01) 48%);
+  --dash-finish-filter: saturate(1.2) contrast(1.1);
 }
 
 :root[data-appearance="chromium"] {
   --surface: #f4f7fb;
   --surface-alt: #dce3ee;
+  --card-bg-start: color-mix(in srgb, var(--surface), #f8fafc 32%);
+  --card-bg-end: color-mix(in srgb, var(--accent-color), #dce3ee 88%);
+  --control-bg: color-mix(in srgb, var(--surface), #dce3ee 34%);
+  --card-finish-overlay: linear-gradient(128deg, rgba(255, 255, 255, 0.34), rgba(186, 200, 217, 0.24) 42%, rgba(255, 255, 255, 0.02) 72%);
+  --dash-finish-filter: saturate(1.08) contrast(1.06);
 }
 
 * {
@@ -136,12 +166,21 @@ h4 {
 
 .card {
   position: relative;
-  background: linear-gradient(155deg, var(--surface), color-mix(in srgb, var(--surface), var(--theme) 4%));
-  border: 1px solid color-mix(in srgb, var(--border), var(--theme) 8%);
+  background: linear-gradient(155deg, var(--card-bg-start), var(--card-bg-end));
+  border: 1px solid var(--card-border);
   border-radius: var(--radius-xl);
   padding: var(--space-lg);
   margin-bottom: var(--space-lg);
   box-shadow: var(--shadow-md);
+  overflow: hidden;
+}
+
+.card::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: var(--card-finish-overlay);
+  pointer-events: none;
 }
 
 .card > * + * {
@@ -159,6 +198,7 @@ h4 {
   padding: 14px;
   color: #fff;
   box-shadow: var(--shadow-sm);
+  filter: var(--dash-finish-filter);
 }
 
 .dash-card span {
@@ -271,8 +311,39 @@ button:active {
   margin-top: var(--space-md);
   padding: 12px;
   color: var(--text);
-  background: color-mix(in srgb, var(--surface), var(--theme) 8%);
+  background: var(--control-bg);
   box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--border), var(--theme) 8%);
+}
+
+.app-signature {
+  margin-top: 4px;
+  margin-bottom: 10px;
+  padding: 12px 14px;
+  border-radius: var(--radius-lg);
+  background: var(--footer-bg);
+  color: var(--footer-text);
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  border: 1px solid color-mix(in srgb, var(--accent-color), #ffffff 78%);
+  box-shadow: var(--shadow-sm);
+}
+
+.app-signature-title {
+  font-size: 13px;
+}
+
+.app-signature-meta {
+  font-size: 11px;
+  opacity: 0.85;
+  color: var(--footer-muted);
+}
+
+.app-signature strong {
+  color: #ffffff;
 }
 
 .icon-btn {

@@ -58,6 +58,10 @@ beforeEach(() => {
             <input id="autoBackupEnabled" type="checkbox" />
             <select id="autoBackupFrequency"><option value="weekly">weekly</option></select>
             <select id="autoBackupTarget"><option value="local_download">local_download</option></select>
+            <small id="autoBackupLastRun"></small>
+            <small id="autoBackupNextRun"></small>
+            <small id="autoBackupRetentionState"></small>
+            <small id="autoBackupRuntimeState"></small>
             <small id="notificationPermissionState"></small>
             <small id="runtimeSupportState"></small>
             <small id="notificationRuntimeConclusion"></small>
@@ -80,6 +84,8 @@ beforeEach(() => {
     window.open = jest.fn();
     if (!URL.createObjectURL) URL.createObjectURL = jest.fn(() => 'blob:test');
     if (!URL.revokeObjectURL) URL.revokeObjectURL = jest.fn();
+    if (!window.navigator.share) window.navigator.share = jest.fn(async () => {});
+    if (!window.navigator.canShare) window.navigator.canShare = jest.fn(() => false);
 });
 
 function localDateKey(date) {
@@ -617,4 +623,44 @@ test('legacy v1 import is migrated and accepted', () => {
     expect(localStorage.getItem('accentColor')).toBe('#22c55e');
     expect(localStorage.getItem('currencyCode')).toBe('INR');
     expect(window.getExpenses().length).toBe(1);
+});
+
+test('footer injects once without legacy inline style and remains centered class-bound', () => {
+    const app = document.createElement('div');
+    app.className = 'app';
+    document.body.appendChild(app);
+
+    window.injectGlobalFooter();
+    window.injectGlobalFooter();
+
+    const footers = app.querySelectorAll('#appSignatureFooter');
+    expect(footers.length).toBe(1);
+    expect(footers[0].innerHTML.includes('style=')).toBe(false);
+    expect(footers[0].className).toContain('app-signature');
+});
+
+test('accent plus appearance persist together after reload simulation', () => {
+    window.changeTheme('#7c3aed');
+    window.setAppearanceMode('chromium');
+
+    expect(localStorage.getItem('accentColor')).toBe('#7c3aed');
+    expect(localStorage.getItem('appearanceMode')).toBe('chromium');
+
+    document.documentElement.style.removeProperty('--theme');
+    document.documentElement.style.removeProperty('--accent-color');
+    delete document.documentElement.dataset.appearance;
+
+    window.loadTheme();
+
+    expect(document.documentElement.style.getPropertyValue('--theme')).toBe('#7c3aed');
+    expect(document.documentElement.style.getPropertyValue('--accent-color')).toBe('#7c3aed');
+    expect(document.documentElement.dataset.appearance).toBe('chromium');
+});
+
+test('export generates filename metadata and updates backup runtime state', async () => {
+    await window.exportDataAsJSON();
+
+    expect(window.__lastBackupExportStatus).toBeTruthy();
+    expect(window.__lastBackupExportStatus.filename).toMatch(/^MoneyTracker_\d{4}-\d{2}-\d{2}_\d{2}-\d{2}\.json$/);
+    expect(document.getElementById('autoBackupRuntimeState').textContent.length).toBeGreaterThan(0);
 });
