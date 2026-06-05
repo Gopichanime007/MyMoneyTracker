@@ -76,25 +76,25 @@
         <input type="date" id="sDate">
 
         <!-- SOURCE -->
-        <div id="sourceWrapper" style="display:none;">
+        <div id="sourceWrapper" class="hidden">
           <label>Source</label>
           <select id="sourceSelect"></select>
         </div>
 
         <!-- REFUND -->
-        <div id="refundWrapper" style="display:none; margin-top:10px;">
+        <div id="refundWrapper" class="hidden form-offset-top">
           <label>Refund Candidate</label>
           <select id="refundSelect" onchange="handleSavingsRefundResolutionChange()">
             <option value="">Select Transaction</option>
           </select>
-          <label style="margin-top:8px;display:block;">Resolution Type</label>
+          <label class="field-label">Resolution Type</label>
           <select id="sRefundResolutionType" onchange="handleSavingsRefundResolutionChange()">
             <option value="partial_refund">Partial Refund</option>
             <option value="complete_refund">Complete Refund</option>
             <option value="consumed">No Refund / Consumed</option>
             <option value="cancelled_with_charges">Cancelled With Charges</option>
           </select>
-          <small id="sRefundInfo" style="display:block;color:#666;margin-top:6px;"></small>
+          <small id="sRefundInfo" class="muted-note refund-info"></small>
         </div>
 
         <!-- PAYMENT -->
@@ -108,13 +108,13 @@
         </select>
 
         <!-- Attachment -->
-        <label style="margin-top:8px;display:block">Attach Receipt (optional)</label>
-        <div style="display:flex;gap:8px;align-items:center;"> 
-          <input id="sAttachment" type="file" accept="image/*" capture="environment" style="flex:1" />
-          <button type="button" id="sAttachmentRemove" style="background:none;border:none;cursor:pointer;display:none">Remove</button>
+        <label class="field-label">Attach Receipt (optional)</label>
+        <div class="inline-row"> 
+          <input id="sAttachment" class="flex-input" type="file" accept="image/*,.pdf,application/pdf" capture="environment" />
+          <button type="button" id="sAttachmentRemove" class="link-btn hidden">Remove</button>
         </div>
-        <div id="sAttachmentPreviewWrapper" style="margin-top:8px;display:none">
-          <img id="sAttachmentPreview" src="" style="width:64px;height:64px;border-radius:8px;object-fit:cover;cursor:pointer" />
+        <div id="sAttachmentPreviewWrapper" class="attachment-preview-wrapper hidden">
+          <img id="sAttachmentPreview" src="" class="attachment-preview" />
         </div>
 
         <!-- ACTION -->
@@ -229,7 +229,7 @@
           <button class="primary" onclick="addCategory()">➕</button>
         </div>
 
-        <h4 onclick="openCategoryModal()" style="cursor:pointer;">
+        <h4 onclick="openCategoryModal()" class="clickable-header">
           Your Categories ⬇️
         </h4>
 
@@ -241,7 +241,7 @@
           <button class="primary" onclick="addPerson()">➕</button>
         </div>
 
-        <h4 onclick="openPersonModal()" style="cursor:pointer;">
+        <h4 onclick="openPersonModal()" class="clickable-header">
           Your Persons ⬇️
         </h4>
         <!-- ========================= -->

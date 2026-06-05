@@ -55,6 +55,8 @@ beforeEach(() => {
     `;
 
     window.open = jest.fn();
+    if (!URL.createObjectURL) URL.createObjectURL = jest.fn(() => 'blob:test');
+    if (!URL.revokeObjectURL) URL.revokeObjectURL = jest.fn();
 });
 
 function localDateKey(date) {
@@ -134,6 +136,58 @@ test('move to budget and transfer back reconcile between savings and budget wall
 
     const netBudgetSpent = window.getNetSpentForBudget('bwb', window.getExpenses());
     expect(netBudgetSpent).toBe(1000);
+});
+
+test('savings entries preserve failed attachment metadata without blocking persistence', () => {
+    window.saveSavings([
+        {
+            id: 'sf1',
+            type: 'deposit',
+            amount: 1200,
+            date: '2026-06-10T10:00:00Z',
+            attachmentStatus: 'failed',
+            attachmentError: 'Worker failed',
+            attachmentId: null
+        }
+    ]);
+
+    const rows = window.getSavings();
+    expect(rows.length).toBe(1);
+    expect(rows[0].amount).toBe(1200);
+    expect(rows[0].attachmentId || null).toBeNull();
+    expect(rows[0].attachmentStatus).toBe('failed');
+    expect(rows[0].attachmentError).toContain('Worker failed');
+});
+
+test('transfer back entry persists original savings source trace metadata', () => {
+    const now = new Date();
+    const start = new Date(now.getFullYear(), now.getMonth(), 1);
+    const end = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+    const periodKey = `${localDateKey(start)}_to_${localDateKey(end)}`;
+
+    localStorage.setItem('bp', JSON.stringify([{ id: 'ptb', start: localDateKey(start), end: localDateKey(end), status: 'active', extraDays: 0 }]));
+
+    window.saveBudgets([
+        { budgetId: 'bw1', totalAllocated: 5000, sourceId: 'srcA', periodKey, isBudgetWallet: true, entity: 'Budget Wallet' }
+    ]);
+
+    const tb = window.addExpense({
+        amount: -1000,
+        type: 'transfer_back',
+        category: 'Transfer Back',
+        purpose: 'Move back',
+        date: now.toISOString(),
+        paymentType: 'Cash',
+        allocationTrail: [{ budgetId: 'bw1', amount: 1000 }],
+        transferBackTrail: [{ budgetId: 'bw1', sourceId: 'srcA', amount: 1000 }],
+        linkedSourceSavingsId: 'srcA',
+        linkedSourceSavingsIds: ['srcA']
+    });
+
+    expect(tb).toBeTruthy();
+    expect(tb.linkedSourceSavingsId).toBe('srcA');
+    expect(Array.isArray(tb.transferBackTrail)).toBe(true);
+    expect(tb.transferBackTrail[0].sourceId).toBe('srcA');
 });
 
 test('budget period planned end + explicit extension calculate effective end correctly', () => {
@@ -285,4 +339,29 @@ test('attachment lifecycle supports save, view, delete, reset, and module isolat
     if (typeof window.setupAttachmentInputs === 'function') {
         window.setupAttachmentInputs();
     }
+});
+
+test('attachment overlay stays above transaction modal and restores modal interaction on close', async () => {
+    window.reMoAttachments = {
+        getImageUrl: jest.fn(async id => `blob:${id}`),
+        getBlob: jest.fn(async () => new Blob(['img'], { type: 'image/png' })),
+        getRecord: jest.fn(async () => ({ filename: 'preview.png', mime: 'image/png', createdAt: Date.now() }))
+    };
+
+    window.saveBudgets([{ budgetId: 'b-layer', totalAllocated: 5000, periodKey: '2026-06-01_to_2026-06-30' }]);
+    window.saveExpenses([{ id: 'ex-layer', type: 'expense', amount: -300, budgetId: 'b-layer', date: '2026-06-02T10:00:00Z', attachmentId: 'att-layer' }]);
+
+    await window.openTransactionAuditDetails('expense', window.getExpenses()[0]);
+    const modal = document.getElementById('txnDetailsModal');
+    expect(modal).toBeTruthy();
+    expect(modal.style.display).toBe('flex');
+
+    await window.viewAttachmentById('att-layer');
+    const overlay = document.getElementById('remo-attach-viewer');
+    expect(overlay).toBeTruthy();
+    expect(modal.classList.contains('modal-layer-muted')).toBe(true);
+
+    overlay.click();
+    expect(document.getElementById('remo-attach-viewer')).toBeNull();
+    expect(modal.classList.contains('modal-layer-muted')).toBe(false);
 });

@@ -883,6 +883,17 @@ function saveBudgetPeriod() {
 
   let data = getData();
 
+  let duplicate = data.some(p => {
+    if (!p || typeof p !== "object") return false;
+    return String(p.start || "") === String(start || "")
+      && String(p.end || "") === String(end || "");
+  });
+
+  if (duplicate) {
+    alert("This budget period already exists");
+    return;
+  }
+
   data.push({
     id: Date.now(),
     start: start,

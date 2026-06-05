@@ -127,7 +127,7 @@
           <select id="budgetSelect"></select>
         </div>
 
-        <div id="linkedTransactionWrapper" class="form-group" style="display:none;">
+        <div id="linkedTransactionWrapper" class="form-group hidden">
           <label for="linkedTransactionSelect">Linked Transaction</label>
           <select id="linkedTransactionSelect" onchange="updateLinkedRemainingUI();handleRefundResolutionChange()">
             <option value="">Select transaction</option>
@@ -141,7 +141,7 @@
             <option value="cancelled_with_charges">Cancelled With Charges</option>
           </select>
 
-          <small id="linkedRemainingText" class="muted-note" style="display:none;"></small>
+          <small id="linkedRemainingText" class="muted-note hidden"></small>
         </div>
 
         <div id="paymentWrapper" class="form-group">
@@ -156,13 +156,13 @@
         </div>
 
         <!-- Attachment -->
-        <label style="margin-top:8px;display:block">Attach Receipt (optional)</label>
-        <div style="display:flex;gap:8px;align-items:center;"> 
-          <input id="expenseAttachment" type="file" accept="image/*" capture="environment" style="flex:1" />
-          <button type="button" id="expenseAttachmentRemove" style="background:none;border:none;cursor:pointer;display:none">Remove</button>
+        <label class="field-label">Attach Receipt (optional)</label>
+        <div class="inline-row"> 
+          <input class="flex-input" id="expenseAttachment" type="file" accept="image/*,.pdf,application/pdf" capture="environment" />
+          <button type="button" id="expenseAttachmentRemove" class="link-btn hidden">Remove</button>
         </div>
-        <div id="expenseAttachmentPreviewWrapper" style="margin-top:8px;display:none">
-          <img id="expenseAttachmentPreview" src="" style="width:64px;height:64px;border-radius:8px;object-fit:cover;cursor:pointer" />
+        <div id="expenseAttachmentPreviewWrapper" class="attachment-preview-wrapper hidden">
+          <img id="expenseAttachmentPreview" src="" class="attachment-preview" />
         </div>
         <button type="button" class="primary" onclick="saveExpense()">Save</button>
       </div>
@@ -181,7 +181,7 @@
           <option value="period">Custom Period</option>
         </select>
 
-        <div style="display:flex; gap:10px; margin-top:10px;">
+        <div class="inline-row history-tools">
 
           <!-- DOWNLOAD -->
           <button class="icon-btn" onclick="exportPDF()">
@@ -255,7 +255,7 @@
       <div class="card">
         <h3>Analytics</h3>
 
-        <div style="display:flex; gap:8px;">
+        <div class="inline-row graph-controls">
           <select onchange="handleGraphFilter(this.value)">
             <option value="day">Day</option>
             <option value="week">Week</option>
@@ -269,12 +269,12 @@
           <canvas id="myChart"></canvas>
         </div>
 
-        <div class="card" style="margin-top:10px;">
+        <div class="card card-tight">
           <h4>Category Breakdown</h4>
           <div id="categoryBreakdown"></div>
         </div>
 
-        <div id="graphDate" style="text-align:center; font-size:12px; color:#777;"></div>
+        <div id="graphDate" class="graph-date"></div>
       </div>
     </section>
 
@@ -313,7 +313,7 @@
         <input type="text" id="hexInput" placeholder="Apply custom theme using hex code (e.g. #4caf50)">
         <button class="secondary" onclick="applyHex()">Apply</button>
 
-        <input type="color" id="colorPicker" style="display:none;" onchange="applyCustomColor(this.value)">
+        <input type="color" id="colorPicker" class="hidden" onchange="applyCustomColor(this.value)">
 
         <!-- Category -->
         <h4>Add Category</h4>
@@ -334,24 +334,83 @@
           <button class="secondary" onclick="openConfirm()">🗑 Reset App</button>
         </div>
 
+        <h4>Automatic Backup</h4>
+        <div class="form-group">
+          <label for="autoBackupEnabled">
+            <input id="autoBackupEnabled" type="checkbox" onchange="applyAutoBackupSettings()" class="inline-checkbox" />
+            Enable Auto Backup
+          </label>
+
+          <label for="autoBackupFrequency">Backup Frequency</label>
+          <select id="autoBackupFrequency" onchange="applyAutoBackupSettings()">
+            <option value="daily">Daily</option>
+            <option value="weekly">Weekly</option>
+            <option value="monthly">Monthly</option>
+          </select>
+
+          <label for="autoBackupTarget">Backup Target</label>
+          <select id="autoBackupTarget" onchange="applyAutoBackupSettings()">
+            <option value="local_download">Local File Download</option>
+            <option value="google_drive">Google Drive (future-ready)</option>
+            <option value="one_drive">OneDrive (future-ready)</option>
+          </select>
+
+          <small id="autoBackupLastRun" class="muted-note">Last Backup: Not available</small>
+          <small id="autoBackupNextRun" class="muted-note">Next Scheduled Backup: Not available</small>
+
+          <button class="secondary" type="button" onclick="runAutoBackupNow()">Run Backup Now</button>
+        </div>
+
+        <h4>Notification Settings</h4>
+        <div class="form-group">
+          <label for="notificationsEnabled">
+            <input id="notificationsEnabled" type="checkbox" onchange="applyNotificationSettings()" class="inline-checkbox" />
+            Enable Notifications
+          </label>
+
+          <label for="notifBudgetPeriodEnding">
+            <input id="notifBudgetPeriodEnding" type="checkbox" onchange="applyNotificationSettings()" class="inline-checkbox" />
+            Budget Period Ending
+          </label>
+
+          <label for="notifLowBudgetWarning">
+            <input id="notifLowBudgetWarning" type="checkbox" onchange="applyNotificationSettings()" class="inline-checkbox" />
+            Low Budget Warning
+          </label>
+
+          <label for="notifDailyReminder">
+            <input id="notifDailyReminder" type="checkbox" onchange="applyNotificationSettings()" class="inline-checkbox" />
+            Daily Reminder
+          </label>
+
+          <label for="notifWeeklySummary">
+            <input id="notifWeeklySummary" type="checkbox" onchange="applyNotificationSettings()" class="inline-checkbox" />
+            Weekly Summary
+          </label>
+
+          <label for="notifBackupReminder">
+            <input id="notifBackupReminder" type="checkbox" onchange="applyNotificationSettings()" class="inline-checkbox" />
+            Backup Reminder
+          </label>
+
+          <small id="notificationPermissionState" class="muted-note">Permission: unknown</small>
+          <button class="secondary" type="button" onclick="requestNotificationPermissionFromSettings()">Request Browser Permission</button>
+          <button class="secondary" type="button" onclick="testNotification()">Send Test Notification</button>
+        </div>
+
+        <h4>Widget Architecture</h4>
+        <div class="form-group">
+          <small class="muted-note">Budget Widget: Current Budget, Spent, Remaining</small>
+          <small class="muted-note">Savings Widget: Current Savings Balance</small>
+          <small class="muted-note">Quick Add Widget: Add Expense and Add Savings Entry</small>
+          <small class="muted-note">Implementation plan is documented for future PWA/mobile integration.</small>
+        </div>
+
         <!-- <h4>💸 Loans / Recoveries</h4>
         <div id="loanSummary"></div>
       </div>
       <div class="app-signature">
         Developed by <strong>Gopichaninme</strong>
-      </div> -->
-        <!-- <div class="card" style="margin-top:15px;">
-        <h3>🔔 Notifications</h3>
-
-        <p id="notifStatus">Status: Checking...</p>
-
-      <div class="notif-actions">
-          <button class="btn btn-enable" onclick="enableNotifications()">Enable</button>
-          <button class="btn btn-test" onclick="testNotification()">Test</button>
-          <button class="btn btn-toggle" onclick="toggleNotifications()" id="notifToggleBtn">
-            Stop
-          </button>
-        </div>
       </div> -->
     </section>
 
@@ -386,7 +445,7 @@
 
       <h3>Backup & Restore</h3>
 
-      <div class="modal-actions" style="flex-direction:column; gap:10px;">
+      <div class="modal-actions modal-stack-actions">
 
         <button class="primary" onclick="exportDataAsJSON()">
           📄 Export JSON
@@ -410,7 +469,7 @@
     <div class="modal-content">
       <h3>Import Data</h3>
 
-      <textarea id="importText" placeholder="Paste JSON here" style="height:120px;"></textarea>
+      <textarea id="importText" placeholder="Paste JSON here" class="import-textarea"></textarea>
 
       <input type="file" accept=".json" onchange="handleFileImport(event)">
 
@@ -438,7 +497,7 @@
     </div>
   </div>
 
-  <div id="confirmModal" class="modal" style="display:none;">
+  <div id="confirmModal" class="modal hidden">
     <div class="modal-content">
       <h3>Clear all app data?</h3>
 

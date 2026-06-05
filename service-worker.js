@@ -3,7 +3,7 @@ const CORE_ASSETS = [
   "/",
   "/index.html",
   "/manifest.json",
-  "/styles/style.css",
+  "/assets/styles/style.css",
   "/assets/scripts/storage.js",
   "/assets/scripts/script.js",
   "/assets/scripts/savings.js",
