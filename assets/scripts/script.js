@@ -1154,7 +1154,16 @@ function addExpense(obj) {
                     ? [{ budgetId: obj.budgetId, amount: Math.abs(baseAmount) }]
                     : [])
             ,
-            attachmentId: obj.attachmentId || null
+            transferBackTrail: Array.isArray(obj.transferBackTrail)
+                ? JSON.parse(JSON.stringify(obj.transferBackTrail))
+                : [],
+            linkedSourceSavingsId: obj.linkedSourceSavingsId || null,
+            linkedSourceSavingsIds: Array.isArray(obj.linkedSourceSavingsIds)
+                ? obj.linkedSourceSavingsIds.map(String)
+                : [],
+            attachmentId: obj.attachmentId || null,
+            attachmentStatus: obj.attachmentStatus || (obj.attachmentId ? "linked" : "none"),
+            attachmentError: obj.attachmentError || null
         };
 
         expenses.push(newEntry);
@@ -1305,7 +1314,7 @@ function loadHistory(list = getExpenses()) {
         container.innerHTML = "";
 
         if (!list.length) {
-            container.innerHTML = `<p style="text-align:center; color:#888;">No data yet 📭</p>`;
+            container.innerHTML = `<p class="empty-state">No data yet</p>`;
             return;
         }
 
@@ -1315,43 +1324,30 @@ function loadHistory(list = getExpenses()) {
             if (da !== db) return da - db;
             return String(a.id || "").localeCompare(String(b.id || ""));
         });
-        let chronological = withRunning;
-
         withRunning.slice().reverse().forEach((e) => {
 
             let div = document.createElement("div");
             div.className = "expense-item";
 
-            let category = e.category || e.type || "Entry";
-            let purpose = e.purpose ? ` • ${e.purpose}` : "";
-            let title = category + purpose;
+                        let entryType = String(e.type || "entry").replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
                         let amount = formatCurrency(Math.abs(Number(e.amount || 0)));
-            let color = e.amount < 0 ? "#ff5252" : "#4caf50";
-            let attachmentCount = e.attachmentId ? 1 : 0;
-
-            let date = new Date(e.date).toLocaleString("en-IN");
-                        let refundStatusNote = "";
-
-            let isResolvableRoot = (e.type === "expense" || e.type === "transfer" || e.type === "loss") && Number(e.amount || 0) < 0;
-            if (isResolvableRoot) {
-                let rs = getExpenseResolutionSnapshot(e.id, chronological);
-                refundStatusNote = `<br><small style=\"color:#666;\">Refund Status: ${formatResolutionStatus(rs.status)}</small>`;
-            }
+                        let amountClass = e.amount < 0 ? "negative" : "positive";
+                        let date = new Date(e.date).toLocaleString("en-IN");
+                        let runningBalance = formatCurrency(Number(e.BalanceAfterTransaction ?? e.runningBalance ?? 0));
+                        let descriptor = [e.category, e.purpose].filter(Boolean).join(" • ");
 
             div.innerHTML = `
-                <div style="display:flex;gap:8px;align-items:center;">
-                  <div>
-                    <strong>${title}</strong><br>
-                                        <small style="color:#888;">${date}</small><br>
-                                        <small style="color:#888;">Running Balance: ${formatCurrency(Number(e.BalanceAfterTransaction ?? e.runningBalance ?? 0))}</small>
-                                        ${refundStatusNote}
-                                        ${attachmentCount ? `<br><small style="color:#666;">📎 Attachment</small>` : ""}
-                  </div>
+                                <div class="history-main">
+                                    <div class="history-type">${entryType}</div>
+                                    ${descriptor ? `<div class="history-note">${descriptor}</div>` : ""}
+                                    <div class="history-meta">${date}</div>
+                                    <div class="history-running">Running Balance: ${runningBalance}</div>
                 </div>
 
-                <div style="text-align:right;">
-                    <div style="color:${color}; font-weight:600;">${amount}</div>
-                    <button class="delete-btn" onclick="event.stopPropagation(); deleteExpenseUI('${e.id}')" title="Delete"> 
+                                <div>
+                                        <div class="history-amount ${amountClass}">${amount}</div>
+                                        <div class="history-actions">
+                                        <button class="delete-btn" onclick="event.stopPropagation(); deleteExpenseUI('${e.id}')" title="Delete">
                       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <path d="M3 6h18"></path>
                         <path d="M8 6V4h8v2"></path>
@@ -1360,6 +1356,7 @@ function loadHistory(list = getExpenses()) {
                         <path d="M14 11v6"></path>
                       </svg>
                     </button>
+                                        </div>
                 </div>
             `;
 
@@ -1557,7 +1554,9 @@ function buildTransferBackPlan(requestAmount) {
 
     let expenses = getExpenses();
     let candidates = budgets.map(b => {
-        let available = Math.max(0, getNetSpentForBudget(b.budgetId, expenses));
+        let spent = Math.max(0, getNetSpentForBudget(b.budgetId, expenses));
+        let allocated = Math.max(0, Number(b.totalAllocated || 0));
+        let available = Math.max(0, allocated - spent);
         return {
             budgetId: b.budgetId,
             sourceId: String(b.sourceId),
@@ -1782,13 +1781,12 @@ async function handleAddExpense() {
     // });
 
     if (type === "expense") {
-        // handle possible attachment (store first to get attachmentId)
-        const attachmentId = await storeAttachmentFromInput('expenseAttachment');
-        await handleExpenseSave(Math.abs(amount), attachmentId);
+        const attachmentMeta = await storeAttachmentWithStatus('expenseAttachment');
+        await handleExpenseSave(Math.abs(amount), attachmentMeta);
         return;
     }
     // non-expense flows (income, transfer, refund, transfer_back) may still have attachments
-    const nonExpAttachmentId = await storeAttachmentFromInput('expenseAttachment');
+    const nonExpAttachment = await storeAttachmentWithStatus('expenseAttachment');
 
     if (type === "transfer") {
         category = "Transfer";
@@ -1825,7 +1823,9 @@ async function handleAddExpense() {
             transferBackTrail,
             linkedSourceSavingsId: uniqueSources.length === 1 ? uniqueSources[0] : null,
             linkedSourceSavingsIds: uniqueSources,
-            attachmentId: nonExpAttachmentId
+            attachmentId: nonExpAttachment.attachmentId,
+            attachmentStatus: nonExpAttachment.status,
+            attachmentError: nonExpAttachment.error
         });
 
         if (created && typeof getSavings === "function" && typeof saveSavings === "function") {
@@ -1892,7 +1892,9 @@ async function handleAddExpense() {
                 budgetId: snapshot.original ? snapshot.original.budgetId : budgetId,
                 linkedTransactionId,
                 entity: paymentType,
-                attachmentId: nonExpAttachmentId
+                attachmentId: nonExpAttachment.attachmentId,
+                attachmentStatus: nonExpAttachment.status,
+                attachmentError: nonExpAttachment.error
             });
         }
 
@@ -1908,7 +1910,9 @@ async function handleAddExpense() {
                 budgetId: snapshot.original ? snapshot.original.budgetId : budgetId,
                 linkedTransactionId,
                 entity: "System",
-                attachmentId: nonExpAttachmentId,
+                attachmentId: nonExpAttachment.attachmentId,
+                attachmentStatus: nonExpAttachment.status,
+                attachmentError: nonExpAttachment.error,
                 resolutionType: refundResolutionType,
                 resolvedAmount: refundAmount,
                 lossAmount: unresolvedAfterRefund
@@ -1937,7 +1941,9 @@ async function handleAddExpense() {
         budgetId,
         linkedTransactionId,
         entity: paymentType,
-        attachmentId: nonExpAttachmentId
+        attachmentId: nonExpAttachment.attachmentId,
+        attachmentStatus: nonExpAttachment.status,
+        attachmentError: nonExpAttachment.error
     });
     // =========================
     // 🔄 UI UPDATES
@@ -2049,6 +2055,8 @@ window.addEventListener("load", function () {
         renderCategoryBreakdown();
         startHeadline();
         updateNotificationButtonState();
+        if (typeof refreshSettingsPanels === "function") refreshSettingsPanels();
+        startAutoBackup();
 
     } catch (e) {
     }
@@ -2069,6 +2077,9 @@ window.showScreen = function showScreen(id) {
     }
     if (id === "graph") {
         loadGraph();
+    }
+    if (id === "settings" && typeof window.refreshSettingsPanels === "function") {
+        window.refreshSettingsPanels();
     }
 }
 
@@ -3322,37 +3333,75 @@ function hexToRgb(hex) {
 // =========================
 
 function openAttachmentViewer(src) {
-    // remove existing
+    return openAttachmentOverlay({ src, kind: "image", title: "Image preview" });
+}
+
+function openAttachmentOverlay({ src, kind = "image", title = "Attachment preview" }) {
     let existing = document.getElementById('remo-attach-viewer');
     if (existing) existing.remove();
 
+    const auditModal = document.getElementById('txnDetailsModal');
+    if (auditModal && auditModal.style.display !== 'none') {
+        auditModal.classList.add('modal-layer-muted');
+    }
+
     const overlay = document.createElement('div');
     overlay.id = 'remo-attach-viewer';
-    overlay.style.position = 'fixed';
-    overlay.style.inset = '0';
-    overlay.style.background = 'rgba(0,0,0,0.85)';
-    overlay.style.display = 'flex';
-    overlay.style.alignItems = 'center';
-    overlay.style.justifyContent = 'center';
-    overlay.style.zIndex = 1400;
-    overlay.style.cursor = 'zoom-out';
+    overlay.className = 'attachment-viewer-overlay';
+    overlay.setAttribute('role', 'dialog');
+    overlay.setAttribute('aria-label', title);
 
-    const img = document.createElement('img');
-    img.src = src;
-    img.style.maxWidth = '94%';
-    img.style.maxHeight = '94%';
-    img.style.borderRadius = '8px';
-    img.style.boxShadow = '0 20px 50px rgba(0,0,0,0.6)';
-    let zoomed = false;
-    img.addEventListener('dblclick', () => {
-        zoomed = !zoomed;
-        img.style.transform = zoomed ? 'scale(1.6)' : 'scale(1)';
+    const panel = document.createElement('div');
+    panel.className = 'attachment-viewer-panel';
+
+    const close = document.createElement('button');
+    close.type = 'button';
+    close.className = 'attachment-viewer-close';
+    close.textContent = 'Close';
+
+    const closeOverlay = () => {
+        if (overlay.dataset.objectUrl) {
+            try { URL.revokeObjectURL(overlay.dataset.objectUrl); } catch (_err) { }
+        }
+        overlay.remove();
+        const txnModal = document.getElementById('txnDetailsModal');
+        if (txnModal) txnModal.classList.remove('modal-layer-muted');
+        document.removeEventListener('keydown', onEscape, true);
+    };
+
+    const onEscape = (event) => {
+        if (event.key === 'Escape') closeOverlay();
+    };
+
+    close.addEventListener('click', closeOverlay);
+    overlay.addEventListener('click', (event) => {
+        if (event.target === overlay) closeOverlay();
     });
+    document.addEventListener('keydown', onEscape, true);
 
-    overlay.addEventListener('click', () => overlay.remove());
+    panel.appendChild(close);
 
-    overlay.appendChild(img);
+    if (kind === 'document') {
+        const frame = document.createElement('iframe');
+        frame.className = 'attachment-viewer-frame';
+        frame.src = src;
+        frame.setAttribute('title', title);
+        panel.appendChild(frame);
+    } else {
+        const img = document.createElement('img');
+        img.src = src;
+        img.className = 'attachment-viewer-image';
+        let zoomed = false;
+        img.addEventListener('dblclick', () => {
+            zoomed = !zoomed;
+            img.style.transform = zoomed ? 'scale(1.6)' : 'scale(1)';
+        });
+        panel.appendChild(img);
+    }
+
+    overlay.appendChild(panel);
     document.body.appendChild(overlay);
+    return overlay;
 }
 
 function escapeHtml(value) {
@@ -3400,10 +3449,18 @@ async function viewAttachmentById(attachmentId) {
     if (!at || !attachmentId) return;
 
     try {
-        if (at.getImageUrl) {
+        let record = null;
+        if (at.getRecord) {
+            try { record = await at.getRecord(attachmentId); } catch (_err) { record = null; }
+        }
+
+        let mime = record && record.mime ? String(record.mime) : "";
+        let isImage = mime ? mime.startsWith("image/") : true;
+
+        if (isImage && at.getImageUrl) {
             let src = await at.getImageUrl(attachmentId);
             if (src) {
-                openAttachmentViewer(src);
+                openAttachmentOverlay({ src, kind: 'image', title: 'Image preview' });
                 return;
             }
         }
@@ -3411,8 +3468,12 @@ async function viewAttachmentById(attachmentId) {
             let blob = await at.getBlob(attachmentId);
             if (!blob) return;
             let url = URL.createObjectURL(blob);
-            window.open(url, "_blank", "noopener,noreferrer");
-            setTimeout(() => URL.revokeObjectURL(url), 15000);
+            let opened = openAttachmentOverlay({
+                src: url,
+                kind: 'document',
+                title: record && record.filename ? record.filename : 'Attachment preview'
+            });
+            if (opened) opened.dataset.objectUrl = url;
         }
     } catch (err) {
         console.warn("viewAttachmentById failed", err);
@@ -3579,6 +3640,47 @@ try {
 }
 
 function setupAttachmentInputs() {
+    function setFilePreview(previewEl, wrapperEl, file, url) {
+        if (!previewEl || !wrapperEl) return;
+
+        let label = wrapperEl.querySelector('.attachment-preview-label');
+        if (!label) {
+            label = document.createElement('small');
+            label.className = 'attachment-preview-label';
+            wrapperEl.appendChild(label);
+        }
+
+        const isImage = Boolean(file && String(file.type || '').startsWith('image/'));
+        if (isImage) {
+            previewEl.src = url;
+            previewEl.style.display = 'block';
+            label.textContent = file.name || '';
+        } else {
+            previewEl.removeAttribute('src');
+            previewEl.style.display = 'none';
+            label.textContent = file ? `Attached: ${file.name}` : '';
+        }
+        wrapperEl.style.display = 'block';
+    }
+
+    function clearFilePreview(inputEl, previewEl, wrapperEl, removeBtn) {
+        if (previewEl && previewEl.dataset._previewUrl) {
+            try { URL.revokeObjectURL(previewEl.dataset._previewUrl); } catch (_err) { }
+            previewEl.dataset._previewUrl = '';
+        }
+        if (inputEl) inputEl.value = '';
+        if (previewEl) {
+            previewEl.removeAttribute('src');
+            previewEl.style.display = 'none';
+        }
+        if (wrapperEl) {
+            const label = wrapperEl.querySelector('.attachment-preview-label');
+            if (label) label.textContent = '';
+            wrapperEl.style.display = 'none';
+        }
+        if (removeBtn) removeBtn.style.display = 'none';
+    }
+
     // expense attachment
     const expInput = document.getElementById('expenseAttachment');
     const expPreview = document.getElementById('expenseAttachmentPreview');
@@ -3592,10 +3694,12 @@ function setupAttachmentInputs() {
             // revoke previous preview url if present
             if (expPreview && expPreview.dataset._previewUrl) { try { URL.revokeObjectURL(expPreview.dataset._previewUrl); } catch (e) { } }
             const url = URL.createObjectURL(file);
-            if (expPreview) { expPreview.src = url; expPreview.dataset._previewUrl = url; expWrapper.style.display = 'block'; expRemove.style.display = 'inline'; }
+            if (expPreview) expPreview.dataset._previewUrl = url;
+            setFilePreview(expPreview, expWrapper, file, url);
+            if (expRemove) expRemove.style.display = 'inline';
             expPreview.onclick = () => openAttachmentViewer(url);
         });
-        if (expRemove) expRemove.addEventListener('click', () => { if (expPreview && expPreview.dataset._previewUrl) { try { URL.revokeObjectURL(expPreview.dataset._previewUrl); } catch (e) { } expPreview.dataset._previewUrl = ''; } expInput.value = ''; if (expWrapper) expWrapper.style.display = 'none'; expRemove.style.display = 'none'; });
+        if (expRemove) expRemove.addEventListener('click', () => clearFilePreview(expInput, expPreview, expWrapper, expRemove));
     }
 
     const sInput = document.getElementById('sAttachment');
@@ -3608,10 +3712,12 @@ function setupAttachmentInputs() {
             if (!file) return;
             if (sPreview && sPreview.dataset._previewUrl) { try { URL.revokeObjectURL(sPreview.dataset._previewUrl); } catch (e) { } }
             const url = URL.createObjectURL(file);
-            if (sPreview) { sPreview.src = url; sPreview.dataset._previewUrl = url; sWrapper.style.display = 'block'; sRemove.style.display = 'inline'; }
+            if (sPreview) sPreview.dataset._previewUrl = url;
+            setFilePreview(sPreview, sWrapper, file, url);
+            if (sRemove) sRemove.style.display = 'inline';
             sPreview.onclick = () => openAttachmentViewer(url);
         });
-        if (sRemove) sRemove.addEventListener('click', () => { if (sPreview && sPreview.dataset._previewUrl) { try { URL.revokeObjectURL(sPreview.dataset._previewUrl); } catch (e) { } sPreview.dataset._previewUrl = ''; } sInput.value = ''; if (sWrapper) sWrapper.style.display = 'none'; sRemove.style.display = 'none'; });
+        if (sRemove) sRemove.addEventListener('click', () => clearFilePreview(sInput, sPreview, sWrapper, sRemove));
     }
 }
 
@@ -3631,6 +3737,43 @@ async function storeAttachmentFromInput(inputId) {
     } catch (err) {
         console.warn('Attachment store failed', err);
         return null;
+    }
+}
+
+async function storeAttachmentWithStatus(inputId) {
+    const fileInput = document.getElementById(inputId);
+    const file = fileInput && fileInput.files && fileInput.files[0] ? fileInput.files[0] : null;
+
+    if (!file) {
+        return { attachmentId: null, status: "none", error: null, mime: null, filename: null };
+    }
+
+    try {
+        const attachmentId = await storeAttachmentFromInput(inputId);
+        if (attachmentId) {
+            return {
+                attachmentId,
+                status: "linked",
+                error: null,
+                mime: file.type || null,
+                filename: file.name || null
+            };
+        }
+        return {
+            attachmentId: null,
+            status: "failed",
+            error: "Attachment store returned no id",
+            mime: file.type || null,
+            filename: file.name || null
+        };
+    } catch (err) {
+        return {
+            attachmentId: null,
+            status: "failed",
+            error: err && err.message ? err.message : "Attachment store failed",
+            mime: file.type || null,
+            filename: file.name || null
+        };
     }
 }
 
@@ -3669,13 +3812,134 @@ function scheduleDailySummary(hour = 20) {
 }
 
 const NOTIF_ENABLED_KEY = "notificationsEnabled";
+const NOTIF_SETTINGS_KEY = "notificationSettingsV1";
+
+function getDefaultNotificationSettings() {
+    return {
+        enabled: false,
+        budgetPeriodEnding: true,
+        lowBudgetWarning: true,
+        dailyReminder: false,
+        weeklySummary: true,
+        backupReminder: true
+    };
+}
+
+function getNotificationSettings() {
+    try {
+        const parsed = JSON.parse(localStorage.getItem(NOTIF_SETTINGS_KEY) || "null");
+        return Object.assign(getDefaultNotificationSettings(), parsed || {});
+    } catch (_err) {
+        return getDefaultNotificationSettings();
+    }
+}
+
+function saveNotificationSettings(settings) {
+    const merged = Object.assign(getDefaultNotificationSettings(), settings || {});
+    localStorage.setItem(NOTIF_SETTINGS_KEY, JSON.stringify(merged));
+    localStorage.setItem(NOTIF_ENABLED_KEY, merged.enabled ? "1" : "0");
+}
+
+async function dispatchNotification(title, body) {
+    if (!("Notification" in window)) return false;
+    if (Notification.permission !== "granted") return false;
+
+    try {
+        const reg = await navigator.serviceWorker?.getRegistration?.();
+        if (reg && typeof reg.showNotification === "function") {
+            await reg.showNotification(title, {
+                body,
+                icon: "assets/images/remo-logo.svg",
+                badge: "assets/images/remo-logo.svg"
+            });
+            return true;
+        }
+    } catch (_err) {
+        // fallback below
+    }
+
+    try {
+        const n = new Notification(title, {
+            body,
+            icon: "assets/images/remo-logo.svg"
+        });
+        n.onclick = () => window.focus();
+        return true;
+    } catch (_err) {
+        return false;
+    }
+}
+
+async function requestNotificationPermissionFromSettings() {
+    if (!("Notification" in window)) {
+        showToast("Notifications not supported on this device", "warning");
+        refreshNotificationSettingsUI();
+        return;
+    }
+
+    try {
+        await Notification.requestPermission();
+    } catch (_err) {
+        // UI state refresh below
+    }
+    refreshNotificationSettingsUI();
+}
+
+function refreshNotificationSettingsUI() {
+    const settings = getNotificationSettings();
+
+    const enabled = document.getElementById("notificationsEnabled");
+    const periodEnding = document.getElementById("notifBudgetPeriodEnding");
+    const lowBudget = document.getElementById("notifLowBudgetWarning");
+    const daily = document.getElementById("notifDailyReminder");
+    const weekly = document.getElementById("notifWeeklySummary");
+    const backup = document.getElementById("notifBackupReminder");
+    const permission = document.getElementById("notificationPermissionState");
+
+    if (enabled) enabled.checked = !!settings.enabled;
+    if (periodEnding) periodEnding.checked = !!settings.budgetPeriodEnding;
+    if (lowBudget) lowBudget.checked = !!settings.lowBudgetWarning;
+    if (daily) daily.checked = !!settings.dailyReminder;
+    if (weekly) weekly.checked = !!settings.weeklySummary;
+    if (backup) backup.checked = !!settings.backupReminder;
+
+    if (permission) {
+        if (!("Notification" in window)) {
+            permission.textContent = "Permission: unsupported on this device";
+        } else {
+            permission.textContent = `Permission: ${Notification.permission}`;
+        }
+    }
+}
+
+async function applyNotificationSettings() {
+    const next = {
+        enabled: !!document.getElementById("notificationsEnabled")?.checked,
+        budgetPeriodEnding: !!document.getElementById("notifBudgetPeriodEnding")?.checked,
+        lowBudgetWarning: !!document.getElementById("notifLowBudgetWarning")?.checked,
+        dailyReminder: !!document.getElementById("notifDailyReminder")?.checked,
+        weeklySummary: !!document.getElementById("notifWeeklySummary")?.checked,
+        backupReminder: !!document.getElementById("notifBackupReminder")?.checked
+    };
+
+    if (next.enabled && "Notification" in window && Notification.permission !== "granted") {
+        await requestNotificationPermissionFromSettings();
+        if (Notification.permission !== "granted") {
+            next.enabled = false;
+            showToast("Notification permission is required to enable alerts", "warning");
+        }
+    }
+
+    saveNotificationSettings(next);
+    updateNotificationButtonState();
+    refreshNotificationSettingsUI();
+}
 
 function updateNotificationButtonState() {
     const btn = document.getElementById("notifToggleBtn");
-    if (!btn) return;
+    const enabled = getNotificationSettings().enabled;
 
-    const enabled = localStorage.getItem(NOTIF_ENABLED_KEY) === "1";
-    btn.textContent = enabled ? "Disable" : "Enable";
+    if (btn) btn.textContent = enabled ? "Disable" : "Enable";
 }
 
 async function enableNotifications() {
@@ -3687,8 +3951,11 @@ async function enableNotifications() {
     try {
         const permission = await Notification.requestPermission();
         if (permission === "granted") {
-            localStorage.setItem(NOTIF_ENABLED_KEY, "1");
+            const settings = getNotificationSettings();
+            settings.enabled = true;
+            saveNotificationSettings(settings);
             updateNotificationButtonState();
+            refreshNotificationSettingsUI();
             showToast("Notifications enabled", "success");
         } else {
             showToast("Notification permission denied", "warning");
@@ -3700,10 +3967,12 @@ async function enableNotifications() {
 }
 
 function toggleNotifications() {
-    const enabled = localStorage.getItem(NOTIF_ENABLED_KEY) === "1";
-    localStorage.setItem(NOTIF_ENABLED_KEY, enabled ? "0" : "1");
+    const settings = getNotificationSettings();
+    settings.enabled = !settings.enabled;
+    saveNotificationSettings(settings);
     updateNotificationButtonState();
-    showToast(enabled ? "Notifications disabled" : "Notifications enabled", "info");
+    refreshNotificationSettingsUI();
+    showToast(settings.enabled ? "Notifications enabled" : "Notifications disabled", "info");
 }
 
 function testNotification() {
@@ -3712,7 +3981,7 @@ function testNotification() {
         return;
     }
 
-    if (localStorage.getItem(NOTIF_ENABLED_KEY) !== "1") {
+    if (!getNotificationSettings().enabled) {
         showToast("Enable notifications first", "warning");
         return;
     }
@@ -3722,22 +3991,26 @@ function testNotification() {
         return;
     }
 
-    try {
-        const n = new Notification("Money Tracker", {
-            body: "Test notification is working.",
-            icon: "assets/images/remo-logo.svg"
-        });
-        n.onclick = () => window.focus();
-    } catch (err) {
+    dispatchNotification("Money Tracker", "Test notification is working.").then((ok) => {
+        if (!ok) showToast("Test notification failed", "error");
+    }).catch((err) => {
         console.warn("testNotification failed", err);
         showToast("Test notification failed", "error");
-    }
+    });
+}
+
+function refreshSettingsPanels() {
+    if (typeof refreshAutoBackupSettingsUI === "function") refreshAutoBackupSettingsUI();
+    refreshNotificationSettingsUI();
 }
 
 try {
     window.enableNotifications = enableNotifications;
     window.toggleNotifications = toggleNotifications;
     window.testNotification = testNotification;
+    window.requestNotificationPermissionFromSettings = requestNotificationPermissionFromSettings;
+    window.applyNotificationSettings = applyNotificationSettings;
+    window.refreshSettingsPanels = refreshSettingsPanels;
 } catch (e) {
     // ignore non-browser contexts
 }
@@ -4677,6 +4950,12 @@ function renderBudgetEntries() {
     });
 }
 
+function toggleBudgetEntryDetails(id) {
+    let details = document.getElementById(`budgetEntryDetails_${id}`);
+    if (!details) return;
+    details.style.display = details.style.display === "none" ? "block" : "none";
+}
+
 function openBudgetDetails(group) {
     let budgets = getBudgets();
     let expenses = filterByActivePeriod(getExpenses());
@@ -4748,18 +5027,48 @@ function openBudgetDetails(group) {
         entriesHtml = "<p>No entries</p>";
     } else {
         related.forEach(e => {
-
             let color = e.amount < 0 ? "#ff5252" : "#4caf50";
+            let compactDate = new Date(e.date || Date.now()).toLocaleDateString("en-GB", {
+                day: "2-digit",
+                month: "short",
+                year: "numeric"
+            });
+            let runningBalance = Number(e.BalanceAfterTransaction ?? e.runningBalance ?? 0);
+            let snapshot = getExpenseResolutionSnapshot(e.linkedTransactionId || e.id, related);
+            let attachmentText = e.attachmentId
+                ? `Linked (${e.attachmentStatus || "linked"})`
+                : (e.attachmentStatus === "failed" ? "Failed" : "None");
 
             entriesHtml += `
-                <div class="expense-item">
-                    <div>
-                        <strong>${e.purpose || e.category || "Entry"}</strong><br>
-                        <small>${new Date(e.date).toLocaleString()}</small>
+                <div class="expense-item" style="display:block;">
+                    <div style="display:grid;grid-template-columns:1fr auto;gap:10px;align-items:start;">
+                        <div>
+                            <strong>${escapeHtml(e.category || e.type || "Entry")}</strong><br>
+                            <small>${escapeHtml(compactDate)}</small><br>
+                            <small>Balance: ${escapeHtml(formatCurrency(runningBalance))}</small>
+                        </div>
+                        <div style="color:${color};font-weight:700;">${escapeHtml(formatCurrency(Math.abs(Number(e.amount || 0))))}</div>
                     </div>
-
-                    <div style="color:${color}; font-weight:600;">
-                        ${formatCurrency(Math.abs(e.amount))}
+                    <div style="margin-top:8px;">
+                        <button class="secondary" type="button" onclick="toggleBudgetEntryDetails('${escapeHtml(e.id)}')">View Details</button>
+                    </div>
+                    <div id="budgetEntryDetails_${escapeHtml(e.id)}" style="display:none;margin-top:10px;padding:10px;border:1px solid #ececec;border-radius:10px;background:#fafafa;">
+                        <small><strong>Transaction ID:</strong> ${escapeHtml(e.id || "-")}</small><br>
+                        <small><strong>Created At:</strong> ${escapeHtml(new Date(e.createdAt || e.date || Date.now()).toLocaleString("en-IN"))}</small><br>
+                        <small><strong>Linked Transaction:</strong> ${escapeHtml(e.linkedTransactionId || "-")}</small><br>
+                        <small><strong>Original Amount:</strong> ${escapeHtml(formatCurrency(snapshot.originalAmount || 0))}</small><br>
+                        <small><strong>Refunded Amount:</strong> ${escapeHtml(formatCurrency(snapshot.refunded || 0))}</small><br>
+                        <small><strong>Remaining Refundable:</strong> ${escapeHtml(formatCurrency(snapshot.remainingRefundable || 0))}</small><br>
+                        <small><strong>Loss Amount:</strong> ${escapeHtml(formatCurrency(snapshot.loss || 0))}</small><br>
+                        <small><strong>Resolution Type:</strong> ${escapeHtml(e.resolutionType || "-")}</small><br>
+                        <small><strong>Attachment:</strong> ${escapeHtml(attachmentText)}</small><br>
+                        <small><strong>Audit Information:</strong> ${escapeHtml(e.type || "-")} | ${escapeHtml(e.paymentType || "-")} | ${escapeHtml(e.entity || "-")}</small>
+                        ${e.attachmentId ? `
+                        <div style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap;">
+                            <button class="secondary" type="button" onclick="viewAttachmentById('${escapeHtml(e.attachmentId)}')">View</button>
+                            <button class="secondary" type="button" onclick="downloadAttachmentById('${escapeHtml(e.attachmentId)}')">Download</button>
+                            <button class="secondary" type="button" onclick="deleteTransactionAttachment('expense','${escapeHtml(e.id)}','${escapeHtml(e.attachmentId)}')">Delete</button>
+                        </div>` : ""}
                     </div>
                 </div>
             `;
@@ -5241,6 +5550,29 @@ function prepareChartData(dataset) {
 }
 function createDatasets(data, dataset) {
 
+    function getChartThemeTokens() {
+        const root = getComputedStyle(document.documentElement);
+        const themeHex = (root.getPropertyValue('--theme') || localStorage.getItem('theme') || '').trim();
+        const text = (root.getPropertyValue('--text') || '').trim() || getComputedStyle(document.body).color;
+        const muted = (root.getPropertyValue('--muted') || '').trim() || getComputedStyle(document.body).color;
+        const border = (root.getPropertyValue('--border') || '').trim() || getComputedStyle(document.body).color;
+
+        let base = { r: 0, g: 0, b: 0 };
+        try {
+            if (themeHex) base = hexToRgb(themeHex);
+        } catch (_err) {
+            // fallback above
+        }
+
+        const expense = `rgba(${base.r}, ${base.g}, ${base.b}, 0.78)`;
+        const income = `rgba(${base.r}, ${base.g}, ${base.b}, 0.34)`;
+        const budgetLine = `rgba(${base.r}, ${base.g}, ${base.b}, 1)`;
+
+        return { text, muted, border, expense, income, budgetLine };
+    }
+
+    const themeTokens = getChartThemeTokens();
+
     function getFixedDailyBudget() {
 
         let budgets = getBudgets();
@@ -5278,24 +5610,32 @@ function createDatasets(data, dataset) {
         {
             label: "Expense",
             data: data.expense,
-            backgroundColor: "rgba(255,99,132,0.7)"
+            backgroundColor: themeTokens.expense
         },
         {
             label: "Income",
             data: data.income,
-            backgroundColor: "rgba(75,192,192,0.7)"
+            backgroundColor: themeTokens.income
         },
         // ❌ REMOVED TOTAL LINE
         {
             label: "Budget",
             data: budgetData,
             type: "line",
-            borderColor: "orange",
+            borderColor: themeTokens.budgetLine,
+            pointBackgroundColor: themeTokens.budgetLine,
+            pointBorderColor: themeTokens.budgetLine,
             borderDash: [5, 5]
         }
     ];
 }
 function getChartOptions(type, expenses, dataset, customRange) {
+
+    const root = getComputedStyle(document.documentElement);
+    const textColor = (root.getPropertyValue('--text') || '').trim() || getComputedStyle(document.body).color;
+    const mutedColor = (root.getPropertyValue('--muted') || '').trim() || getComputedStyle(document.body).color;
+    const borderColor = (root.getPropertyValue('--border') || '').trim() || getComputedStyle(document.body).color;
+    const surfaceColor = (root.getPropertyValue('--surface') || '').trim() || getComputedStyle(document.body).backgroundColor;
 
     return {
         responsive: true,
@@ -5308,8 +5648,10 @@ function getChartOptions(type, expenses, dataset, customRange) {
 
         plugins: {
             tooltip: {
-                backgroundColor: "#111",
-                borderColor: "#333",
+                backgroundColor: surfaceColor,
+                titleColor: textColor,
+                bodyColor: textColor,
+                borderColor: borderColor,
                 borderWidth: 1,
                 padding: 12,
                 cornerRadius: 10,
@@ -5352,7 +5694,7 @@ function getChartOptions(type, expenses, dataset, customRange) {
 
             legend: {
                 labels: {
-                    color: "#555",
+                    color: mutedColor,
                     usePointStyle: true
                 }
             }
@@ -5362,10 +5704,10 @@ function getChartOptions(type, expenses, dataset, customRange) {
             x: {
                 grid: {
                     display: true,
-                    color: "rgba(0,0,0,0.08)"
+                    color: borderColor
                 },
                 ticks: {
-                    color: "#333",
+                    color: textColor,
                     autoSkip: true,
                     maxRotation: 90,
                     minRotation: 90
@@ -5375,10 +5717,10 @@ function getChartOptions(type, expenses, dataset, customRange) {
             y: {
                 beginAtZero: true,
                 grid: {
-                    color: "rgba(0,0,0,0.08)"
+                    color: borderColor
                 },
                 ticks: {
-                    color: "#333",
+                    color: textColor,
                     callback: function (value) {
                         return formatCurrency(value);
                     }
@@ -7026,7 +7368,7 @@ function prepareSplit(amount, budgets) {
     return remaining > 0 ? null : result;
 }
 
-function handleExpenseSave(amount, attachmentId = null) {
+function handleExpenseSave(amount, attachmentMeta = null) {
 
     // =========================
     // ✅ VALIDATE
@@ -7170,7 +7512,9 @@ function handleExpenseSave(amount, attachmentId = null) {
             purpose,
             paymentType,
             date,
-            attachmentId: attachmentId || null,
+            attachmentId: attachmentMeta && attachmentMeta.attachmentId ? attachmentMeta.attachmentId : null,
+            attachmentStatus: attachmentMeta ? attachmentMeta.status : "none",
+            attachmentError: attachmentMeta ? attachmentMeta.error : null,
             type: "expense"
         });
 
@@ -7796,22 +8140,91 @@ function exportDataAsJSON() {
 // 🔄 AUTO BACKUP ENGINE
 // =========================
 
+const AUTO_BACKUP_SETTINGS_KEY = "autoBackupSettingsV1";
+const AUTO_BACKUP_LAST_RUN_KEY = "autoBackupLastRunAt";
+
+function getDefaultAutoBackupSettings() {
+    return {
+        enabled: false,
+        frequency: "weekly",
+        target: "local_download"
+    };
+}
+
+function getAutoBackupSettings() {
+    try {
+        const parsed = JSON.parse(localStorage.getItem(AUTO_BACKUP_SETTINGS_KEY) || "null");
+        return Object.assign(getDefaultAutoBackupSettings(), parsed || {});
+    } catch (_err) {
+        return getDefaultAutoBackupSettings();
+    }
+}
+
+function saveAutoBackupSettings(settings) {
+    localStorage.setItem(AUTO_BACKUP_SETTINGS_KEY, JSON.stringify(Object.assign(getDefaultAutoBackupSettings(), settings || {})));
+}
+
+function getBackupFrequencyDays(frequency) {
+    if (frequency === "daily") return 1;
+    if (frequency === "monthly") return 30;
+    return 7;
+}
+
+function formatDateTimeLabel(ts) {
+    if (!ts) return "Not available";
+    const d = new Date(Number(ts));
+    if (Number.isNaN(d.getTime())) return "Not available";
+    return d.toLocaleString("en-IN");
+}
+
+function getNextAutoBackupAt(lastRunTs, frequency) {
+    if (!lastRunTs) return null;
+    const dayMs = 24 * 60 * 60 * 1000;
+    return Number(lastRunTs) + (getBackupFrequencyDays(frequency) * dayMs);
+}
+
+function refreshAutoBackupSettingsUI() {
+    const settings = getAutoBackupSettings();
+    const enabled = document.getElementById("autoBackupEnabled");
+    const frequency = document.getElementById("autoBackupFrequency");
+    const target = document.getElementById("autoBackupTarget");
+    const lastRun = document.getElementById("autoBackupLastRun");
+    const nextRun = document.getElementById("autoBackupNextRun");
+
+    if (enabled) enabled.checked = !!settings.enabled;
+    if (frequency) frequency.value = settings.frequency;
+    if (target) target.value = settings.target;
+
+    const last = localStorage.getItem(AUTO_BACKUP_LAST_RUN_KEY);
+    const next = getNextAutoBackupAt(last, settings.frequency);
+
+    if (lastRun) lastRun.textContent = `Last Backup: ${formatDateTimeLabel(last)}`;
+    if (nextRun) nextRun.textContent = `Next Scheduled Backup: ${next ? formatDateTimeLabel(next) : "Not available"}`;
+}
+
+function applyAutoBackupSettings() {
+    const settings = {
+        enabled: !!document.getElementById("autoBackupEnabled")?.checked,
+        frequency: document.getElementById("autoBackupFrequency")?.value || "weekly",
+        target: document.getElementById("autoBackupTarget")?.value || "local_download"
+    };
+    saveAutoBackupSettings(settings);
+    refreshAutoBackupSettingsUI();
+}
+
+function runAutoBackupNow() {
+    const settings = getAutoBackupSettings();
+    createAutoBackup(settings.frequency);
+    if (settings.target === "local_download") {
+        try { exportDataAsJSON(); } catch (_err) { }
+    }
+    refreshAutoBackupSettingsUI();
+}
+
 function startAutoBackup() {
-
-    checkAndCreateBackup(
-        "daily",
-        1
-    );
-
-    checkAndCreateBackup(
-        "weekly",
-        7
-    );
-
-    checkAndCreateBackup(
-        "monthly",
-        30
-    );
+    const settings = getAutoBackupSettings();
+    if (!settings.enabled) return;
+    checkAndCreateBackup(settings.frequency, getBackupFrequencyDays(settings.frequency));
 }
 
 // =========================
@@ -7894,9 +8307,13 @@ function createAutoBackup(type) {
             Date.now().toString()
         );
 
+        localStorage.setItem(AUTO_BACKUP_LAST_RUN_KEY, Date.now().toString());
+
         console.log(
             `✅ ${type} backup completed`
         );
+
+        refreshAutoBackupSettingsUI();
 
     } catch (err) {
 
@@ -7905,4 +8322,12 @@ function createAutoBackup(type) {
             err
         );
     }
+}
+
+try {
+    window.applyAutoBackupSettings = applyAutoBackupSettings;
+    window.refreshAutoBackupSettingsUI = refreshAutoBackupSettingsUI;
+    window.runAutoBackupNow = runAutoBackupNow;
+} catch (_err) {
+    // ignore non-browser contexts
 }

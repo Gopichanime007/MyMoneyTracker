@@ -779,6 +779,8 @@ async function addSavings() {
     const payment = document.getElementById("sPayment") ? document.getElementById("sPayment").value : null;
     const sourceSelect = document.getElementById("sourceSelect");
     const personSelect = document.getElementById("sPerson");
+    const destinationTypeEl = document.getElementById("destinationType");
+    const destinationSelectEl = document.getElementById("destinationSelect");
 
     if (!amount || amount <= 0) {
         showToast("Enter valid amount ❗", "warning");
@@ -795,14 +797,25 @@ async function addSavings() {
 
     let data = getSavings();
 
-    const sAttachmentId = await (window.storeAttachmentFromInput ? storeAttachmentFromInput('sAttachment') : (async () => {
-        const fileInput = document.getElementById('sAttachment');
-        const file = fileInput && fileInput.files && fileInput.files[0] ? fileInput.files[0] : null;
-        if (!file) return null;
-        const store = window.reMoAttachments && window.reMoAttachments.storeImage ? window.reMoAttachments.storeImage : (window.reMoAttachmentsIndexed && window.reMoAttachmentsIndexed.storeImage);
-        if (!store) return null;
-        try { const res = await store(null, file); return res && res.id ? res.id : null; } catch (e) { console.warn('Attachment save failed', e); return null; }
-    })());
+    let attachmentMeta = { attachmentId: null, status: "none", error: null };
+    try {
+        if (typeof window.storeAttachmentWithStatus === "function") {
+            attachmentMeta = await window.storeAttachmentWithStatus("sAttachment");
+        } else if (typeof window.storeAttachmentFromInput === "function") {
+            const attachmentId = await window.storeAttachmentFromInput("sAttachment");
+            attachmentMeta = {
+                attachmentId,
+                status: attachmentId ? "linked" : "none",
+                error: attachmentId ? null : null
+            };
+        }
+    } catch (err) {
+        attachmentMeta = {
+            attachmentId: null,
+            status: "failed",
+            error: err && err.message ? err.message : "Attachment save failed"
+        };
+    }
 
     if (type === "deposit") {
         const entry = createSavingsEntry({
@@ -813,12 +826,16 @@ async function addSavings() {
             note,
             date
         });
-        if (sAttachmentId) entry.attachmentId = sAttachmentId;
+        if (attachmentMeta.attachmentId) entry.attachmentId = attachmentMeta.attachmentId;
+        entry.attachmentStatus = attachmentMeta.status;
+        entry.attachmentError = attachmentMeta.error;
         data.push(entry);
     }
     else if (type === "transfer") {
         const sourceId = String(sourceSelect?.value || "");
         const person = personSelect?.value || null;
+        const destinationType = destinationTypeEl?.value || null;
+        const destination = destinationSelectEl?.value || null;
 
         if (!sourceId) {
             showToast("Select source ❗", "warning");
@@ -831,6 +848,16 @@ async function addSavings() {
             return;
         }
 
+        if (destinationTypeEl && destinationSelectEl && (!destinationType || !destination)) {
+            showToast("Select destination type and destination ❗", "warning");
+            return;
+        }
+
+        if (personSelect && !person) {
+            showToast("Select person ❗", "warning");
+            return;
+        }
+
         const entry = createSavingsEntry({
             type: "transfer",
             amount: -Math.abs(amount),
@@ -840,7 +867,11 @@ async function addSavings() {
             note,
             date
         });
-        if (sAttachmentId) entry.attachmentId = sAttachmentId;
+        if (destinationType) entry.destinationType = destinationType;
+        if (destination) entry.destination = destination;
+        if (attachmentMeta.attachmentId) entry.attachmentId = attachmentMeta.attachmentId;
+        entry.attachmentStatus = attachmentMeta.status;
+        entry.attachmentError = attachmentMeta.error;
         data.push(entry);
     }
     else if (type === "refund") {
@@ -899,7 +930,9 @@ async function addSavings() {
                     resolvedAmount: creditAmount,
                     lossAmount: 0
                 });
-                if (sAttachmentId) refundEntry.attachmentId = sAttachmentId;
+                if (attachmentMeta.attachmentId) refundEntry.attachmentId = attachmentMeta.attachmentId;
+                refundEntry.attachmentStatus = attachmentMeta.status;
+                refundEntry.attachmentError = attachmentMeta.error;
                 data.push(refundEntry);
             }
         }
@@ -964,7 +997,9 @@ async function addSavings() {
 
         entry.targetBudgetId = wallet.budgetId;
         entry.budgetWalletId = wallet.budgetId;
-        if (sAttachmentId) entry.attachmentId = sAttachmentId;
+        if (attachmentMeta.attachmentId) entry.attachmentId = attachmentMeta.attachmentId;
+        entry.attachmentStatus = attachmentMeta.status;
+        entry.attachmentError = attachmentMeta.error;
         data.push(entry);
     }
     else {
@@ -1103,13 +1138,21 @@ function resolveActivePeriodKeyForSavings() {
 function upsertActiveBudgetWalletFromSavings(entry) {
     let budgets = JSON.parse(localStorage.getItem("budgets")) || [];
     let periodKey = resolveActivePeriodKeyForSavings();
+    let sourceId = String(entry && entry.sourceId ? entry.sourceId : "savings_wallet");
 
     if (!periodKey) return null;
 
-    let wallet = budgets.find(b => b && b.periodKey === periodKey && b.isBudgetWallet === true);
+    let wallet = budgets.find(b => b && b.periodKey === periodKey && b.isBudgetWallet === true && String(b.sourceId || "") === sourceId);
 
     if (!wallet) {
-        wallet = budgets.find(b => b && b.periodKey === periodKey && (String(b.entity || "").toLowerCase() === "budget wallet"));
+        wallet = budgets.find(b => b && b.periodKey === periodKey && (String(b.entity || "").toLowerCase() === "budget wallet") && String(b.sourceId || "") === sourceId);
+    }
+
+    if (!wallet) {
+        wallet = budgets.find(b => b && b.periodKey === periodKey && b.isBudgetWallet === true && String(b.sourceId || "") === "savings_wallet");
+        if (wallet) {
+            wallet.sourceId = sourceId;
+        }
     }
 
     if (!wallet) {
@@ -1120,8 +1163,8 @@ function upsertActiveBudgetWalletFromSavings(entry) {
         wallet = {
             id: Date.now(),
             type: "budget",
-            budgetId: `budget_wallet_${periodKey}_${uid}`,
-            sourceId: "savings_wallet",
+            budgetId: `budget_wallet_${periodKey}_${sourceId}_${uid}`,
+            sourceId: sourceId,
             totalAllocated: 0,
             entity: "Budget Wallet",
             note: "Auto Budget Wallet",
@@ -1254,6 +1297,11 @@ function renderSavingsHistory(data) {
 
     container.innerHTML = "";
 
+    if (!Array.isArray(data) || !data.length) {
+        container.innerHTML = `<p class="empty-state">No data yet</p>`;
+        return;
+    }
+
     let compareTxn = (a, b) => {
         let da = new Date(a.date || 0).getTime();
         let db = new Date(b.date || 0).getTime();
@@ -1275,9 +1323,7 @@ function renderSavingsHistory(data) {
         return Object.assign({}, t, { runningBalance: Number.isFinite(fallback) ? fallback : Number(t.amount || 0) });
     });
 
-    withRunning.slice().reverse().forEach((t, index) => {
-
-        // let realIndex = data.length - 1 - index; // 🔥 FIX INDEX
+    withRunning.slice().reverse().forEach((t) => {
 
         let div = document.createElement("div");
         div.className = "expense-item";
@@ -1291,32 +1337,23 @@ function renderSavingsHistory(data) {
             expense_resolution: "🧾 Closure"
         };
 
-        let label = labelMap[t.type] || t.type;
-        let color = t.amount < 0 ? "red" : "green";
-        let attachmentCount = t.attachmentId ? 1 : 0;
-                let refundStatusNote = "";
-
-        if (t.type === "transfer" && Number(t.amount || 0) < 0) {
-            let snapshot = getSavingsResolutionSnapshot(t.id, chronological);
-                        refundStatusNote = `<br>Refund Status: ${formatSavingsResolutionStatus(snapshot.status)}`;
-        }
+                let label = labelMap[t.type] || t.type;
+                let amountClass = t.amount < 0 ? "negative" : "positive";
+                let date = new Date(t.date).toLocaleString("en-IN");
+                let runningBalance = formatCurrency(Number(t.runningBalance || 0));
 
         div.innerHTML = `
-    <div style="display:flex;gap:8px;align-items:center;">
-      <div>
-                <strong>${label}${t.note ? ` • ${t.note}` : ""}</strong><br>
-        <small>
-                        ${new Date(t.date).toLocaleString()}<br>
-                        Running Balance: ₹${Number(t.runningBalance || 0).toFixed(2)}
-                        ${refundStatusNote}
-                        ${attachmentCount ? `<br>📎 Attachment` : ""}
-        </small>
-      </div>
+        <div class="history-main">
+            <div class="history-type">${label}</div>
+            <div class="history-meta">${date}</div>
+            <div class="history-running">Running Balance: ${runningBalance}</div>
     </div>
 
-    <div style="display:flex; align-items:center; gap:10px;">
-        <span style="color:${color}; font-weight:600;">₹${Math.abs(t.amount)}</span>
-        <button class="delete-btn" style="background:none; border:none; cursor:pointer; font-size:16px;">🗑</button>
+        <div>
+                <div class="history-amount ${amountClass}">${formatCurrency(Math.abs(Number(t.amount || 0)))}</div>
+                <div class="history-actions">
+                    <button class="delete-btn" title="Delete">🗑</button>
+                </div>
     </div>
 `;
 

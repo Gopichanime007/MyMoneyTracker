@@ -126,25 +126,67 @@
         return URL.createObjectURL(blob);
     }
 
+    function getWorkerPath(){
+        return location.pathname.includes('/pages/')
+            ? '../assets/scripts/remo/attachments-worker.js'
+            : 'assets/scripts/remo/attachments-worker.js';
+    }
+
     async function storeImage(transactionId, file){
         const id = transactionId || (crypto && crypto.randomUUID ? crypto.randomUUID() : ('atta-'+Date.now()));
+        const mime = (file && file.type) ? String(file.type) : 'application/octet-stream';
+        const isImage = mime.startsWith('image/');
+
+        if(!isImage){
+            const record = {
+                id,
+                createdAt: Date.now(),
+                filename: file.name || 'attachment.bin',
+                mime,
+                blob: file,
+                thumb: null
+            };
+            await putRecord(record);
+            const imageUrl = makeObjectUrl(record.blob);
+            urlMap.set(id, { imageUrl, thumbUrl: null });
+            return { id, imageUrl, thumbUrl: null };
+        }
+
         // If a processing worker is available, use it to avoid main-thread work
         let compressed, thumb;
         if(window.Worker && !processingWorker){
             try{
-                processingWorker = new Worker('assets/scripts/remo/attachments-worker.js');
+                processingWorker = new Worker(getWorkerPath());
             }catch(e){ processingWorker = null; }
         }
         if(processingWorker){
             const msgId = 'm_' + Date.now() + '_' + Math.random();
             compressed = await new Promise((res, rej)=>{
+                const timeout = setTimeout(()=>{
+                    cleanup();
+                    rej(new Error('Attachment worker timeout'));
+                }, 8000);
+
+                const cleanup = ()=>{
+                    clearTimeout(timeout);
+                    processingWorker.removeEventListener('message', onmsg);
+                    processingWorker.removeEventListener('error', onerr);
+                };
+
                 const onmsg = (ev)=>{
                     if(ev.data && ev.data.msgId === msgId){
-                        processingWorker.removeEventListener('message', onmsg);
+                        cleanup();
                         if(ev.data.error) rej(new Error(ev.data.error)); else res(ev.data.compressed);
                     }
                 };
+
+                const onerr = ()=>{
+                    cleanup();
+                    rej(new Error('Attachment worker failed'));
+                };
+
                 processingWorker.addEventListener('message', onmsg);
+                processingWorker.addEventListener('error', onerr);
                 // post file (cloneable) and parameters
                 processingWorker.postMessage({ cmd: 'compress', msgId, file, maxWidth:1600, quality:0.8 });
             });
@@ -165,7 +207,7 @@
         await putRecord(record);
         // create and cache object URLs for reuse; revoke on remove or unload
         const imageUrl = makeObjectUrl(record.blob);
-        const thumbUrl = makeObjectUrl(record.thumb);
+        const thumbUrl = record.thumb ? makeObjectUrl(record.thumb) : null;
         urlMap.set(id, { imageUrl, thumbUrl });
         return { id, imageUrl, thumbUrl };
     }
