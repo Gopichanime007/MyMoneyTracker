@@ -407,27 +407,29 @@
 
           <small id="notificationPermissionState" class="muted-note">Permission: unknown</small>
           <small id="runtimeSupportState" class="muted-note">Runtime: checking capabilities...</small>
+          <small id="notificationRuntimeConclusion" class="muted-note">Notification status: checking runtime support...</small>
           <button class="secondary" type="button" onclick="requestNotificationPermissionFromSettings()">Request Browser Permission</button>
           <button class="secondary" type="button" onclick="testNotification()">Send Test Notification</button>
         </div>
 
-        <h4>Widget Settings</h4>
+        <h4>Dashboard Card Settings</h4>
+        <small id="widgetCapabilityState" class="muted-note">Android home-screen widgets are not provided by this runtime.</small>
         <div class="form-group">
           <label for="widgetBudgetSummary">
             <input id="widgetBudgetSummary" type="checkbox" onchange="applyWidgetSettingsFromUI()" class="inline-checkbox" />
-            Budget Summary Widget
+            Budget Summary Card
           </label>
           <label for="widgetDailyEfficiency">
             <input id="widgetDailyEfficiency" type="checkbox" onchange="applyWidgetSettingsFromUI()" class="inline-checkbox" />
-            Daily Efficiency Widget
+            Daily Efficiency Card
           </label>
           <label for="widgetQuickAddExpense">
             <input id="widgetQuickAddExpense" type="checkbox" onchange="applyWidgetSettingsFromUI()" class="inline-checkbox" />
-            Quick Add Expense Widget
+            Quick Add Expense Card
           </label>
           <label for="widgetQuickAddSavings">
             <input id="widgetQuickAddSavings" type="checkbox" onchange="applyWidgetSettingsFromUI()" class="inline-checkbox" />
-            Quick Add Savings Widget
+            Quick Add Savings Card
           </label>
         </div>
 
@@ -495,6 +497,7 @@
       <h3>Import Data</h3>
 
       <textarea id="importText" placeholder="Paste JSON here" class="import-textarea"></textarea>
+      <pre id="importValidationReport" class="muted-note" aria-live="polite">Import report will appear here.</pre>
 
       <input type="file" accept=".json" onchange="handleFileImport(event)">
 

@@ -60,6 +60,7 @@ beforeEach(() => {
             <select id="autoBackupTarget"><option value="local_download">local_download</option></select>
             <small id="notificationPermissionState"></small>
             <small id="runtimeSupportState"></small>
+            <small id="notificationRuntimeConclusion"></small>
             <input id="notificationsEnabled" type="checkbox" />
             <input id="notifBudgetPeriodEnding" type="checkbox" />
             <input id="notifLowBudgetWarning" type="checkbox" />
@@ -70,8 +71,10 @@ beforeEach(() => {
             <input id="widgetDailyEfficiency" type="checkbox" />
             <input id="widgetQuickAddExpense" type="checkbox" />
             <input id="widgetQuickAddSavings" type="checkbox" />
+            <small id="widgetCapabilityState"></small>
             <div id="importModal" style="display:block"></div>
             <textarea id="importText"></textarea>
+            <pre id="importValidationReport"></pre>
     `;
 
     window.open = jest.fn();
@@ -472,9 +475,146 @@ test('import restores settings and widgets with no ledger drift', () => {
 test('runtime diagnostics surfaces capability flags independently', () => {
     window.refreshSettingsPanels();
     const line = document.getElementById('runtimeSupportState').textContent;
+    const conclusion = document.getElementById('notificationRuntimeConclusion').textContent;
 
-    expect(line).toContain('Notifications:');
+    expect(line).toContain('Notification API:');
     expect(line).toContain('Service Worker:');
     expect(line).toContain('Push Manager:');
     expect(line).toContain('PWA Install Prompt:');
+    expect(conclusion).toContain('Notification status:');
+});
+
+test('import classifies malformed json separately from validation errors', () => {
+    document.getElementById('importText').value = '{"expenses":';
+    window.importData();
+
+    const report = window.__lastImportValidationReport;
+    expect(report).toBeTruthy();
+    expect(report.errors).toContain('Malformed JSON');
+});
+
+test('import rejects unsupported version and invalid schema with validation report', () => {
+    const payload = {
+        meta: { version: 'v9' },
+        expenses: {},
+        savings: [],
+        budgets: []
+    };
+
+    document.getElementById('importText').value = JSON.stringify(payload);
+    window.importData();
+
+    const report = window.__lastImportValidationReport;
+    expect(report.errors.some(e => e.includes('Unsupported Version'))).toBe(true);
+    expect(report.errors.some(e => e.includes('expenses must be an array'))).toBe(true);
+});
+
+test('import accepts numeric string guid ids and null linkage fields', () => {
+    const payload = {
+        expenses: [
+            {
+                id: 1780644309293,
+                type: 'expense',
+                amount: -200,
+                budgetId: 'b-id-1',
+                person: null,
+                sourceId: null,
+                linkedTransactionId: null,
+                date: '2026-06-01T10:00:00Z'
+            },
+            {
+                id: 'bcc1a037-8dc7-4101-b975-4e591dbd2e81',
+                type: 'expense',
+                amount: -100,
+                budgetId: 'b-id-1',
+                person: 'self',
+                date: '2026-06-01T11:00:00Z'
+            }
+        ],
+        savings: [
+            {
+                id: 'savings_wallet',
+                type: 'deposit',
+                amount: 2000,
+                autoRecovered: true,
+                sourceId: null,
+                linkedTransactionId: null,
+                date: '2026-06-01T09:00:00Z'
+            }
+        ],
+        budgets: [
+            {
+                budgetId: 'b-id-1',
+                totalAllocated: 5000,
+                periodKey: '2026-06-01_to_2026-06-30'
+            }
+        ],
+        budgetPeriods: [
+            {
+                id: 'bp1',
+                periodKey: '2026-06-01_to_2026-06-30',
+                status: 'active'
+            }
+        ],
+        settings: {
+            theme: '#2196f3',
+            currencyCode: 'INR'
+        },
+        categories: [],
+        persons: [],
+        meta: { version: 'v2' }
+    };
+
+    document.getElementById('importText').value = JSON.stringify(payload);
+    window.importData();
+
+    const report = window.__lastImportValidationReport;
+    expect(report.errors).toEqual([]);
+    expect(report.imported.expenses).toBe(2);
+    expect(report.imported.savings).toBe(1);
+    expect(window.getExpenses().length).toBe(2);
+    expect(window.getSavings().length).toBe(1);
+});
+
+test('legacy v1 import is migrated and accepted', () => {
+    const payload = {
+        expenses: [
+            {
+                id: 1,
+                type: 'expense',
+                amount: -300,
+                budgetId: 'b-legacy',
+                date: '2026-06-01T10:00:00Z'
+            }
+        ],
+        savings: [
+            {
+                id: 's-legacy',
+                type: 'deposit',
+                amount: 1000,
+                date: '2026-06-01T09:00:00Z'
+            }
+        ],
+        budgets: [
+            {
+                budgetId: 'b-legacy',
+                totalAllocated: 5000,
+                monthKey: '2026-06'
+            }
+        ],
+        settings: {
+            theme: '#22c55e',
+            currencyCode: 'INR'
+        },
+        meta: { version: 'v1' }
+    };
+
+    document.getElementById('importText').value = JSON.stringify(payload);
+    window.importData();
+
+    const report = window.__lastImportValidationReport;
+    expect(report.errors).toEqual([]);
+    expect(localStorage.getItem('accentColor')).toBe('#22c55e');
+    expect(localStorage.getItem('currencyCode')).toBe('INR');
+    expect(window.getExpenses().length).toBe(1);
 });

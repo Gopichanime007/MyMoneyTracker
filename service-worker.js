@@ -1,4 +1,4 @@
-const CACHE_NAME = "moneytracker-cache-v2";
+const CACHE_NAME = "moneytracker-cache-v3";
 const CORE_ASSETS = [
   "/",
   "/index.html",
@@ -43,6 +43,26 @@ self.addEventListener("fetch", event => {
   const url = new URL(req.url);
   if (url.origin !== self.location.origin) return;
 
+  const isNavigation = req.mode === "navigate";
+  const isAppShellAsset = /\.(?:html|css|js|json)$/i.test(url.pathname) || url.pathname === "/";
+
+  if (isNavigation || isAppShellAsset) {
+    event.respondWith((async () => {
+      try {
+        const network = await fetch(req, { cache: "no-store" });
+        const cache = await caches.open(CACHE_NAME);
+        cache.put(req, network.clone()).catch(() => {});
+        return network;
+      } catch (_err) {
+        const cached = await caches.match(req);
+        if (cached) return cached;
+        const fallback = await caches.match("/index.html");
+        return fallback || Response.error();
+      }
+    })());
+    return;
+  }
+
   event.respondWith((async () => {
     const cached = await caches.match(req);
     if (cached) return cached;
@@ -52,14 +72,18 @@ self.addEventListener("fetch", event => {
       const cache = await caches.open(CACHE_NAME);
       cache.put(req, network.clone()).catch(() => {});
       return network;
-    } catch (err) {
-      const fallback = await caches.match("/index.html");
-      return fallback || Response.error();
+    } catch (_err) {
+      return Response.error();
     }
   })());
 });
 
 self.addEventListener("message", event => {
+  if (event.data?.type === "SKIP_WAITING") {
+    self.skipWaiting();
+    return;
+  }
+
   if (event.data?.type === "SHOW_NOTIFICATION") {
     self.registration.showNotification(event.data.title, {
       body: event.data.body,

@@ -2015,7 +2015,30 @@ function registerOfflineServiceWorker() {
 
     const swPath = location.pathname.includes('/pages/') ? '../service-worker.js' : 'service-worker.js';
 
-    navigator.serviceWorker.register(swPath).catch(err => {
+    let refreshing = false;
+
+    navigator.serviceWorker.addEventListener("controllerchange", () => {
+        if (refreshing) return;
+        refreshing = true;
+        window.location.reload();
+    });
+
+    navigator.serviceWorker.register(swPath).then((registration) => {
+        if (registration.waiting) {
+            registration.waiting.postMessage({ type: "SKIP_WAITING" });
+        }
+
+        registration.addEventListener("updatefound", () => {
+            const installing = registration.installing;
+            if (!installing) return;
+
+            installing.addEventListener("statechange", () => {
+                if (installing.state === "installed" && navigator.serviceWorker.controller) {
+                    installing.postMessage({ type: "SKIP_WAITING" });
+                }
+            });
+        });
+    }).catch(err => {
         console.warn('Service worker registration failed', err);
     });
 }
@@ -3979,6 +4002,7 @@ function refreshNotificationSettingsUI() {
     const backup = document.getElementById("notifBackupReminder");
     const permission = document.getElementById("notificationPermissionState");
     const runtimeState = document.getElementById("runtimeSupportState");
+    const runtimeConclusion = document.getElementById("notificationRuntimeConclusion");
 
     if (enabled) enabled.checked = !!settings.enabled;
     if (periodEnding) periodEnding.checked = !!settings.budgetPeriodEnding;
@@ -3998,14 +4022,33 @@ function refreshNotificationSettingsUI() {
     if (runtimeState) {
         runtimeState.textContent = [
             `Runtime: ${runtime.isWebView ? "Android WebView" : "Browser"}`,
-            `Notifications: ${runtime.notificationApi ? "Supported" : "Unsupported"}`,
+            `Notification API: ${runtime.notificationApi ? "Supported" : "Unsupported"}`,
             `Service Worker: ${runtime.serviceWorkerApi ? "Supported" : "Unsupported"}`,
             `Push Manager: ${runtime.pushManagerApi ? "Supported" : "Unsupported"}`,
             `PWA Install Prompt: ${runtime.beforeinstallprompt ? "Supported" : "Unsupported"}`
         ].join(" | ");
     }
 
+    if (runtimeConclusion) {
+        runtimeConclusion.textContent = getNotificationRuntimeConclusion(runtime);
+    }
+
     window.__moneyTrackerRuntimeDiagnostics = runtime;
+}
+
+function getNotificationRuntimeConclusion(runtime) {
+    if (!runtime.notificationApi || !runtime.serviceWorkerApi || !runtime.pushManagerApi) {
+        if (runtime.isWebView) {
+            return "Notification status: constrained by WebIntoApp runtime capabilities (not fully app-fixable).";
+        }
+        return "Notification status: runtime capability gap detected.";
+    }
+
+    if (runtime.notificationPermission !== "granted") {
+        return "Notification status: APIs are available; user permission is required.";
+    }
+
+    return "Notification status: APIs available in current runtime.";
 }
 
 async function applyNotificationSettings() {
@@ -4155,11 +4198,15 @@ function refreshWidgetSettingsUI() {
     let elDaily = document.getElementById("widgetDailyEfficiency");
     let elQuickExpense = document.getElementById("widgetQuickAddExpense");
     let elQuickSavings = document.getElementById("widgetQuickAddSavings");
+    let capability = document.getElementById("widgetCapabilityState");
 
     if (elBudget) elBudget.checked = !!settings.budgetSummary;
     if (elDaily) elDaily.checked = !!settings.dailyEfficiency;
     if (elQuickExpense) elQuickExpense.checked = !!settings.quickAddExpense;
     if (elQuickSavings) elQuickSavings.checked = !!settings.quickAddSavings;
+    if (capability) {
+        capability.textContent = "Android home-screen widgets are not available in this WebIntoApp runtime. These controls manage in-app dashboard cards only.";
+    }
 }
 
 function getQuickSavingsSourceOptions() {
@@ -4358,7 +4405,7 @@ function renderHomeWidgets() {
 
     host.innerHTML = blocks.length
         ? `<div class="widget-grid">${blocks.join("")}</div>`
-        : `<p class="muted-note">Widgets are currently disabled in settings.</p>`;
+        : `<p class="muted-note">Dashboard cards are currently disabled in settings.</p>`;
 
     handleQuickSavingsTypeChange();
 }
@@ -4785,73 +4832,263 @@ function closePeriod() {
 //         showToast("Invalid JSON ❌");
 //     }
 // }
-function importData() {
+function normalizeImportRawText(rawText) {
+    if (typeof rawText !== "string") return "";
+    return rawText.replace(/^\uFEFF/, "").trim();
+}
 
-    let text = document.getElementById("importText").value;
+function isValidImportId(value) {
+    return typeof value === "string" || typeof value === "number";
+}
+
+function isValidNullableImportId(value) {
+    return value === null || typeof value === "undefined" || isValidImportId(value);
+}
+
+function renderImportValidationReport(report) {
+    const found = report.found || {};
+    const imported = report.imported || {};
+    const warnings = Array.isArray(report.warnings) ? report.warnings : [];
+    const errors = Array.isArray(report.errors) ? report.errors : [];
+    const version = report.version || "unknown";
+
+    const lines = [
+        `Version: ${version}`,
+        `Records Found | Expenses: ${Number(found.expenses || 0)} | Savings: ${Number(found.savings || 0)} | Budgets: ${Number(found.budgets || 0)} | Budget Periods: ${Number(found.budgetPeriods || 0)}`,
+        `Records Imported | Expenses: ${Number(imported.expenses || 0)} | Savings: ${Number(imported.savings || 0)} | Budgets: ${Number(imported.budgets || 0)} | Budget Periods: ${Number(imported.budgetPeriods || 0)}`,
+        `Warnings: ${warnings.length}`,
+        `Errors: ${errors.length}`
+    ];
+
+    if (warnings.length) lines.push(`Warning Details: ${warnings.join("; ")}`);
+    if (errors.length) lines.push(`Error Details: ${errors.join("; ")}`);
+
+    const host = document.getElementById("importValidationReport");
+    if (host) host.textContent = lines.join("\n");
+
+    window.__lastImportValidationReport = report;
+    console.info("Import Validation Report", report);
+}
+
+function buildImportDiagnostics(parsed) {
+    return {
+        typeofImportedData: typeof parsed,
+        keys: (parsed && typeof parsed === "object") ? Object.keys(parsed) : [],
+        meta: parsed ? parsed.meta : undefined,
+        settings: parsed ? parsed.settings : undefined,
+        expensesCount: Array.isArray(parsed && parsed.expenses) ? parsed.expenses.length : 0,
+        savingsCount: Array.isArray(parsed && parsed.savings) ? parsed.savings.length : 0,
+        budgetsCount: Array.isArray(parsed && parsed.budgets) ? parsed.budgets.length : 0,
+        budgetPeriodsCount: Array.isArray(parsed && parsed.budgetPeriods) ? parsed.budgetPeriods.length : 0
+    };
+}
+
+function validateImportPayload(parsed) {
+    const errors = [];
+    const warnings = [];
+
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+        errors.push("Missing Fields: top-level object is required");
+        return { errors, warnings, normalized: null, version: "unknown" };
+    }
+
+    const normalized = Object.assign({}, parsed);
+    normalized.meta = (normalized.meta && typeof normalized.meta === "object" && !Array.isArray(normalized.meta)) ? normalized.meta : {};
+
+    const rawVersion = typeof normalized.meta.version === "string" ? normalized.meta.version.trim().toLowerCase() : "v1";
+    const supported = ["v1", "v2", "v3"];
+    if (!supported.includes(rawVersion)) {
+        errors.push(`Unsupported Version: ${normalized.meta.version}`);
+    }
+
+    const topArrays = ["expenses", "savings", "budgets", "budgetPeriods", "orders", "categories", "persons"];
+    topArrays.forEach((key) => {
+        if (!Object.prototype.hasOwnProperty.call(normalized, key)) {
+            normalized[key] = [];
+            warnings.push(`Missing Fields: ${key}`);
+            return;
+        }
+
+        if (!Array.isArray(normalized[key])) {
+            if (key === "budgetPeriods") {
+                errors.push("Invalid Budget Periods: budgetPeriods must be an array");
+            } else if (key === "expenses" || key === "savings" || key === "budgets") {
+                errors.push(`Missing Fields: ${key} must be an array`);
+            } else {
+                errors.push(`Invalid Transactions: ${key} must be an array`);
+            }
+        }
+    });
+
+    if (!Object.prototype.hasOwnProperty.call(normalized, "settings") || normalized.settings === null || typeof normalized.settings === "undefined") {
+        normalized.settings = {};
+        warnings.push("Missing Fields: settings");
+    } else if (typeof normalized.settings !== "object" || Array.isArray(normalized.settings)) {
+        errors.push("Invalid Settings Structure: settings must be an object");
+    }
+
+    const settings = normalized.settings || {};
+    ["theme", "appearanceMode", "accentColor", "currencyCode"].forEach((key) => {
+        if (Object.prototype.hasOwnProperty.call(settings, key) && typeof settings[key] !== "string") {
+            errors.push(`Invalid Settings Structure: ${key} must be a string`);
+        }
+    });
+
+    ["autoBackupEnabled", "autoBackup"].forEach((key) => {
+        if (Object.prototype.hasOwnProperty.call(settings, key) && typeof settings[key] !== "boolean") {
+            errors.push(`Invalid Settings Structure: ${key} must be a boolean`);
+        }
+    });
+
+    ["autoBackupFrequency", "backupFrequency", "autoBackupTarget"].forEach((key) => {
+        if (Object.prototype.hasOwnProperty.call(settings, key) && typeof settings[key] !== "string") {
+            errors.push(`Invalid Settings Structure: ${key} must be a string`);
+        }
+    });
+
+    if (Object.prototype.hasOwnProperty.call(settings, "notificationSettings") && (typeof settings.notificationSettings !== "object" || settings.notificationSettings === null || Array.isArray(settings.notificationSettings))) {
+        errors.push("Invalid Settings Structure: notificationSettings must be an object");
+    }
+
+    if (Object.prototype.hasOwnProperty.call(settings, "widgetSettings") && (typeof settings.widgetSettings !== "object" || settings.widgetSettings === null || Array.isArray(settings.widgetSettings))) {
+        errors.push("Invalid Settings Structure: widgetSettings must be an object");
+    }
+
+    function validateTransactions(rows, label) {
+        if (!Array.isArray(rows)) return;
+
+        rows.forEach((row, index) => {
+            if (!row || typeof row !== "object" || Array.isArray(row)) {
+                errors.push(`Invalid Transactions: ${label}[${index}] must be an object`);
+                return;
+            }
+
+            if (!isValidImportId(row.id)) {
+                errors.push(`Invalid IDs: ${label}[${index}].id`);
+            }
+
+            ["person", "sourceId", "linkedTransactionId"].forEach((field) => {
+                if (Object.prototype.hasOwnProperty.call(row, field) && !isValidNullableImportId(row[field])) {
+                    errors.push(`Invalid IDs: ${label}[${index}].${field}`);
+                }
+            });
+        });
+    }
+
+    validateTransactions(normalized.expenses, "expenses");
+    validateTransactions(normalized.savings, "savings");
+
+    if (Array.isArray(normalized.budgets)) {
+        normalized.budgets.forEach((row, index) => {
+            if (!row || typeof row !== "object" || Array.isArray(row)) {
+                errors.push(`Invalid Transactions: budgets[${index}] must be an object`);
+                return;
+            }
+
+            const id = Object.prototype.hasOwnProperty.call(row, "budgetId") ? row.budgetId : row.id;
+            if (!isValidImportId(id)) {
+                errors.push(`Invalid IDs: budgets[${index}] budgetId/id`);
+            }
+        });
+    }
+
+    if (Array.isArray(normalized.budgetPeriods)) {
+        normalized.budgetPeriods.forEach((period, index) => {
+            if (!period || typeof period !== "object" || Array.isArray(period)) {
+                errors.push(`Invalid Budget Periods: budgetPeriods[${index}] must be an object`);
+                return;
+            }
+
+            const hasPeriodKey = typeof period.periodKey === "string" && period.periodKey.length > 0;
+            const hasRange = typeof period.start === "string" && typeof period.end === "string";
+            if (!hasPeriodKey && !hasRange) {
+                errors.push(`Invalid Budget Periods: budgetPeriods[${index}] missing periodKey or start/end`);
+            }
+        });
+    }
+
+    if (settings && typeof settings === "object") {
+        if (settings.theme && !settings.accentColor) {
+            settings.accentColor = settings.theme;
+        }
+
+        if (Object.prototype.hasOwnProperty.call(settings, "autoBackup") && !Object.prototype.hasOwnProperty.call(settings, "autoBackupEnabled")) {
+            settings.autoBackupEnabled = !!settings.autoBackup;
+        }
+
+        if (settings.backupFrequency && !settings.autoBackupFrequency) {
+            settings.autoBackupFrequency = settings.backupFrequency;
+        }
+    }
+
+    return {
+        errors: Array.from(new Set(errors)),
+        warnings: Array.from(new Set(warnings)),
+        normalized,
+        version: rawVersion
+    };
+}
+
+function importData() {
+    let text = normalizeImportRawText(document.getElementById("importText")?.value || "");
 
     if (!text) {
         showToast("Paste data");
         return;
     }
 
+    let parsed;
     try {
-        let data = JSON.parse(text);
+        parsed = JSON.parse(text);
+    } catch (err) {
+        renderImportValidationReport({
+            version: "unknown",
+            found: { expenses: 0, savings: 0, budgets: 0, budgetPeriods: 0 },
+            imported: { expenses: 0, savings: 0, budgets: 0, budgetPeriods: 0 },
+            warnings: [],
+            errors: ["Malformed JSON"]
+        });
+        showToast("Malformed JSON", "error");
+        return;
+    }
 
-        // =========================
-        // 🧠 BASIC VALIDATION
-        // =========================
-        if (!data || typeof data !== "object") {
-            throw new Error("Invalid structure");
-        }
+    const diagnostics = buildImportDiagnostics(parsed);
+    console.info("Import parse diagnostics", diagnostics);
 
-        // =========================
-        // 🔥 CORE TABLES
-        // =========================
-        if (Array.isArray(data.expenses)) {
-            saveExpenses(data.expenses);
-        }
+    const validation = validateImportPayload(parsed);
+    const found = {
+        expenses: diagnostics.expensesCount,
+        savings: diagnostics.savingsCount,
+        budgets: diagnostics.budgetsCount,
+        budgetPeriods: diagnostics.budgetPeriodsCount
+    };
 
-        if (Array.isArray(data.budgets)) {
-            saveBudgets(data.budgets);
-        }
+    if (validation.errors.length) {
+        renderImportValidationReport({
+            version: validation.version,
+            found,
+            imported: { expenses: 0, savings: 0, budgets: 0, budgetPeriods: 0 },
+            warnings: validation.warnings,
+            errors: validation.errors
+        });
+        showToast("Import Validation Failed", "error");
+        return;
+    }
 
-        if (Array.isArray(data.savings)) {
-            saveSavings(data.savings);
-        }
+    const data = validation.normalized;
 
-        // =========================
-        // 📦 ORDERS
-        // =========================
-        if (Array.isArray(data.orders)) {
-            localStorage.setItem("orders", JSON.stringify(data.orders));
-        }
+    try {
+        if (Array.isArray(data.expenses)) saveExpenses(data.expenses);
+        if (Array.isArray(data.budgets)) saveBudgets(data.budgets);
+        if (Array.isArray(data.savings)) saveSavings(data.savings);
+        if (Array.isArray(data.orders)) localStorage.setItem("orders", JSON.stringify(data.orders));
+        if (Array.isArray(data.categories)) localStorage.setItem("categories", JSON.stringify(data.categories));
+        if (Array.isArray(data.persons)) localStorage.setItem("persons", JSON.stringify(data.persons));
+        if (Array.isArray(data.budgetPeriods)) localStorage.setItem("bp", JSON.stringify(data.budgetPeriods));
 
-        // =========================
-        // 🧩 EXTRA TABLES (NEW)
-        // =========================
-        if (Array.isArray(data.categories)) {
-            localStorage.setItem("categories", JSON.stringify(data.categories));
-        }
-
-        if (Array.isArray(data.persons)) {
-            localStorage.setItem("persons", JSON.stringify(data.persons));
-        }
-
-        if (Array.isArray(data.budgetPeriods)) {
-            localStorage.setItem("bp", JSON.stringify(data.budgetPeriods));
-        }
-
-        // =========================
-        // ⚙️ SETTINGS
-        // =========================
         if (data.settings) {
-            if (data.settings.currencyCode) {
-                localStorage.setItem("currencyCode", data.settings.currencyCode);
-            }
-
-            if (data.settings.appearanceMode) {
-                setAppearanceMode(data.settings.appearanceMode);
-            }
+            if (data.settings.currencyCode) localStorage.setItem("currencyCode", data.settings.currencyCode);
+            if (data.settings.appearanceMode) setAppearanceMode(data.settings.appearanceMode);
 
             if (data.settings.accentColor) {
                 changeTheme(data.settings.accentColor);
@@ -4886,53 +5123,49 @@ function importData() {
             }
         }
 
-        // =========================
-        // 🧠 META (OPTIONAL FUTURE USE)
-        // =========================
-        if (data.meta) {
-            console.log("Imported version:", data.meta.version);
-        }
-
-        // Repair and re-tie legacy references after import.
         runIntegrityRepairSilently();
         loadTheme();
         syncThemeSelectors();
         refreshSettingsPanels();
         renderHomeWidgets();
 
-        showToast("Import successful ✅");
-
-        // =========================
-        // 🔄 FULL UI REFRESH
-        // =========================
         loadHistory();
         loadBudgetOptions();
         loadDashboard();
         loadGraph();
         updateBudgetEfficiency();
+        if (typeof renderBudgetEntries === "function") renderBudgetEntries();
+        if (typeof renderIncomeList === "function") renderIncomeList();
+        if (typeof loadSavings === "function") loadSavings();
 
-        if (typeof renderBudgetEntries === "function") {
-            renderBudgetEntries();
-        }
+        renderImportValidationReport({
+            version: validation.version,
+            found,
+            imported: {
+                expenses: Array.isArray(data.expenses) ? data.expenses.length : 0,
+                savings: Array.isArray(data.savings) ? data.savings.length : 0,
+                budgets: Array.isArray(data.budgets) ? data.budgets.length : 0,
+                budgetPeriods: Array.isArray(data.budgetPeriods) ? data.budgetPeriods.length : 0
+            },
+            warnings: validation.warnings,
+            errors: []
+        });
 
-        if (typeof renderIncomeList === "function") {
-            renderIncomeList();
-        }
+        showToast("Import successful ✅");
 
-        if (typeof loadSavings === "function") {
-            loadSavings();
-        }
-
-        // =========================
-        // 🧹 CLEANUP
-        // =========================
-        document.getElementById("importText").value = "";
+        const importText = document.getElementById("importText");
+        if (importText) importText.value = "";
         closeImportModal();
-
     } catch (err) {
-
         console.error(err);
-        showToast("Invalid or incompatible backup ❌");
+        renderImportValidationReport({
+            version: validation.version,
+            found,
+            imported: { expenses: 0, savings: 0, budgets: 0, budgetPeriods: 0 },
+            warnings: validation.warnings,
+            errors: ["Import Validation Failed: invalid transactions or data mapping"]
+        });
+        showToast("Import Validation Failed", "error");
     }
 }
 
@@ -6817,15 +7050,21 @@ function closeImportModal() {
 }
 
 function handleFileImport(event) {
-    let file = event.target.files[0];
+    let file = event.target.files && event.target.files[0];
     if (!file) return;
 
     let reader = new FileReader();
 
-    reader.onload = function (e) {
-        let text = e.target.result;
+    reader.onerror = function () {
+        showToast("File read failed", "error");
+    };
 
-        document.getElementById("importText").value = text;
+    reader.onload = function (e) {
+        let text = typeof e.target.result === "string" ? e.target.result : "";
+        let importText = document.getElementById("importText");
+        if (importText) {
+            importText.value = normalizeImportRawText(text);
+        }
     };
 
     reader.readAsText(file);
