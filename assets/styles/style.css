@@ -157,6 +157,49 @@ h4 {
   gap: var(--space-sm);
   margin-bottom: var(--space-md);
   overflow-x: auto;
+  width: 100%;
+  padding-bottom: max(2px, env(safe-area-inset-bottom));
+}
+
+.nav button {
+  flex: 1 1 0;
+  min-width: 0;
+  min-height: 52px;
+  height: 52px;
+  border: none;
+  border-radius: var(--radius-md);
+  margin-top: 0;
+  padding: 8px 6px;
+  background: color-mix(in srgb, var(--surface), var(--theme) 8%);
+  color: var(--text);
+  font-size: 20px;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: var(--shadow-sm);
+}
+
+.nav button:hover {
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-md);
+}
+
+.nav button.active {
+  background: linear-gradient(160deg, var(--theme), var(--theme-strong));
+  color: #fff;
+}
+
+@media (min-width: 900px) {
+  .nav {
+    max-width: 100%;
+  }
+
+  .nav button {
+    min-height: 56px;
+    height: 56px;
+    font-size: 21px;
+  }
 }
 
 .screen {

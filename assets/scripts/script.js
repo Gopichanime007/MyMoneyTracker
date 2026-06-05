@@ -4298,7 +4298,23 @@ function closePeriod() {
 // }
 function normalizeImportRawText(rawText) {
     if (typeof rawText !== "string") return "";
-    return rawText.replace(/^\uFEFF/, "").trim();
+    return rawText
+        .replace(/^\uFEFF/, "")
+        .replace(/\u0000/g, "")
+        .trim();
+}
+
+function setImportStage(stage, payload) {
+    window.__lastImportStage = {
+        stage,
+        payload: payload || null,
+        at: new Date().toISOString()
+    };
+}
+
+function getJsonParseErrorMessage(err) {
+    const message = (err && err.message) ? String(err.message) : "Unknown parse error";
+    return `JSON Parse Error: ${message}`;
 }
 
 function isValidImportId(value) {
@@ -4486,7 +4502,15 @@ function validateImportPayload(parsed) {
 }
 
 function importData() {
+    setImportStage("validation-input");
     let text = normalizeImportRawText(document.getElementById("importText")?.value || "");
+
+    console.info("Import raw diagnostics", {
+        fileName: window.__lastImportFileMeta?.fileName || "manual_text",
+        fileSize: Number(window.__lastImportFileMeta?.fileSize || 0),
+        typeofContent: typeof text,
+        contentLength: text.length
+    });
 
     if (!text) {
         showToast("Paste data");
@@ -4495,19 +4519,23 @@ function importData() {
 
     let parsed;
     try {
+        setImportStage("json-parse");
         parsed = JSON.parse(text);
     } catch (err) {
+        const parseError = getJsonParseErrorMessage(err);
+        setImportStage("json-parse-failed", { error: parseError });
         renderImportValidationReport({
             version: "unknown",
             found: { expenses: 0, savings: 0, budgets: 0, budgetPeriods: 0 },
             imported: { expenses: 0, savings: 0, budgets: 0, budgetPeriods: 0 },
             warnings: [],
-            errors: ["Malformed JSON"]
+            errors: [parseError]
         });
-        showToast("Malformed JSON", "error");
+        showToast("JSON Parse Error", "error");
         return;
     }
 
+    setImportStage("schema-validation");
     const diagnostics = buildImportDiagnostics(parsed);
     console.info("Import parse diagnostics", diagnostics);
 
@@ -4520,6 +4548,7 @@ function importData() {
     };
 
     if (validation.errors.length) {
+        setImportStage("schema-validation-failed", { errors: validation.errors });
         renderImportValidationReport({
             version: validation.version,
             found,
@@ -4534,6 +4563,7 @@ function importData() {
     const data = validation.normalized;
 
     try {
+        setImportStage("import-mapping");
         if (Array.isArray(data.expenses)) saveExpenses(data.expenses);
         if (Array.isArray(data.budgets)) saveBudgets(data.budgets);
         if (Array.isArray(data.savings)) saveSavings(data.savings);
@@ -4569,6 +4599,7 @@ function importData() {
         }
 
         runIntegrityRepairSilently();
+    setImportStage("ledger-rebuild");
         loadTheme();
         syncThemeSelectors();
         refreshSettingsPanels();
@@ -4596,12 +4627,14 @@ function importData() {
         });
 
         showToast("Import successful ✅");
+        setImportStage("completed");
 
         const importText = document.getElementById("importText");
         if (importText) importText.value = "";
         closeImportModal();
     } catch (err) {
         console.error(err);
+        setImportStage("import-mapping-failed", { error: err && err.message ? err.message : "unknown" });
         renderImportValidationReport({
             version: validation.version,
             found,
@@ -6496,21 +6529,46 @@ function handleFileImport(event) {
     let file = event.target.files && event.target.files[0];
     if (!file) return;
 
+    setImportStage("file-selected", {
+        fileName: file.name,
+        fileSize: file.size
+    });
+
     let reader = new FileReader();
 
     reader.onerror = function () {
+        setImportStage("file-read-failed");
         showToast("File read failed", "error");
     };
 
     reader.onload = function (e) {
         let text = typeof e.target.result === "string" ? e.target.result : "";
+        const normalizedText = normalizeImportRawText(text);
+        window.__lastImportFileMeta = {
+            fileName: file.name,
+            fileSize: Number(file.size || 0)
+        };
+
+        console.info("Import file diagnostics", {
+            fileName: file.name,
+            fileSize: Number(file.size || 0),
+            typeofContent: typeof normalizedText,
+            contentLength: normalizedText.length
+        });
+
+        setImportStage("file-read", {
+            fileName: file.name,
+            fileSize: Number(file.size || 0),
+            contentLength: normalizedText.length
+        });
+
         let importText = document.getElementById("importText");
         if (importText) {
-            importText.value = normalizeImportRawText(text);
+            importText.value = normalizedText;
         }
     };
 
-    reader.readAsText(file);
+    reader.readAsText(file, "UTF-8");
 }
 
 

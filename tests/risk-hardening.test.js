@@ -438,7 +438,40 @@ test('import classifies malformed json separately from validation errors', () =>
 
     const report = window.__lastImportValidationReport;
     expect(report).toBeTruthy();
-    expect(report.errors).toContain('Malformed JSON');
+    expect(report.errors[0]).toContain('JSON Parse Error:');
+    expect(window.__lastImportStage.stage).toBe('json-parse-failed');
+});
+
+test('import accepts content containing null-byte separators from non-standard runtimes', () => {
+    const payload = {
+        expenses: [
+            { id: 'e-null-1', type: 'expense', amount: -100, budgetId: 'b-null', date: '2026-06-01T10:00:00Z' }
+        ],
+        savings: [
+            { id: 's-null-1', type: 'deposit', amount: 500, date: '2026-06-01T09:00:00Z' }
+        ],
+        budgets: [
+            { budgetId: 'b-null', totalAllocated: 1000, periodKey: '2026-06-01_to_2026-06-30' }
+        ],
+        budgetPeriods: [],
+        settings: {
+            theme: '#4caf50',
+            currencyCode: 'INR'
+        },
+        categories: [],
+        persons: [],
+        meta: { version: 'v2' }
+    };
+
+    const json = JSON.stringify(payload);
+    const withNulls = json.split('').join('\u0000');
+    document.getElementById('importText').value = withNulls;
+    window.importData();
+
+    const report = window.__lastImportValidationReport;
+    expect(report.errors).toEqual([]);
+    expect(report.imported.expenses).toBe(1);
+    expect(window.__lastImportStage.stage).toBe('completed');
 });
 
 test('import rejects unsupported version and invalid schema with validation report', () => {
