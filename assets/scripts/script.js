@@ -4394,6 +4394,29 @@ function normalizeImportRawText(rawText) {
         .trim();
 }
 
+function getImportTextSignature(text) {
+    const raw = String(text || "");
+    let hash = 0;
+    for (let i = 0; i < raw.length; i += 1) {
+        hash = (hash * 31 + raw.charCodeAt(i)) >>> 0;
+    }
+    return {
+        length: raw.length,
+        hash32: hash.toString(16).padStart(8, "0")
+    };
+}
+
+function getImportCharCodes(text, from, to) {
+    const raw = String(text || "");
+    const start = Math.max(0, Number(from) || 0);
+    const end = Math.min(raw.length, Number(to) || 0);
+    let out = [];
+    for (let i = start; i < end; i += 1) {
+        out.push({ index: i, code: raw.charCodeAt(i) });
+    }
+    return out;
+}
+
 function setImportStage(stage, payload) {
     window.__lastImportStage = {
         stage,
@@ -4618,17 +4641,21 @@ function validateImportPayload(parsed) {
 function importData() {
     setImportStage("validation-input");
     let text = normalizeImportRawText(document.getElementById("importText")?.value || "");
+    const baselineSignature = getImportTextSignature(text);
 
     console.info("Import raw diagnostics", {
         fileName: window.__lastImportFileMeta?.fileName || "manual_text",
         fileSize: Number(window.__lastImportFileMeta?.fileSize || 0),
         typeofContent: typeof text,
-        contentLength: text.length
+        contentLength: text.length,
+        signature: baselineSignature,
+        normalization: window.__lastImportNormalizationMeta || null
     });
 
     // UAT requested pre-parse raw section logging around known failure offsets.
     console.log(text.substring(7000, 7150));
     window.__lastImportContentSample7000 = text.substring(7000, 7150);
+    window.__lastImportCharCodes7000 = getImportCharCodes(text, 7000, 7060);
 
     if (!text) {
         showToast("Paste data");
@@ -4645,11 +4672,18 @@ function importData() {
         const fragStart = Number.isFinite(parsePosition) ? Math.max(0, parsePosition - 40) : 0;
         const fragEnd = Number.isFinite(parsePosition) ? Math.min(text.length, parsePosition + 110) : Math.min(text.length, 150);
         const fragment = text.substring(fragStart, fragEnd);
+        const codeStart = Number.isFinite(parsePosition) ? Math.max(0, parsePosition - 15) : 0;
+        const codeEnd = Number.isFinite(parsePosition) ? Math.min(text.length, parsePosition + 15) : Math.min(text.length, 30);
+        const parseWindowCodes = getImportCharCodes(text, codeStart, codeEnd);
 
         window.__lastImportCorruptFragment = fragment;
+        window.__lastImportParseWindowCodes = parseWindowCodes;
         console.error("Import parse fragment", {
             parsePosition,
-            fragment
+            fragment,
+            parseWindowCodes,
+            signature: baselineSignature,
+            normalization: window.__lastImportNormalizationMeta || null
         });
 
         setImportStage("json-parse-failed", {
@@ -6700,7 +6734,24 @@ function handleFileImport(event) {
 
     reader.onload = function (e) {
         let text = typeof e.target.result === "string" ? e.target.result : "";
+        const rawSignature = getImportTextSignature(text);
+        const nullByteCount = (text.match(/\u0000/g) || []).length;
+        const hadBom = text.charCodeAt(0) === 65279;
         const normalizedText = normalizeImportRawText(text);
+        const normalizedSignature = getImportTextSignature(normalizedText);
+        window.__lastImportNormalizationMeta = {
+            hadBom,
+            nullByteCount,
+            rawLength: rawSignature.length,
+            normalizedLength: normalizedSignature.length,
+            lengthDelta: rawSignature.length - normalizedSignature.length,
+            rawSignature,
+            normalizedSignature,
+            rawSample7000: text.substring(7000, 7100),
+            normalizedSample7000: normalizedText.substring(7000, 7100),
+            rawCharCodes7000: getImportCharCodes(text, 7000, 7060),
+            normalizedCharCodes7000: getImportCharCodes(normalizedText, 7000, 7060)
+        };
         window.__lastImportFileMeta = {
             fileName: file.name,
             fileSize: Number(file.size || 0)
@@ -6710,7 +6761,8 @@ function handleFileImport(event) {
             fileName: file.name,
             fileSize: Number(file.size || 0),
             typeofContent: typeof normalizedText,
-            contentLength: normalizedText.length
+            contentLength: normalizedText.length,
+            normalization: window.__lastImportNormalizationMeta
         });
 
         setImportStage("file-read", {
