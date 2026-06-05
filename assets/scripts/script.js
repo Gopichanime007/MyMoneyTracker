@@ -2058,6 +2058,7 @@ window.addEventListener("load", function () {
         startHeadline();
         updateNotificationButtonState();
         if (typeof refreshSettingsPanels === "function") refreshSettingsPanels();
+        renderHomeWidgets();
         startAutoBackup();
 
     } catch (e) {
@@ -2082,6 +2083,9 @@ window.showScreen = function showScreen(id) {
     }
     if (id === "settings" && typeof window.refreshSettingsPanels === "function") {
         window.refreshSettingsPanels();
+    }
+    if (id === "home") {
+        renderHomeWidgets();
     }
 }
 
@@ -2207,14 +2211,63 @@ function showDate() {
     if (el) el.innerText = new Date().toLocaleString();
 }
 
+const APPEARANCE_MODES = ["metallic", "matte", "glossy", "chromium"];
+const ACCENT_PRESETS = {
+    purple: "#7c3aed",
+    blue: "#2196f3",
+    emerald: "#10b981",
+    orange: "#ff5722",
+    red: "#ef4444"
+};
+const DEFAULT_ACCENT = "#4caf50";
+
+function resolveAccentColor(value) {
+    if (!value) return DEFAULT_ACCENT;
+    if (ACCENT_PRESETS[value]) return ACCENT_PRESETS[value];
+    return value;
+}
+
+function setAppearanceMode(mode) {
+    let safeMode = APPEARANCE_MODES.includes(String(mode || "").toLowerCase())
+        ? String(mode).toLowerCase()
+        : "metallic";
+
+    localStorage.setItem("appearanceMode", safeMode);
+    document.documentElement.dataset.appearance = safeMode;
+}
+
+function syncThemeSelectors() {
+    let accentSelect = document.getElementById("accentColorSelect");
+    let appearanceSelect = document.getElementById("appearanceModeSelect");
+
+    let accent = localStorage.getItem("accentColor") || localStorage.getItem("theme") || DEFAULT_ACCENT;
+    let appearance = localStorage.getItem("appearanceMode") || "metallic";
+
+    if (appearanceSelect) appearanceSelect.value = APPEARANCE_MODES.includes(appearance) ? appearance : "metallic";
+
+    if (accentSelect) {
+        let key = Object.keys(ACCENT_PRESETS).find(k => ACCENT_PRESETS[k] === accent);
+        accentSelect.value = key || "custom";
+    }
+}
+
 function changeTheme(c) {
-    localStorage.setItem("theme", c);
-    document.documentElement.style.setProperty("--theme", c);
+    let color = resolveAccentColor(c);
+    localStorage.setItem("theme", color);
+    localStorage.setItem("accentColor", color);
+    document.documentElement.style.setProperty("--theme", color);
+    syncThemeSelectors();
 }
 
 function loadTheme() {
-    let t = localStorage.getItem("theme");
-    if (t) changeTheme(t);
+    let appearance = localStorage.getItem("appearanceMode");
+    if (!appearance && APPEARANCE_MODES.includes(String(localStorage.getItem("theme") || "").toLowerCase())) {
+        appearance = String(localStorage.getItem("theme")).toLowerCase();
+    }
+    setAppearanceMode(appearance || "metallic");
+
+    let accent = localStorage.getItem("accentColor") || localStorage.getItem("theme") || DEFAULT_ACCENT;
+    changeTheme(accent);
 }
 
 function updateUI() {
@@ -3836,6 +3889,7 @@ function getRuntimeDiagnostics() {
         notificationApi: hasNotification,
         notificationPermission: hasNotification ? Notification.permission : "unavailable",
         serviceWorkerApi: typeof navigator !== "undefined" && ("serviceWorker" in navigator),
+        pushManagerApi: typeof window !== "undefined" && ("PushManager" in window),
         beforeinstallprompt: beforeInstallPromptDetected || (typeof window !== "undefined" && "onbeforeinstallprompt" in window),
         downloadAttribute: "download" in document.createElement("a"),
         showSaveFilePicker: typeof window !== "undefined" && typeof window.showSaveFilePicker === "function"
@@ -3944,8 +3998,10 @@ function refreshNotificationSettingsUI() {
     if (runtimeState) {
         runtimeState.textContent = [
             `Runtime: ${runtime.isWebView ? "Android WebView" : "Browser"}`,
-            `Service Worker: ${runtime.serviceWorkerApi ? "supported" : "not supported"}`,
-            `beforeinstallprompt: ${runtime.beforeinstallprompt ? "available" : "not available"}`
+            `Notifications: ${runtime.notificationApi ? "Supported" : "Unsupported"}`,
+            `Service Worker: ${runtime.serviceWorkerApi ? "Supported" : "Unsupported"}`,
+            `Push Manager: ${runtime.pushManagerApi ? "Supported" : "Unsupported"}`,
+            `PWA Install Prompt: ${runtime.beforeinstallprompt ? "Supported" : "Unsupported"}`
         ].join(" | ");
     }
 
@@ -4042,6 +4098,7 @@ function testNotification() {
 function refreshSettingsPanels() {
     if (typeof refreshAutoBackupSettingsUI === "function") refreshAutoBackupSettingsUI();
     refreshNotificationSettingsUI();
+    refreshWidgetSettingsUI();
 }
 
 try {
@@ -4053,6 +4110,267 @@ try {
     window.refreshSettingsPanels = refreshSettingsPanels;
 } catch (e) {
     // ignore non-browser contexts
+}
+
+const WIDGET_SETTINGS_KEY = "widgetSettingsV1";
+
+function getDefaultWidgetSettings() {
+    return {
+        budgetSummary: true,
+        dailyEfficiency: true,
+        quickAddExpense: true,
+        quickAddSavings: true
+    };
+}
+
+function getWidgetSettings() {
+    try {
+        const parsed = JSON.parse(localStorage.getItem(WIDGET_SETTINGS_KEY) || "null");
+        return Object.assign(getDefaultWidgetSettings(), parsed || {});
+    } catch (_err) {
+        return getDefaultWidgetSettings();
+    }
+}
+
+function saveWidgetSettings(settings) {
+    const merged = Object.assign(getDefaultWidgetSettings(), settings || {});
+    localStorage.setItem(WIDGET_SETTINGS_KEY, JSON.stringify(merged));
+}
+
+function applyWidgetSettingsFromUI() {
+    const next = {
+        budgetSummary: !!document.getElementById("widgetBudgetSummary")?.checked,
+        dailyEfficiency: !!document.getElementById("widgetDailyEfficiency")?.checked,
+        quickAddExpense: !!document.getElementById("widgetQuickAddExpense")?.checked,
+        quickAddSavings: !!document.getElementById("widgetQuickAddSavings")?.checked
+    };
+
+    saveWidgetSettings(next);
+    renderHomeWidgets();
+}
+
+function refreshWidgetSettingsUI() {
+    const settings = getWidgetSettings();
+    let elBudget = document.getElementById("widgetBudgetSummary");
+    let elDaily = document.getElementById("widgetDailyEfficiency");
+    let elQuickExpense = document.getElementById("widgetQuickAddExpense");
+    let elQuickSavings = document.getElementById("widgetQuickAddSavings");
+
+    if (elBudget) elBudget.checked = !!settings.budgetSummary;
+    if (elDaily) elDaily.checked = !!settings.dailyEfficiency;
+    if (elQuickExpense) elQuickExpense.checked = !!settings.quickAddExpense;
+    if (elQuickSavings) elQuickSavings.checked = !!settings.quickAddSavings;
+}
+
+function getQuickSavingsSourceOptions() {
+    let savings = getSavingsSafe();
+    return savings.filter(s => s && !s.sourceId && Number(s.amount || 0) > 0 && (s.type === "income" || s.type === "deposit"));
+}
+
+function refreshQuickSourceOptions() {
+    let select = document.getElementById("quickSavingsSource");
+    if (!select) return;
+
+    select.innerHTML = "<option value=''>Select source</option>";
+    getQuickSavingsSourceOptions().forEach(s => {
+        let opt = document.createElement("option");
+        opt.value = String(s.id);
+        opt.textContent = `${s.note || s.entity || s.id}`;
+        select.appendChild(opt);
+    });
+}
+
+function handleQuickSavingsTypeChange() {
+    let type = document.getElementById("quickSavingsType")?.value || "deposit";
+    let sourceWrap = document.getElementById("quickSavingsSourceWrap");
+    if (sourceWrap) sourceWrap.style.display = type === "deposit" ? "none" : "block";
+    refreshQuickSourceOptions();
+}
+
+function refreshAllPrimaryViews() {
+    loadDashboard();
+    loadHistory();
+    loadGraph();
+    renderBudgetEntries();
+    updateBudgetEfficiency();
+    loadBudgetOptions();
+    if (typeof loadSavings === "function") loadSavings();
+}
+
+function saveQuickExpense() {
+    let amount = Number(document.getElementById("quickExpenseAmount")?.value || 0);
+    let category = document.getElementById("quickExpenseCategory")?.value || "Others";
+
+    if (!(amount > 0)) {
+        showToast("Enter valid quick expense amount", "warning");
+        return;
+    }
+
+    addExpense({
+        amount: -Math.abs(amount),
+        category,
+        purpose: "Quick Add Widget",
+        type: "expense",
+        date: new Date().toISOString(),
+        paymentType: "Cash",
+        entity: "Cash"
+    });
+
+    let amt = document.getElementById("quickExpenseAmount");
+    if (amt) amt.value = "";
+
+    refreshAllPrimaryViews();
+    renderHomeWidgets();
+    showToast("Quick expense saved ✅", "success");
+}
+
+function saveQuickSavings() {
+    let type = document.getElementById("quickSavingsType")?.value || "deposit";
+    let amount = Number(document.getElementById("quickSavingsAmount")?.value || 0);
+    let sourceId = String(document.getElementById("quickSavingsSource")?.value || "");
+
+    if (!(amount > 0)) {
+        showToast("Enter valid quick savings amount", "warning");
+        return;
+    }
+
+    let savings = getSavingsSafe();
+    let nowIso = new Date().toISOString();
+    let monthKey = nowIso.slice(0, 7);
+
+    if (type !== "deposit" && !sourceId) {
+        showToast("Select savings source", "warning");
+        return;
+    }
+
+    if (type === "transfer") {
+        let remaining = typeof getSourceRemainingById === "function" ? getSourceRemainingById(sourceId, savings) : Number.MAX_SAFE_INTEGER;
+        if (Math.abs(amount) > remaining) {
+            showToast("Insufficient source balance", "warning");
+            return;
+        }
+    }
+
+    let entry = {
+        id: (typeof crypto !== "undefined" && crypto.randomUUID) ? crypto.randomUUID() : `sav_${Date.now()}_${Math.random()}`,
+        type,
+        amount: type === "transfer" ? -Math.abs(amount) : Math.abs(amount),
+        sourceId: type === "deposit" ? null : sourceId,
+        entity: "Quick Widget",
+        paymentType: "Cash",
+        note: "Quick Add Widget",
+        date: nowIso,
+        monthKey,
+        periodKey: (typeof getActivePeriodKey === "function") ? getActivePeriodKey() : null,
+        createdAt: nowIso,
+        updatedAt: nowIso
+    };
+
+    savings.push(entry);
+    if (typeof saveSavings === "function") {
+        saveSavings(savings);
+    } else {
+        localStorage.setItem("savingsTransactions", JSON.stringify(savings));
+    }
+
+    let amt = document.getElementById("quickSavingsAmount");
+    if (amt) amt.value = "";
+
+    refreshAllPrimaryViews();
+    renderHomeWidgets();
+    showToast("Quick savings saved ✅", "success");
+}
+
+function renderHomeWidgets() {
+    let host = document.getElementById("widgetContainer");
+    if (!host) return;
+
+    let settings = getWidgetSettings();
+    let blocks = [];
+
+    let budgets = filterBudgetsByActivePeriod(getBudgets());
+    let expenses = filterByActivePeriod(getExpenses());
+    let allocated = budgets.reduce((sum, b) => sum + Number(b.totalAllocated || 0), 0);
+    let spent = budgets.reduce((sum, b) => sum + getNetSpentForBudget(b.budgetId, expenses), 0);
+    spent = Math.max(0, spent);
+    let remaining = allocated - spent;
+
+    if (settings.budgetSummary) {
+        blocks.push(`
+          <div class="widget-card">
+            <h4>Budget Summary</h4>
+            <div class="widget-metrics">
+              <div><small>Allocated</small><strong>${formatCurrency(allocated)}</strong></div>
+              <div><small>Spent</small><strong>${formatCurrency(spent)}</strong></div>
+              <div><small>Remaining</small><strong>${formatCurrency(remaining)}</strong></div>
+            </div>
+          </div>
+        `);
+    }
+
+    if (settings.dailyEfficiency) {
+        let metrics = (typeof computeBudgetEfficiencyMetrics === "function") ? computeBudgetEfficiencyMetrics(new Date()) : { dailyLimit: 0, spentToday: 0, dailyRemaining: 0 };
+        blocks.push(`
+          <div class="widget-card">
+            <h4>Daily Efficiency</h4>
+            <div class="widget-metrics">
+              <div><small>Daily Limit</small><strong>${formatCurrency(metrics.dailyLimit || 0)}</strong></div>
+              <div><small>Spent Today</small><strong>${formatCurrency(metrics.spentToday || 0)}</strong></div>
+              <div><small>Remaining Today</small><strong>${formatCurrency(metrics.dailyRemaining || 0)}</strong></div>
+            </div>
+          </div>
+        `);
+    }
+
+    if (settings.quickAddExpense) {
+        let categoryOptions = (getCategories() || []).map(c => `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join("") || "<option value='Others'>Others</option>";
+        blocks.push(`
+          <div class="widget-card">
+            <h4>Quick Add Expense</h4>
+            <div class="widget-form-row">
+              <input id="quickExpenseAmount" type="number" placeholder="Amount" />
+              <select id="quickExpenseCategory">${categoryOptions}</select>
+            </div>
+            <button class="secondary widget-action" type="button" onclick="saveQuickExpense()">Save</button>
+          </div>
+        `);
+    }
+
+    if (settings.quickAddSavings) {
+        blocks.push(`
+          <div class="widget-card">
+            <h4>Quick Add Savings</h4>
+            <div class="widget-form-row">
+              <select id="quickSavingsType" onchange="handleQuickSavingsTypeChange()">
+                <option value="deposit">Deposit</option>
+                <option value="transfer">Transfer</option>
+                <option value="refund">Refund</option>
+              </select>
+              <input id="quickSavingsAmount" type="number" placeholder="Amount" />
+            </div>
+            <div id="quickSavingsSourceWrap" class="widget-form-row" style="display:none;">
+              <select id="quickSavingsSource"></select>
+            </div>
+            <button class="secondary widget-action" type="button" onclick="saveQuickSavings()">Save</button>
+          </div>
+        `);
+    }
+
+    host.innerHTML = blocks.length
+        ? `<div class="widget-grid">${blocks.join("")}</div>`
+        : `<p class="muted-note">Widgets are currently disabled in settings.</p>`;
+
+    handleQuickSavingsTypeChange();
+}
+
+try {
+    window.applyWidgetSettingsFromUI = applyWidgetSettingsFromUI;
+    window.saveQuickExpense = saveQuickExpense;
+    window.saveQuickSavings = saveQuickSavings;
+    window.handleQuickSavingsTypeChange = handleQuickSavingsTypeChange;
+    window.renderHomeWidgets = renderHomeWidgets;
+} catch (_err) {
+    // ignore
 }
 
 // Cleanup orphaned attachments not referenced by any transaction
@@ -4316,6 +4634,11 @@ function handleTheme(val) {
         changeTheme(val);
     }
 }
+
+function applyAppearanceSettings(mode) {
+    setAppearanceMode(mode);
+    syncThemeSelectors();
+}
 // Applies custom color theme
 function applyCustomColor(color) {
     changeTheme(color);
@@ -4522,12 +4845,44 @@ function importData() {
         // ⚙️ SETTINGS
         // =========================
         if (data.settings) {
-            if (data.settings.theme) {
-                localStorage.setItem("theme", data.settings.theme);
-            }
-
             if (data.settings.currencyCode) {
                 localStorage.setItem("currencyCode", data.settings.currencyCode);
+            }
+
+            if (data.settings.appearanceMode) {
+                setAppearanceMode(data.settings.appearanceMode);
+            }
+
+            if (data.settings.accentColor) {
+                changeTheme(data.settings.accentColor);
+            } else if (data.settings.theme) {
+                changeTheme(data.settings.theme);
+            }
+
+            if (Object.prototype.hasOwnProperty.call(data.settings, "autoBackupEnabled") || data.settings.autoBackupFrequency || data.settings.autoBackupTarget) {
+                saveAutoBackupSettings({
+                    enabled: !!data.settings.autoBackupEnabled,
+                    frequency: data.settings.autoBackupFrequency || "weekly",
+                    target: data.settings.autoBackupTarget || "local_download"
+                });
+            } else if (Object.prototype.hasOwnProperty.call(data.settings, "autoBackup") || data.settings.backupFrequency) {
+                saveAutoBackupSettings({
+                    enabled: !!data.settings.autoBackup,
+                    frequency: data.settings.backupFrequency || "weekly",
+                    target: "local_download"
+                });
+            }
+
+            if (data.settings.notificationSettings && typeof data.settings.notificationSettings === "object") {
+                saveNotificationSettings(data.settings.notificationSettings);
+            } else if (Object.prototype.hasOwnProperty.call(data.settings, "notificationsEnabled")) {
+                let baseNotif = getDefaultNotificationSettings();
+                baseNotif.enabled = !!data.settings.notificationsEnabled;
+                saveNotificationSettings(baseNotif);
+            }
+
+            if (data.settings.widgetSettings && typeof data.settings.widgetSettings === "object") {
+                saveWidgetSettings(data.settings.widgetSettings);
             }
         }
 
@@ -4540,6 +4895,10 @@ function importData() {
 
         // Repair and re-tie legacy references after import.
         runIntegrityRepairSilently();
+        loadTheme();
+        syncThemeSelectors();
+        refreshSettingsPanels();
+        renderHomeWidgets();
 
         showToast("Import successful ✅");
 
@@ -4575,6 +4934,11 @@ function importData() {
         console.error(err);
         showToast("Invalid or incompatible backup ❌");
     }
+}
+
+if (typeof window !== "undefined") {
+    window.importData = importData;
+    window.exportDataAsJSON = exportDataAsJSON;
 }
 // Fixes old data structure to new system
 function runMigration() {
@@ -4833,6 +5197,7 @@ function loadDashboard() {
     );
 
     updateProgressBar();
+    renderHomeWidgets();
 }
 // =========================
 // 📦 LOAD BUDGET SCREEN
@@ -8035,6 +8400,30 @@ function isParentSplitContainer(entry) {
 
 function getFullAppData() {
 
+    let autoBackup = getAutoBackupSettings();
+    let notifications = getNotificationSettings();
+    let widgets = getWidgetSettings();
+
+    let settingsSnapshot = {
+        theme: localStorage.getItem("theme") || "",
+        appearanceMode: localStorage.getItem("appearanceMode") || "metallic",
+        accentColor: localStorage.getItem("accentColor") || localStorage.getItem("theme") || DEFAULT_ACCENT,
+        currencyCode: localStorage.getItem("currencyCode") || "INR",
+        autoBackup: !!autoBackup.enabled,
+        backupFrequency: autoBackup.frequency || "weekly",
+        autoBackupEnabled: !!autoBackup.enabled,
+        autoBackupFrequency: autoBackup.frequency || "weekly",
+        autoBackupTarget: autoBackup.target || "local_download",
+        notificationsEnabled: !!notifications.enabled,
+        notificationTypes: {
+            budget: !!notifications.budgetPeriodEnding,
+            savings: !!notifications.lowBudgetWarning,
+            reminders: !!(notifications.dailyReminder || notifications.weeklySummary || notifications.backupReminder)
+        },
+        notificationSettings: notifications,
+        widgetSettings: widgets
+    };
+
     return {
 
         expenses:
@@ -8067,14 +8456,7 @@ function getFullAppData() {
             ) || [],
 
         settings: {
-
-            theme:
-                localStorage.getItem("theme")
-                || "",
-
-            currencyCode:
-                localStorage.getItem("currencyCode")
-                || "INR"
+            ...settingsSnapshot
         },
 
         meta: {
@@ -8086,6 +8468,11 @@ function getFullAppData() {
                 "v2"
         }
     };
+}
+
+if (typeof window !== "undefined") {
+    window.getFullAppData = getFullAppData;
+    window.getRuntimeDiagnostics = getRuntimeDiagnostics;
 }
 
 // =========================
@@ -8129,7 +8516,8 @@ async function downloadBlobWithBestEffort(blob, filename) {
     let url = URL.createObjectURL(blob);
     let a = document.createElement("a");
     a.href = url;
-    a.download = filename;
+    a.download = filename || "MoneyTracker_Backup.json";
+    a.setAttribute("download", filename || "MoneyTracker_Backup.json");
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
@@ -8172,8 +8560,10 @@ async function exportDataAsJSON() {
                 }
             );
 
-        let filename = `MoneyTracker_${getSafeDate()}.json`;
+        let safe = getSafeDate();
+        let filename = safe ? `MoneyTracker_${safe}.json` : "MoneyTracker_Backup.json";
         await downloadBlobWithBestEffort(blob, filename);
+        showToast(`Backup exported: ${filename}`, "success");
 
         console.log(
             "✅ Manual export completed"

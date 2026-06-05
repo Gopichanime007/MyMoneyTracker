@@ -52,6 +52,26 @@ beforeEach(() => {
       <h4 id="savedToday">0</h4>
       <h4 id="savedWeek">0</h4>
       <h4 id="savedPeriod">0</h4>
+            <div id="widgetContainer"></div>
+            <select id="appearanceModeSelect"></select>
+            <select id="accentColorSelect"></select>
+            <input id="autoBackupEnabled" type="checkbox" />
+            <select id="autoBackupFrequency"><option value="weekly">weekly</option></select>
+            <select id="autoBackupTarget"><option value="local_download">local_download</option></select>
+            <small id="notificationPermissionState"></small>
+            <small id="runtimeSupportState"></small>
+            <input id="notificationsEnabled" type="checkbox" />
+            <input id="notifBudgetPeriodEnding" type="checkbox" />
+            <input id="notifLowBudgetWarning" type="checkbox" />
+            <input id="notifDailyReminder" type="checkbox" />
+            <input id="notifWeeklySummary" type="checkbox" />
+            <input id="notifBackupReminder" type="checkbox" />
+            <input id="widgetBudgetSummary" type="checkbox" />
+            <input id="widgetDailyEfficiency" type="checkbox" />
+            <input id="widgetQuickAddExpense" type="checkbox" />
+            <input id="widgetQuickAddSavings" type="checkbox" />
+            <div id="importModal" style="display:block"></div>
+            <textarea id="importText"></textarea>
     `;
 
     window.open = jest.fn();
@@ -364,4 +384,97 @@ test('attachment overlay stays above transaction modal and restores modal intera
     overlay.click();
     expect(document.getElementById('remo-attach-viewer')).toBeNull();
     expect(modal.classList.contains('modal-layer-muted')).toBe(false);
+});
+
+test('backup serializer includes full settings envelope and widgets settings', () => {
+    localStorage.setItem('appearanceMode', 'chromium');
+    localStorage.setItem('accentColor', '#2196f3');
+    localStorage.setItem('theme', '#2196f3');
+    localStorage.setItem('currencyCode', 'INR');
+
+    localStorage.setItem('autoBackupSettingsV1', JSON.stringify({ enabled: true, frequency: 'daily', target: 'local_download' }));
+    localStorage.setItem('notificationSettingsV1', JSON.stringify({
+        enabled: true,
+        budgetPeriodEnding: true,
+        lowBudgetWarning: true,
+        dailyReminder: true,
+        weeklySummary: true,
+        backupReminder: false
+    }));
+    localStorage.setItem('widgetSettingsV1', JSON.stringify({
+        budgetSummary: true,
+        dailyEfficiency: true,
+        quickAddExpense: true,
+        quickAddSavings: true
+    }));
+
+    const dump = window.getFullAppData();
+    expect(dump.settings.appearanceMode).toBe('chromium');
+    expect(dump.settings.accentColor).toBe('#2196f3');
+    expect(dump.settings.autoBackupEnabled).toBe(true);
+    expect(dump.settings.autoBackupFrequency).toBe('daily');
+    expect(dump.settings.notificationsEnabled).toBe(true);
+    expect(dump.settings.notificationTypes.budget).toBe(true);
+    expect(dump.settings.widgetSettings.quickAddSavings).toBe(true);
+});
+
+test('import restores settings and widgets with no ledger drift', () => {
+    window.saveBudgets([{ budgetId: 'bimp', totalAllocated: 10000, periodKey: '2026-06-01_to_2026-06-30' }]);
+    window.saveExpenses([{ id: 'eimp', type: 'expense', amount: -1200, budgetId: 'bimp', date: '2026-06-01T10:00:00Z' }]);
+    window.saveSavings([{ id: 'simp', type: 'deposit', amount: 5000, date: '2026-06-01T10:00:00Z' }]);
+
+    const beforeExpense = window.getExpenses().map(e => ({ id: e.id, before: e.BalanceBeforeTransaction, after: e.BalanceAfterTransaction }));
+    const beforeSavings = window.getSavings().map(s => ({ id: s.id, before: s.BalanceBeforeTransaction, after: s.BalanceAfterTransaction }));
+
+    const payload = {
+        ...window.getFullAppData(),
+        settings: {
+            appearanceMode: 'matte',
+            accentColor: '#ef4444',
+            theme: '#ef4444',
+            currencyCode: 'INR',
+            autoBackupEnabled: true,
+            autoBackupFrequency: 'weekly',
+            autoBackupTarget: 'local_download',
+            notificationSettings: {
+                enabled: true,
+                budgetPeriodEnding: true,
+                lowBudgetWarning: true,
+                dailyReminder: false,
+                weeklySummary: true,
+                backupReminder: true
+            },
+            widgetSettings: {
+                budgetSummary: true,
+                dailyEfficiency: true,
+                quickAddExpense: true,
+                quickAddSavings: false
+            }
+        }
+    };
+
+    document.getElementById('importText').value = JSON.stringify(payload);
+    window.importData();
+
+    expect(localStorage.getItem('appearanceMode')).toBe('matte');
+    expect(localStorage.getItem('accentColor')).toBe('#ef4444');
+
+    const widget = JSON.parse(localStorage.getItem('widgetSettingsV1'));
+    expect(widget.quickAddSavings).toBe(false);
+
+    const afterExpense = window.getExpenses().map(e => ({ id: e.id, before: e.BalanceBeforeTransaction, after: e.BalanceAfterTransaction }));
+    const afterSavings = window.getSavings().map(s => ({ id: s.id, before: s.BalanceBeforeTransaction, after: s.BalanceAfterTransaction }));
+
+    expect(afterExpense).toEqual(beforeExpense);
+    expect(afterSavings).toEqual(beforeSavings);
+});
+
+test('runtime diagnostics surfaces capability flags independently', () => {
+    window.refreshSettingsPanels();
+    const line = document.getElementById('runtimeSupportState').textContent;
+
+    expect(line).toContain('Notifications:');
+    expect(line).toContain('Service Worker:');
+    expect(line).toContain('Push Manager:');
+    expect(line).toContain('PWA Install Prompt:');
 });

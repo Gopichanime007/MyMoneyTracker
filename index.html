@@ -82,6 +82,8 @@
 
         </div>
 
+        <div id="widgetContainer"></div>
+
         <!-- Progress -->
         <div class="progress-wrapper">
           <div class="progress-bar">
@@ -303,14 +305,21 @@
           <option value="GBP">GBP (£)</option>
         </select>
         <!-- Theme -->
-        <h4>Theme</h4>
-        <select id="themeSelect" onchange="handleTheme(this.value)">
-          <option value="#4caf50">Green</option>
-          <option value="#ff5722">Orange</option>
-          <option value="#2196f3">Blue</option>
+        <h4>Appearance Mode</h4>
+        <select id="appearanceModeSelect" onchange="applyAppearanceSettings(this.value)">
           <option value="metallic">Metallic</option>
           <option value="matte">Matte</option>
+          <option value="glossy">Glossy</option>
           <option value="chromium">Chromium</option>
+        </select>
+
+        <h4>Accent Color</h4>
+        <select id="accentColorSelect" onchange="handleTheme(this.value)">
+          <option value="purple">Purple</option>
+          <option value="blue">Blue</option>
+          <option value="emerald">Emerald</option>
+          <option value="orange">Orange</option>
+          <option value="red">Red</option>
           <option value="custom">Custom</option>
         </select>
         <input type="text" id="hexInput" placeholder="Apply custom theme using hex code (e.g. #4caf50)">
@@ -402,12 +411,24 @@
           <button class="secondary" type="button" onclick="testNotification()">Send Test Notification</button>
         </div>
 
-        <h4>Widget Architecture</h4>
+        <h4>Widget Settings</h4>
         <div class="form-group">
-          <small class="muted-note">Budget Widget: Current Budget, Spent, Remaining</small>
-          <small class="muted-note">Savings Widget: Current Savings Balance</small>
-          <small class="muted-note">Quick Add Widget: Add Expense and Add Savings Entry</small>
-          <small class="muted-note">Implementation plan is documented for future PWA/mobile integration.</small>
+          <label for="widgetBudgetSummary">
+            <input id="widgetBudgetSummary" type="checkbox" onchange="applyWidgetSettingsFromUI()" class="inline-checkbox" />
+            Budget Summary Widget
+          </label>
+          <label for="widgetDailyEfficiency">
+            <input id="widgetDailyEfficiency" type="checkbox" onchange="applyWidgetSettingsFromUI()" class="inline-checkbox" />
+            Daily Efficiency Widget
+          </label>
+          <label for="widgetQuickAddExpense">
+            <input id="widgetQuickAddExpense" type="checkbox" onchange="applyWidgetSettingsFromUI()" class="inline-checkbox" />
+            Quick Add Expense Widget
+          </label>
+          <label for="widgetQuickAddSavings">
+            <input id="widgetQuickAddSavings" type="checkbox" onchange="applyWidgetSettingsFromUI()" class="inline-checkbox" />
+            Quick Add Savings Widget
+          </label>
         </div>
 
         <!-- <h4>💸 Loans / Recoveries</h4>
