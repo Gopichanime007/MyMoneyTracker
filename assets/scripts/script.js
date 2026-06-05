@@ -1142,7 +1142,8 @@ function addExpense(obj) {
             splitIndex: obj.splitIndex || null,
             isSplit: obj.isSplit || false,
             linkedTransactionId: obj.linkedTransactionId || null,
-            resolutionType: obj.resolutionType || null,
+            refundType: (type === "refund" || obj.refundType) ? normalizeRefundType(obj.refundType) : null,
+            resolutionType: obj.resolutionType ? normalizeResolutionType(obj.resolutionType) : null,
             resolvedAmount: Number(obj.resolvedAmount || 0),
             lossAmount: Number(obj.lossAmount || 0),
 
@@ -1334,7 +1335,10 @@ function loadHistory(list = getExpenses()) {
                         let amountClass = e.amount < 0 ? "negative" : "positive";
                         let date = new Date(e.date).toLocaleString("en-IN");
                         let runningBalance = formatCurrency(Number(e.BalanceAfterTransaction ?? e.runningBalance ?? 0));
-                        let descriptor = [e.category, e.purpose].filter(Boolean).join(" • ");
+                        let descriptorParts = [e.category, e.purpose].filter(Boolean);
+                        if (e.type === "refund") descriptorParts.push(`Refund Type: ${formatRefundType(e.refundType)}`);
+                        if (e.resolutionType) descriptorParts.push(`Resolution: ${RESOLUTION_TYPE_LABELS[normalizeResolutionType(e.resolutionType)] || e.resolutionType}`);
+                        let descriptor = descriptorParts.join(" • ");
 
             div.innerHTML = `
                                 <div class="history-main">
@@ -1446,6 +1450,73 @@ function getLinkedPendingAmount(originalId, linkedTypes) {
     return Math.max(0, originalAmount - settled);
 }
 
+const REFUND_TYPE_LABELS = {
+    cancellation: "Cancellation",
+    return: "Return",
+    recovery: "Recovery",
+    reversal: "Reversal",
+    adjustment: "Adjustment",
+    cashback: "Cashback",
+    correction: "Correction",
+    custom: "Custom"
+};
+
+const RESOLUTION_TYPE_LABELS = {
+    open: "Open",
+    partially_refunded: "Partially Refunded",
+    fully_refunded: "Fully Refunded",
+    cancelled_with_charges: "Cancelled With Charges",
+    consumed: "Consumed",
+    written_off: "Written Off",
+    settled: "Settled"
+};
+
+function normalizeRefundType(value) {
+    const raw = String(value || "").trim().toLowerCase();
+    if (!raw) return "custom";
+
+    const mapped = {
+        cancellation: "cancellation",
+        cancelled: "cancellation",
+        return: "return",
+        returned: "return",
+        recovery: "recovery",
+        reimbursement: "recovery",
+        reversal: "reversal",
+        adjustment: "adjustment",
+        cashback: "cashback",
+        correction: "correction",
+        custom: "custom"
+    };
+
+    return mapped[raw] || "custom";
+}
+
+function formatRefundType(value) {
+    const key = normalizeRefundType(value);
+    return REFUND_TYPE_LABELS[key] || "Custom";
+}
+
+function normalizeResolutionType(value) {
+    const raw = String(value || "").trim().toLowerCase();
+    if (!raw) return "open";
+
+    const mapped = {
+        open: "open",
+        partial_refund: "partially_refunded",
+        partially_refunded: "partially_refunded",
+        part_refund: "partially_refunded",
+        complete_refund: "fully_refunded",
+        fully_refunded: "fully_refunded",
+        cancelled_with_charges: "cancelled_with_charges",
+        consumed: "consumed",
+        written_off: "written_off",
+        settled: "settled"
+    };
+
+    return mapped[raw] || "open";
+}
+
 function getExpenseResolutionSnapshot(originalId, expensesList) {
     let expenses = Array.isArray(expensesList) ? expensesList : getExpenses();
     let original = expenses.find(e => String(e.id) === String(originalId));
@@ -1475,20 +1546,24 @@ function getExpenseResolutionSnapshot(originalId, expensesList) {
         .pop() || null;
 
     let unresolved = Math.max(0, originalAmount - refunded);
-    let closureType = closure ? (closure.resolutionType || null) : null;
+    let closureType = closure ? normalizeResolutionType(closure.resolutionType) : null;
 
     let status = "OPEN";
     if (closureType === "consumed") {
         status = "CONSUMED";
     } else if (closureType === "cancelled_with_charges") {
         status = "CANCELLED_WITH_CHARGES";
+    } else if (closureType === "written_off") {
+        status = "WRITTEN_OFF";
+    } else if (closureType === "settled") {
+        status = "SETTLED";
     } else if (refunded >= originalAmount && originalAmount > 0) {
         status = "FULLY_REFUNDED";
     } else if (refunded > 0 && refunded < originalAmount) {
         status = "PARTIALLY_REFUNDED";
     }
 
-    let remainingRefundable = (status === "CONSUMED" || status === "CANCELLED_WITH_CHARGES")
+    let remainingRefundable = (status === "CONSUMED" || status === "CANCELLED_WITH_CHARGES" || status === "WRITTEN_OFF" || status === "SETTLED")
         ? 0
         : unresolved;
 
@@ -1506,9 +1581,11 @@ function getExpenseResolutionSnapshot(originalId, expensesList) {
 
 function formatResolutionStatus(status) {
     let map = {
+        SETTLED: "Settled",
         FULLY_REFUNDED: "Fully Refunded",
         PARTIALLY_REFUNDED: "Partially Refunded",
         CONSUMED: "Consumed",
+        WRITTEN_OFF: "Written Off",
         CANCELLED_WITH_CHARGES: "Cancelled With Charges",
         OPEN: "Open"
     };
@@ -1519,7 +1596,7 @@ function handleRefundResolutionChange() {
     let type = document.getElementById("entryType")?.value;
     if (type !== "refund") return;
 
-    let resolutionType = document.getElementById("refundResolutionType")?.value || "partial_refund";
+    let resolutionType = normalizeResolutionType(document.getElementById("refundResolutionType")?.value || "open");
     let amountEl = document.getElementById("amount");
     let select = document.getElementById("linkedTransactionSelect");
 
@@ -1531,13 +1608,13 @@ function handleRefundResolutionChange() {
     amountEl.disabled = false;
     amountEl.placeholder = "Amount";
 
-    if (resolutionType === "complete_refund") {
+    if (resolutionType === "fully_refunded") {
         if (pending > 0) amountEl.value = String(pending);
         amountEl.disabled = true;
-    } else if (resolutionType === "consumed") {
+    } else if (resolutionType === "consumed" || resolutionType === "written_off") {
         amountEl.value = "0";
         amountEl.disabled = true;
-        amountEl.placeholder = "No wallet credit for consumed closure";
+        amountEl.placeholder = "No wallet credit for this closure";
     }
 
     updateLinkedRemainingUI();
@@ -1709,10 +1786,11 @@ async function handleAddExpense() {
     let paymentType = document.getElementById("paymentType")?.value;
     let budgetId = document.getElementById("budgetSelect")?.value;
     let linkedTransactionId = document.getElementById("linkedTransactionSelect")?.value || null;
-    let refundResolutionType = document.getElementById("refundResolutionType")?.value || "partial_refund";
+    let refundResolutionType = normalizeResolutionType(document.getElementById("refundResolutionType")?.value || "open");
+    let refundType = normalizeRefundType(document.getElementById("refundType")?.value || "custom");
 
     // ✅ VALIDATION
-    if (!(type === "refund" && refundResolutionType === "consumed") && !amount) {
+    if (!(type === "refund" && (refundResolutionType === "consumed" || refundResolutionType === "written_off")) && !amount) {
         showToast("Enter amount");
         return;
     }
@@ -1731,20 +1809,20 @@ async function handleAddExpense() {
         let snapshot = getExpenseResolutionSnapshot(linkedTransactionId);
         let pending = Number(snapshot.remainingRefundable || 0);
 
-        if (refundResolutionType === "consumed") {
+        if (refundResolutionType === "consumed" || refundResolutionType === "written_off") {
             amount = 0;
-        } else if (refundResolutionType === "complete_refund") {
+        } else if (refundResolutionType === "fully_refunded") {
             amount = pending;
         } else {
             amount = Math.abs(Number(amount) || 0);
         }
 
-        if (refundResolutionType !== "consumed" && amount <= 0) {
+        if (!(refundResolutionType === "consumed" || refundResolutionType === "written_off") && amount <= 0) {
             showToast("Refund amount must be greater than zero");
             return;
         }
 
-        if (refundResolutionType !== "consumed" && amount > pending) {
+        if (!(refundResolutionType === "consumed" || refundResolutionType === "written_off") && amount > pending) {
             showToast(`Only ${formatCurrency(pending)} available`);
             return;
         }
@@ -1883,7 +1961,7 @@ async function handleAddExpense() {
         let pending = Number(snapshot.remainingRefundable || 0);
         let refundAmount = Math.abs(Number(amount) || 0);
 
-        if (refundResolutionType !== "consumed") {
+        if (refundResolutionType !== "consumed" && refundResolutionType !== "written_off") {
             addExpense({
                 amount: refundAmount,
                 category: "Refund",
@@ -1893,6 +1971,7 @@ async function handleAddExpense() {
                 paymentType,
                 budgetId: snapshot.original ? snapshot.original.budgetId : budgetId,
                 linkedTransactionId,
+                refundType,
                 entity: paymentType,
                 attachmentId: nonExpAttachment.attachmentId,
                 attachmentStatus: nonExpAttachment.status,
@@ -1900,12 +1979,12 @@ async function handleAddExpense() {
             });
         }
 
-        if (refundResolutionType === "consumed" || refundResolutionType === "cancelled_with_charges") {
+        if (["consumed", "cancelled_with_charges", "written_off", "settled"].includes(refundResolutionType)) {
             let unresolvedAfterRefund = Math.max(0, pending - refundAmount);
             addExpense({
                 amount: 0,
                 category: "Expense Resolution",
-                purpose: purpose || (refundResolutionType === "consumed" ? "Marked consumed" : "Cancelled with charges"),
+                purpose: purpose || formatResolutionStatus(refundResolutionType.toUpperCase()),
                 date: selectedDate.toISOString(),
                 type: "expense_resolution",
                 paymentType: paymentType || "N/A",
@@ -1917,7 +1996,7 @@ async function handleAddExpense() {
                 attachmentError: nonExpAttachment.error,
                 resolutionType: refundResolutionType,
                 resolvedAmount: refundAmount,
-                lossAmount: unresolvedAfterRefund
+                lossAmount: (refundResolutionType === "consumed" || refundResolutionType === "settled") ? 0 : unresolvedAfterRefund
             });
         }
 
@@ -1969,7 +2048,8 @@ function resetForm() {
     if (document.getElementById("amount")) document.getElementById("amount").value = "";
     if (document.getElementById("purpose")) document.getElementById("purpose").value = "";
     if (document.getElementById("linkedTransactionSelect")) document.getElementById("linkedTransactionSelect").value = "";
-    if (document.getElementById("refundResolutionType")) document.getElementById("refundResolutionType").value = "partial_refund";
+    if (document.getElementById("refundResolutionType")) document.getElementById("refundResolutionType").value = "open";
+    if (document.getElementById("refundType")) document.getElementById("refundType").value = "custom";
     if (document.getElementById("amount")) document.getElementById("amount").disabled = false;
     if (document.getElementById("linkedRemainingText")) {
         document.getElementById("linkedRemainingText").style.display = "none";
@@ -2571,9 +2651,15 @@ function generatePdfReport(opts = {}) {
         const date = new Date(e.date).toLocaleDateString("en-IN");
         const category = e.category || "Others";
         const amount = Number(e.amount || 0);
-        const purpose = e.purpose || "N/A";
+        const refundDetails = [];
+        if (e.type === "refund") refundDetails.push(`Type: ${formatRefundType(e.refundType)}`);
+        if (e.resolutionType) refundDetails.push(`Resolution: ${RESOLUTION_TYPE_LABELS[normalizeResolutionType(e.resolutionType)] || e.resolutionType}`);
+        const purpose = [e.purpose || "N/A"].concat(refundDetails).join(" | ");
         const payment = e.paymentType || e.entity || "-";
-        const type = e.type ? e.type.toUpperCase() : (amount < 0 ? "EXPENSE" : "INCOME");
+        const baseType = e.type ? e.type.toUpperCase() : (amount < 0 ? "EXPENSE" : "INCOME");
+        const type = (e.type === "refund")
+            ? `REFUND (${formatRefundType(e.refundType).toUpperCase()})`
+            : baseType;
 
         const formatted = new Intl.NumberFormat("en-IN").format(Math.abs(amount));
 
@@ -3649,6 +3735,10 @@ async function openTransactionAuditDetails(scope, transaction) {
       <div><small>Amount</small><div>${escapeHtml(formatCurrency(Number(transaction.amount || 0)))}</div></div>
       <div><small>Running Balance</small><div>${escapeHtml(runningBalanceText)}</div></div>
       <div><small>Notes</small><div>${escapeHtml(transaction.purpose || transaction.note || "-")}</div></div>
+    <div><small>Refund Type</small><div>${escapeHtml(transaction.type === "refund" ? formatRefundType(transaction.refundType) : "-")}</div></div>
+    <div><small>Resolution Type</small><div>${escapeHtml(transaction.resolutionType ? (RESOLUTION_TYPE_LABELS[normalizeResolutionType(transaction.resolutionType)] || transaction.resolutionType) : "-")}</div></div>
+    <div><small>Resolved Amount</small><div>${escapeHtml(formatCurrency(Number(transaction.resolvedAmount || 0)))}</div></div>
+    <div><small>Loss Amount</small><div>${escapeHtml(formatCurrency(Number(transaction.lossAmount || 0)))}</div></div>
       <div><small>Linked Transaction</small><div>${escapeHtml(transaction.linkedTransactionId || "-")}</div></div>
       <div><small>Created At</small><div>${escapeHtml(new Date(createdAt || Date.now()).toLocaleString("en-IN"))}</div></div>
       ${summary && summary.exists ? `<div><small>Original Amount</small><div>${escapeHtml(formatCurrency(summary.originalAmount))}</div></div>` : ""}
@@ -4317,6 +4407,14 @@ function getJsonParseErrorMessage(err) {
     return `JSON Parse Error: ${message}`;
 }
 
+function getJsonParseErrorPosition(err) {
+    const message = (err && err.message) ? String(err.message) : "";
+    const m = message.match(/position\s+(\d+)/i);
+    if (!m) return null;
+    const n = Number(m[1]);
+    return Number.isFinite(n) ? n : null;
+}
+
 function isValidImportId(value) {
     return typeof value === "string" || typeof value === "number";
 }
@@ -4450,6 +4548,22 @@ function validateImportPayload(parsed) {
     validateTransactions(normalized.expenses, "expenses");
     validateTransactions(normalized.savings, "savings");
 
+    function normalizeImportedResolutionRows(rows) {
+        if (!Array.isArray(rows)) return;
+        rows.forEach((row) => {
+            if (!row || typeof row !== "object" || Array.isArray(row)) return;
+            if (row.type === "refund") {
+                row.refundType = normalizeRefundType(row.refundType || "custom");
+            }
+            if (row.type === "expense_resolution" || row.resolutionType) {
+                row.resolutionType = normalizeResolutionType(row.resolutionType || "open");
+            }
+        });
+    }
+
+    normalizeImportedResolutionRows(normalized.expenses);
+    normalizeImportedResolutionRows(normalized.savings);
+
     if (Array.isArray(normalized.budgets)) {
         normalized.budgets.forEach((row, index) => {
             if (!row || typeof row !== "object" || Array.isArray(row)) {
@@ -4512,6 +4626,10 @@ function importData() {
         contentLength: text.length
     });
 
+    // UAT requested pre-parse raw section logging around known failure offsets.
+    console.log(text.substring(7000, 7150));
+    window.__lastImportContentSample7000 = text.substring(7000, 7150);
+
     if (!text) {
         showToast("Paste data");
         return;
@@ -4523,7 +4641,22 @@ function importData() {
         parsed = JSON.parse(text);
     } catch (err) {
         const parseError = getJsonParseErrorMessage(err);
-        setImportStage("json-parse-failed", { error: parseError });
+        const parsePosition = getJsonParseErrorPosition(err);
+        const fragStart = Number.isFinite(parsePosition) ? Math.max(0, parsePosition - 40) : 0;
+        const fragEnd = Number.isFinite(parsePosition) ? Math.min(text.length, parsePosition + 110) : Math.min(text.length, 150);
+        const fragment = text.substring(fragStart, fragEnd);
+
+        window.__lastImportCorruptFragment = fragment;
+        console.error("Import parse fragment", {
+            parsePosition,
+            fragment
+        });
+
+        setImportStage("json-parse-failed", {
+            error: parseError,
+            parsePosition,
+            fragment
+        });
         renderImportValidationReport({
             version: "unknown",
             found: { expenses: 0, savings: 0, budgets: 0, budgetPeriods: 0 },
@@ -4838,6 +4971,14 @@ function loadDashboard() {
     let net =
         totalIncome - totalSpent;
 
+    let refundByType = {};
+    filteredExpenses
+        .filter(e => e.type === "refund" && Number(e.amount || 0) > 0)
+        .forEach(e => {
+            let key = normalizeRefundType(e.refundType);
+            refundByType[key] = (refundByType[key] || 0) + Number(e.amount || 0);
+        });
+
     // =========================
     // 📅 TODAY
     // =========================
@@ -4905,6 +5046,21 @@ function loadDashboard() {
         "netValue",
         formatCurrency(net)
     );
+
+    let refundTypeBreakdown = document.getElementById("refundTypeBreakdown");
+    if (refundTypeBreakdown) {
+        let entries = Object.entries(refundByType).sort((a, b) => b[1] - a[1]);
+        if (!entries.length) {
+            refundTypeBreakdown.innerHTML = "<p class='empty-state'>No refunds this period</p>";
+        } else {
+            refundTypeBreakdown.innerHTML = entries.map(([key, value]) => `
+                <div class="refund-type-row">
+                    <span>${escapeHtml(REFUND_TYPE_LABELS[key] || "Custom")}</span>
+                    <strong>${escapeHtml(formatCurrency(value))}</strong>
+                </div>
+            `).join("");
+        }
+    }
 
     updateProgressBar();
 }
@@ -5161,7 +5317,8 @@ function openBudgetDetails(group) {
                         <small><strong>Refunded Amount:</strong> ${escapeHtml(formatCurrency(snapshot.refunded || 0))}</small><br>
                         <small><strong>Remaining Refundable:</strong> ${escapeHtml(formatCurrency(snapshot.remainingRefundable || 0))}</small><br>
                         <small><strong>Loss Amount:</strong> ${escapeHtml(formatCurrency(snapshot.loss || 0))}</small><br>
-                        <small><strong>Resolution Type:</strong> ${escapeHtml(e.resolutionType || "-")}</small><br>
+                        <small><strong>Refund Type:</strong> ${escapeHtml(e.type === "refund" ? formatRefundType(e.refundType) : "-")}</small><br>
+                        <small><strong>Resolution Type:</strong> ${escapeHtml(e.resolutionType ? (RESOLUTION_TYPE_LABELS[normalizeResolutionType(e.resolutionType)] || e.resolutionType) : "-")}</small><br>
                         <small><strong>Attachment:</strong> ${escapeHtml(attachmentText)}</small><br>
                         <small><strong>Audit Information:</strong> ${escapeHtml(e.type || "-")} | ${escapeHtml(e.paymentType || "-")} | ${escapeHtml(e.entity || "-")}</small>
                         ${e.attachmentId ? `
@@ -8111,9 +8268,10 @@ async function downloadBlobWithBestEffort(blob, filename) {
     a.click();
     document.body.removeChild(a);
 
+    const revokeDelayMs = (runtime.isAndroid && runtime.isWebView) ? 120000 : 4000;
     setTimeout(() => {
         URL.revokeObjectURL(url);
-    }, 1000);
+    }, revokeDelayMs);
 
     if (runtime.isAndroid && runtime.isWebView && !runtime.showSaveFilePicker && !runtime.webShareFiles) {
         updateAutoBackupRuntimeState("Android WebIntoApp runtime may ignore suggested filename in save dialog. This is a runtime limitation.");
@@ -8142,12 +8300,20 @@ async function exportDataAsJSON() {
                 2
             );
 
+        // Assert export payload is valid JSON before invoking runtime save flows.
+        JSON.parse(json);
+        window.__lastBackupExportIntegrity = {
+            isValidJson: true,
+            length: json.length,
+            tail: json.slice(Math.max(0, json.length - 160))
+        };
+
         const blob =
             new Blob(
                 [json],
                 {
                     type:
-                        "application/json"
+                        "application/json;charset=utf-8"
                 }
             );
 

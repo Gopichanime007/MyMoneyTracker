@@ -35,17 +35,97 @@
     <!-- ================= HOME ================= -->
     <section id="home" class="screen active">
       <div class="card">
-        <h3>Total Savings</h3>
-        <h1 id="savingsBalance">0</h1>
+        <h3>Savings Dashboard</h3>
+        <h1 id="savingsBalance">₹0</h1>
 
-        <div class="summary">
-          <div class="box">
-            <small>📦 Allocated</small>
-            <h3 id="allocatedToBudget">0</h3>
+        <div class="savings-summary-grid">
+          <div class="summary box">
+            <small>Total Deposits</small>
+            <h3 id="totalDeposits">₹0</h3>
           </div>
-          <div class="box success">
-            <small>💵 Available</small>
-            <h3 id="availableBalance">0</h3>
+          <div class="summary box">
+            <small>Total Transfers</small>
+            <h3 id="totalTransfers">₹0</h3>
+          </div>
+          <div class="summary box">
+            <small>Total Refunds</small>
+            <h3 id="totalRefunds">₹0</h3>
+          </div>
+          <div class="summary box">
+            <small>Net Movement</small>
+            <h3 id="netSavingsMovement">₹0</h3>
+          </div>
+          <div class="summary box">
+            <small>Current Budget Allocation</small>
+            <h3 id="allocatedToBudget">₹0</h3>
+          </div>
+          <div class="summary box success">
+            <small>Available Savings</small>
+            <h3 id="availableBalance">₹0</h3>
+          </div>
+        </div>
+
+        <div class="period-summary-card">
+          <h4>Current Budget Period</h4>
+          <div class="period-grid">
+            <div>
+              <small>Period</small>
+              <strong id="currentBudgetPeriodLabel">No Active Period</strong>
+            </div>
+            <div>
+              <small>Start Date</small>
+              <strong id="currentBudgetPeriodStart">-</strong>
+            </div>
+            <div>
+              <small>End Date</small>
+              <strong id="currentBudgetPeriodEnd">-</strong>
+            </div>
+            <div>
+              <small>Days Remaining</small>
+              <strong id="currentBudgetPeriodRemaining">-</strong>
+            </div>
+          </div>
+        </div>
+
+        <div class="activity-summary-grid">
+          <div class="summary box">
+            <small>Transactions This Period</small>
+            <h3 id="transactionsThisPeriod">0</h3>
+          </div>
+          <div class="summary box">
+            <small>Latest Transaction</small>
+            <h3 id="latestTransactionValue">-</h3>
+            <small id="latestTransactionMeta">No transactions</small>
+          </div>
+          <div class="summary box">
+            <small>Largest Expense Transfer</small>
+            <h3 id="largestExpenseTransfer">₹0</h3>
+          </div>
+          <div class="summary box">
+            <small>Largest Refund</small>
+            <h3 id="largestRefund">₹0</h3>
+          </div>
+        </div>
+
+        <div class="health-card">
+          <h4>Financial Health</h4>
+          <div class="health-grid">
+            <div>
+              <small>Savings Balance</small>
+              <strong id="savingsHealthBalance">₹0</strong>
+            </div>
+            <div>
+              <small>Allocated to Budget</small>
+              <strong id="savingsHealthAllocated">₹0</strong>
+            </div>
+            <div>
+              <small>Net Movement</small>
+              <strong id="savingsHealthNet">₹0</strong>
+            </div>
+            <div>
+              <small>Transactions</small>
+              <strong id="savingsHealthTransactions">0</strong>
+            </div>
           </div>
         </div>
       </div>
@@ -89,10 +169,24 @@
           </select>
           <label class="field-label">Resolution Type</label>
           <select id="sRefundResolutionType" onchange="handleSavingsRefundResolutionChange()">
-            <option value="partial_refund">Partial Refund</option>
-            <option value="complete_refund">Complete Refund</option>
-            <option value="consumed">No Refund / Consumed</option>
+            <option value="open">Open</option>
+            <option value="partially_refunded">Partially Refunded</option>
+            <option value="fully_refunded">Fully Refunded</option>
             <option value="cancelled_with_charges">Cancelled With Charges</option>
+            <option value="consumed">Consumed</option>
+            <option value="written_off">Written Off</option>
+            <option value="settled">Settled</option>
+          </select>
+          <label class="field-label">Refund Type</label>
+          <select id="sRefundType">
+            <option value="cancellation">Cancellation</option>
+            <option value="return">Return</option>
+            <option value="recovery">Recovery</option>
+            <option value="reversal">Reversal</option>
+            <option value="adjustment">Adjustment</option>
+            <option value="cashback">Cashback</option>
+            <option value="correction">Correction</option>
+            <option value="custom" selected>Custom</option>
           </select>
           <small id="sRefundInfo" class="muted-note refund-info"></small>
         </div>
