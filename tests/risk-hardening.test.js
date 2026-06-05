@@ -508,7 +508,7 @@ test('import accepts content containing null-byte separators from non-standard r
     expect(window.__lastImportStage.stage).toBe('completed');
 });
 
-test('import rejects unsupported version and invalid schema with validation report', () => {
+test('import rejects unsupported version and recovers invalid root collections via normalization', () => {
     const payload = {
         meta: { version: 'v9' },
         expenses: {},
@@ -521,7 +521,43 @@ test('import rejects unsupported version and invalid schema with validation repo
 
     const report = window.__lastImportValidationReport;
     expect(report.errors.some(e => e.includes('Unsupported Version'))).toBe(true);
-    expect(report.errors.some(e => e.includes('expenses must be an array'))).toBe(true);
+    expect((report.normalization && report.normalization.missingFieldsRecovered) || 0).toBeGreaterThan(0);
+});
+
+test('import strips unknown fields but preserves financial fields', () => {
+    const payload = {
+        meta: { version: 'v2', debugMeta: true },
+        expenses: [
+            {
+                id: 'e-unknown-1',
+                type: 'expense',
+                amount: -100,
+                budgetId: 'b1',
+                date: '2026-06-01T10:00:00Z',
+                runningBalance: 900,
+                BalanceBeforeTransaction: 1000,
+                BalanceAfterTransaction: 900,
+                futureField: 'remove-me'
+            }
+        ],
+        savings: [],
+        budgets: [{ budgetId: 'b1', totalAllocated: 5000, monthKey: '2026-06', uiOnly: 'x' }],
+        settings: { theme: '#22c55e', currencyCode: 'INR', temporaryFlag: true }
+    };
+
+    document.getElementById('importText').value = JSON.stringify(payload);
+    window.importData();
+
+    const report = window.__lastImportValidationReport;
+    const norm = window.__lastImportNormalizationReport;
+    const importedExpense = window.getExpenses().find(x => x.id === 'e-unknown-1');
+
+    expect(report.errors).toEqual([]);
+    expect((norm.unknownFieldsRemoved || 0)).toBeGreaterThan(0);
+    expect(Object.prototype.hasOwnProperty.call(importedExpense, 'runningBalance')).toBe(true);
+    expect(Object.prototype.hasOwnProperty.call(importedExpense, 'BalanceBeforeTransaction')).toBe(true);
+    expect(Object.prototype.hasOwnProperty.call(importedExpense, 'BalanceAfterTransaction')).toBe(true);
+    expect(Object.prototype.hasOwnProperty.call(importedExpense, 'futureField')).toBe(false);
 });
 
 test('import accepts numeric string guid ids and null linkage fields', () => {
