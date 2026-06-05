@@ -4317,6 +4317,14 @@ function getJsonParseErrorMessage(err) {
     return `JSON Parse Error: ${message}`;
 }
 
+function getJsonParseErrorPosition(err) {
+    const message = (err && err.message) ? String(err.message) : "";
+    const m = message.match(/position\s+(\d+)/i);
+    if (!m) return null;
+    const n = Number(m[1]);
+    return Number.isFinite(n) ? n : null;
+}
+
 function isValidImportId(value) {
     return typeof value === "string" || typeof value === "number";
 }
@@ -4512,6 +4520,10 @@ function importData() {
         contentLength: text.length
     });
 
+    // UAT requested pre-parse raw section logging around known failure offsets.
+    console.log(text.substring(7000, 7150));
+    window.__lastImportContentSample7000 = text.substring(7000, 7150);
+
     if (!text) {
         showToast("Paste data");
         return;
@@ -4523,7 +4535,22 @@ function importData() {
         parsed = JSON.parse(text);
     } catch (err) {
         const parseError = getJsonParseErrorMessage(err);
-        setImportStage("json-parse-failed", { error: parseError });
+        const parsePosition = getJsonParseErrorPosition(err);
+        const fragStart = Number.isFinite(parsePosition) ? Math.max(0, parsePosition - 40) : 0;
+        const fragEnd = Number.isFinite(parsePosition) ? Math.min(text.length, parsePosition + 110) : Math.min(text.length, 150);
+        const fragment = text.substring(fragStart, fragEnd);
+
+        window.__lastImportCorruptFragment = fragment;
+        console.error("Import parse fragment", {
+            parsePosition,
+            fragment
+        });
+
+        setImportStage("json-parse-failed", {
+            error: parseError,
+            parsePosition,
+            fragment
+        });
         renderImportValidationReport({
             version: "unknown",
             found: { expenses: 0, savings: 0, budgets: 0, budgetPeriods: 0 },
@@ -8111,9 +8138,10 @@ async function downloadBlobWithBestEffort(blob, filename) {
     a.click();
     document.body.removeChild(a);
 
+    const revokeDelayMs = (runtime.isAndroid && runtime.isWebView) ? 120000 : 4000;
     setTimeout(() => {
         URL.revokeObjectURL(url);
-    }, 1000);
+    }, revokeDelayMs);
 
     if (runtime.isAndroid && runtime.isWebView && !runtime.showSaveFilePicker && !runtime.webShareFiles) {
         updateAutoBackupRuntimeState("Android WebIntoApp runtime may ignore suggested filename in save dialog. This is a runtime limitation.");
@@ -8142,12 +8170,20 @@ async function exportDataAsJSON() {
                 2
             );
 
+        // Assert export payload is valid JSON before invoking runtime save flows.
+        JSON.parse(json);
+        window.__lastBackupExportIntegrity = {
+            isValidJson: true,
+            length: json.length,
+            tail: json.slice(Math.max(0, json.length - 160))
+        };
+
         const blob =
             new Blob(
                 [json],
                 {
                     type:
-                        "application/json"
+                        "application/json;charset=utf-8"
                 }
             );
 

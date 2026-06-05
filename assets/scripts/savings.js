@@ -1205,54 +1205,126 @@ function formatMonth(monthKey) {
 // 📊 LOAD UI
 // =========================
 
+function formatSavingsAmount(value) {
+    let n = Number(value || 0);
+    if (!Number.isFinite(n)) n = 0;
+    if (typeof formatCurrency === "function") return formatCurrency(n);
+    return `Rs. ${n.toFixed(2)}`;
+}
+
+function setTextById(id, value) {
+    let el = document.getElementById(id);
+    if (!el) return;
+    el.textContent = value;
+}
+
+function getPeriodEntriesForSavingsDashboard(allRows, activePeriod, periodKey) {
+    if (!Array.isArray(allRows)) return [];
+    if (periodKey) return allRows.filter(r => r && r.periodKey === periodKey);
+    if (!activePeriod || !activePeriod.start || !activePeriod.end) return allRows;
+
+    const startTs = new Date(activePeriod.start).getTime();
+    const endRaw = (typeof getBudgetPeriodEffectiveEndDate === "function")
+        ? getBudgetPeriodEffectiveEndDate(activePeriod, new Date())
+        : new Date(activePeriod.end);
+    const endTs = new Date(endRaw).getTime();
+
+    if (!Number.isFinite(startTs) || !Number.isFinite(endTs)) return allRows;
+    return allRows.filter(r => {
+        const ts = new Date(r && r.date ? r.date : 0).getTime();
+        return Number.isFinite(ts) && ts >= startTs && ts <= endTs;
+    });
+}
+
 // Calculates totals and updates savings dashboard UI
 function loadSavings() {
+    let scoped = (typeof getScopedSavings === "function") ? getScopedSavings() : (getSavings() || []);
+    let allRows = (typeof getSavings === "function") ? (getSavings() || []) : scoped;
+    let periodKey = (typeof getActivePeriodKey === "function") ? getActivePeriodKey() : null;
+    let activePeriod = (typeof getActiveBudgetPeriod === "function") ? getActiveBudgetPeriod() : null;
+    let periodRows = getPeriodEntriesForSavingsDashboard(allRows, activePeriod, periodKey);
 
-    let data = (typeof getScopedSavings === "function")
-        ? getScopedSavings()
-        : (getSavings() || []);
-
-    let periodKey = typeof getActivePeriodKey === "function"
-        ? getActivePeriodKey()
-        : null;
-
-    let now = new Date();
-    let currentMonth = now.toISOString().slice(0, 7);
     let daily = getDailyBudget();
-
     let dailyEl = document.getElementById("dailyBudget");
-    if (dailyEl) dailyEl.innerText = "₹ " + daily.toFixed(2);
-    // 🔥 MERGED FILTER (period + fallback)
-    // let filtered = data.filter(t => {
-    //     if (periodKey) {
-    //         return (
-    //             t.periodKey === periodKey ||
-    //             (!t.periodKey && t.monthKey === currentMonth)
-    //         );
-    //     }
-    //     return t.monthKey === currentMonth;
-    // });
-    let filtered = [...data];
-    // 🔥 CALCULATIONS
-    let total = filtered.reduce((sum, t) => sum + t.amount, 0);
+    if (dailyEl) dailyEl.innerText = "₹ " + Number(daily || 0).toFixed(2);
 
-    let allocated = filtered
-        .filter(t => t.type === "budget_allocation")
-        .reduce((sum, t) => sum + Math.abs(t.amount), 0);
+    let totalBalance = allRows.reduce((sum, t) => sum + Number(t && t.amount || 0), 0);
+    let totalDeposits = allRows.filter(t => t && t.type === "deposit").reduce((sum, t) => sum + Math.abs(Number(t.amount || 0)), 0);
+    let totalTransfers = allRows.filter(t => t && (t.type === "transfer" || t.type === "budget_allocation")).reduce((sum, t) => sum + Math.abs(Number(t.amount || 0)), 0);
+    let totalRefunds = allRows.filter(t => t && t.type === "refund").reduce((sum, t) => sum + Math.abs(Number(t.amount || 0)), 0);
+    let netMovement = allRows.reduce((sum, t) => sum + Number(t && t.amount || 0), 0);
+    let allocated = allRows.filter(t => t && t.type === "budget_allocation").reduce((sum, t) => sum + Math.abs(Number(t.amount || 0)), 0);
+    let available = totalBalance;
 
-    let available = total;
+    let sortedByDate = allRows.slice().sort((a, b) => new Date(b.date || 0).getTime() - new Date(a.date || 0).getTime());
+    let latest = sortedByDate[0] || null;
 
-    // 🔥 UI UPDATE
-    document.getElementById("savingsBalance").innerText = 'Rs. ' + total;
+    let largestTransfer = allRows
+        .filter(t => t && (t.type === "transfer" || t.type === "budget_allocation") && Number(t.amount || 0) < 0)
+        .reduce((mx, t) => Math.max(mx, Math.abs(Number(t.amount || 0))), 0);
 
-    let allocatedEl = document.getElementById("allocatedToBudget");
-    if (allocatedEl) allocatedEl.innerText = 'Rs. ' + allocated;
+    let largestRefund = allRows
+        .filter(t => t && t.type === "refund")
+        .reduce((mx, t) => Math.max(mx, Math.abs(Number(t.amount || 0))), 0);
 
-    let availableEl = document.getElementById("availableBalance");
-    if (availableEl) availableEl.innerText = 'Rs. ' + available;
+    let periodLabel = "No Active Period";
+    let periodStart = "-";
+    let periodEnd = "-";
+    let daysRemaining = "-";
 
-    // 🔥 HISTORY
-    renderSavingsHistory(filtered);
+    if (activePeriod) {
+        let effectiveEnd = (typeof getBudgetPeriodEffectiveEndDate === "function")
+            ? getBudgetPeriodEffectiveEndDate(activePeriod, new Date())
+            : new Date(activePeriod.end || activePeriod.start || Date.now());
+        let endDate = new Date(effectiveEnd);
+        let startDate = new Date(activePeriod.start || activePeriod.end || Date.now());
+
+        periodLabel = activePeriod.periodKey || [activePeriod.start || "-", activePeriod.end || "-"].join(" to ");
+        periodStart = Number.isFinite(startDate.getTime()) ? startDate.toLocaleDateString("en-IN") : "-";
+        periodEnd = Number.isFinite(endDate.getTime()) ? endDate.toLocaleDateString("en-IN") : "-";
+
+        if (Number.isFinite(endDate.getTime())) {
+            let now = new Date();
+            let diff = Math.ceil((endDate.setHours(23, 59, 59, 999) - now.getTime()) / (24 * 60 * 60 * 1000));
+            daysRemaining = diff >= 0 ? `${diff}` : "Closed";
+        }
+    }
+
+    setTextById("savingsBalance", formatSavingsAmount(totalBalance));
+    setTextById("totalDeposits", formatSavingsAmount(totalDeposits));
+    setTextById("totalTransfers", formatSavingsAmount(totalTransfers));
+    setTextById("totalRefunds", formatSavingsAmount(totalRefunds));
+    setTextById("netSavingsMovement", formatSavingsAmount(netMovement));
+    setTextById("allocatedToBudget", formatSavingsAmount(allocated));
+    setTextById("availableBalance", formatSavingsAmount(available));
+
+    setTextById("currentBudgetPeriodLabel", periodLabel);
+    setTextById("currentBudgetPeriodStart", periodStart);
+    setTextById("currentBudgetPeriodEnd", periodEnd);
+    let remainingLabel = "-";
+    if (daysRemaining === "Closed") remainingLabel = "Closed";
+    else if (daysRemaining !== "-") remainingLabel = `${daysRemaining} days`;
+    setTextById("currentBudgetPeriodRemaining", remainingLabel);
+
+    setTextById("transactionsThisPeriod", String(periodRows.length));
+    setTextById("largestExpenseTransfer", formatSavingsAmount(largestTransfer));
+    setTextById("largestRefund", formatSavingsAmount(largestRefund));
+
+    if (latest) {
+        setTextById("latestTransactionValue", formatSavingsAmount(Number(latest.amount || 0)));
+        let latestMeta = `${latest.type || "entry"} • ${new Date(latest.date || Date.now()).toLocaleString("en-IN")}`;
+        setTextById("latestTransactionMeta", latestMeta);
+    } else {
+        setTextById("latestTransactionValue", "-");
+        setTextById("latestTransactionMeta", "No transactions");
+    }
+
+    setTextById("savingsHealthBalance", formatSavingsAmount(totalBalance));
+    setTextById("savingsHealthAllocated", formatSavingsAmount(allocated));
+    setTextById("savingsHealthNet", formatSavingsAmount(netMovement));
+    setTextById("savingsHealthTransactions", String(periodRows.length));
+
+    renderSavingsHistory(scoped);
 }
 
 // =========================

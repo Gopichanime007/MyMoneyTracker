@@ -442,6 +442,38 @@ test('import classifies malformed json separately from validation errors', () =>
     expect(window.__lastImportStage.stage).toBe('json-parse-failed');
 });
 
+test('import parse diagnostics capture fragment around large-offset corruption', () => {
+    const longNote = 'x'.repeat(7400);
+    const payload = {
+        expenses: [
+            {
+                id: 'e-frag-1',
+                type: 'expense',
+                amount: -100,
+                budgetId: 'b-frag',
+                purpose: longNote,
+                date: '2026-06-01T10:00:00Z'
+            }
+        ],
+        savings: [],
+        budgets: [{ budgetId: 'b-frag', totalAllocated: 5000, periodKey: '2026-06-01_to_2026-06-30' }],
+        budgetPeriods: [],
+        settings: { theme: '#4caf50', currencyCode: 'INR' },
+        categories: [],
+        persons: [],
+        meta: { version: 'v2' }
+    };
+
+    const text = JSON.stringify(payload, null, 2);
+    const broken = text.slice(0, 7055) + '"broken_fragment' + text.slice(7055, 7090);
+    document.getElementById('importText').value = broken;
+    window.importData();
+
+    expect(window.__lastImportStage.stage).toBe('json-parse-failed');
+    expect(String(window.__lastImportCorruptFragment || '').length).toBeGreaterThan(0);
+    expect(String(window.__lastImportContentSample7000 || '').length).toBeGreaterThan(0);
+});
+
 test('import accepts content containing null-byte separators from non-standard runtimes', () => {
     const payload = {
         expenses: [
@@ -638,4 +670,29 @@ test('export generates filename metadata and updates backup runtime state', asyn
     expect(window.__lastBackupExportStatus).toBeTruthy();
     expect(window.__lastBackupExportStatus.filename).toMatch(/^MoneyTracker_\d{4}-\d{2}-\d{2}_\d{2}-\d{2}\.json$/);
     expect(document.getElementById('autoBackupRuntimeState').textContent.length).toBeGreaterThan(0);
+});
+
+test('export payload is valid JSON and immediate import succeeds', async () => {
+    URL.createObjectURL = jest.fn(() => 'blob:test-export');
+    URL.revokeObjectURL = jest.fn();
+
+    window.saveBudgets([{ budgetId: 'b-expimp', totalAllocated: 2500, periodKey: '2026-06-01_to_2026-06-30' }]);
+    window.saveExpenses([{ id: 'e-expimp', type: 'expense', amount: -250, budgetId: 'b-expimp', date: '2026-06-01T10:00:00Z' }]);
+    window.saveSavings([{ id: 's-expimp', type: 'deposit', amount: 3000, date: '2026-06-01T09:00:00Z' }]);
+
+    await window.exportDataAsJSON();
+
+    expect(window.__lastBackupExportIntegrity).toBeTruthy();
+    expect(window.__lastBackupExportIntegrity.isValidJson).toBe(true);
+
+    const exportedText = JSON.stringify(window.getFullAppData(), null, 2);
+    expect(() => JSON.parse(exportedText)).not.toThrow();
+
+    document.getElementById('importText').value = exportedText;
+    window.importData();
+
+    const report = window.__lastImportValidationReport;
+    expect(report.errors).toEqual([]);
+    expect(window.getExpenses().length).toBeGreaterThan(0);
+    expect(window.getSavings().length).toBeGreaterThan(0);
 });
