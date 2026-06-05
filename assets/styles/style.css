@@ -126,9 +126,9 @@ body {
   width: min(100%, 960px);
   margin: 0 auto;
   min-height: 100vh;
-  padding: var(--space-md);
+  padding: var(--space-sm);
   display: grid;
-  gap: var(--space-lg);
+  gap: var(--space-md);
   align-content: start;
 }
 
@@ -212,13 +212,13 @@ h4 {
 .dashboard-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px;
+  gap: 8px;
 }
 
 .card {
   position: relative;
   overflow: hidden;
-  padding: var(--space-lg);
+  padding: var(--space-md);
   border-radius: var(--radius-xl);
   background: linear-gradient(150deg, var(--card-bg-start), var(--card-bg-end));
   border: 1px solid var(--card-border);
@@ -240,7 +240,7 @@ h4 {
 
 .dash-card {
   border-radius: var(--radius-lg);
-  padding: var(--space-md);
+  padding: 10px;
   box-shadow: var(--shadow-sm);
   filter: var(--dash-finish-filter);
 }
@@ -251,8 +251,31 @@ h4 {
 }
 
 .dash-card h2 {
-  margin-top: 4px;
-  font-size: 1rem;
+  margin-top: 2px;
+  font-size: .95rem;
+}
+
+.clickable-card {
+  cursor: pointer;
+}
+
+.history-tools,
+.graph-controls {
+  align-items: center;
+  gap: 8px;
+}
+
+.history-tools .icon-btn,
+.graph-controls .icon-btn {
+  margin-top: 0;
+}
+
+.card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
 }
 
 .budget {
@@ -676,6 +699,30 @@ button:active {
   margin-top: var(--space-md);
 }
 
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.modal-body {
+  display: grid;
+  gap: 10px;
+}
+
+.modal-sub {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.refund-info {
+  margin-top: 6px;
+  display: block;
+}
+
 .modal-actions button {
   min-width: 110px;
 }
@@ -931,11 +978,11 @@ button:active {
 
 @media (max-width: 640px) {
   .app {
-    padding: 12px;
+    padding: 10px;
   }
 
   .card {
-    padding: 16px;
+    padding: 12px;
   }
 
   .budget-insights {
@@ -962,6 +1009,26 @@ button:active {
     grid-template-columns: 1fr;
   }
 
+}
+
+@media (min-width: 390px) {
+  .dashboard-grid {
+    gap: 10px;
+  }
+
+  .dash-card {
+    padding: 12px;
+  }
+}
+
+@media (min-width: 412px) {
+  .dashboard-grid {
+    gap: 12px;
+  }
+
+  .dash-card h2 {
+    font-size: 1rem;
+  }
 }
 
 @media (min-width: 640px) and (orientation: landscape) {
