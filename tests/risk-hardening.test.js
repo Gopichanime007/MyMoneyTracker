@@ -52,7 +52,6 @@ beforeEach(() => {
       <h4 id="savedToday">0</h4>
       <h4 id="savedWeek">0</h4>
       <h4 id="savedPeriod">0</h4>
-            <div id="widgetContainer"></div>
             <select id="appearanceModeSelect"></select>
             <select id="accentColorSelect"></select>
             <input id="autoBackupEnabled" type="checkbox" />
@@ -62,20 +61,6 @@ beforeEach(() => {
             <small id="autoBackupNextRun"></small>
             <small id="autoBackupRetentionState"></small>
             <small id="autoBackupRuntimeState"></small>
-            <small id="notificationPermissionState"></small>
-            <small id="runtimeSupportState"></small>
-            <small id="notificationRuntimeConclusion"></small>
-            <input id="notificationsEnabled" type="checkbox" />
-            <input id="notifBudgetPeriodEnding" type="checkbox" />
-            <input id="notifLowBudgetWarning" type="checkbox" />
-            <input id="notifDailyReminder" type="checkbox" />
-            <input id="notifWeeklySummary" type="checkbox" />
-            <input id="notifBackupReminder" type="checkbox" />
-            <input id="widgetBudgetSummary" type="checkbox" />
-            <input id="widgetDailyEfficiency" type="checkbox" />
-            <input id="widgetQuickAddExpense" type="checkbox" />
-            <input id="widgetQuickAddSavings" type="checkbox" />
-            <small id="widgetCapabilityState"></small>
             <div id="importModal" style="display:block"></div>
             <textarea id="importText"></textarea>
             <pre id="importValidationReport"></pre>
@@ -395,39 +380,23 @@ test('attachment overlay stays above transaction modal and restores modal intera
     expect(modal.classList.contains('modal-layer-muted')).toBe(false);
 });
 
-test('backup serializer includes full settings envelope and widgets settings', () => {
+test('backup serializer includes simplified production settings envelope', () => {
     localStorage.setItem('appearanceMode', 'chromium');
     localStorage.setItem('accentColor', '#2196f3');
     localStorage.setItem('theme', '#2196f3');
     localStorage.setItem('currencyCode', 'INR');
 
     localStorage.setItem('autoBackupSettingsV1', JSON.stringify({ enabled: true, frequency: 'daily', target: 'local_download' }));
-    localStorage.setItem('notificationSettingsV1', JSON.stringify({
-        enabled: true,
-        budgetPeriodEnding: true,
-        lowBudgetWarning: true,
-        dailyReminder: true,
-        weeklySummary: true,
-        backupReminder: false
-    }));
-    localStorage.setItem('widgetSettingsV1', JSON.stringify({
-        budgetSummary: true,
-        dailyEfficiency: true,
-        quickAddExpense: true,
-        quickAddSavings: true
-    }));
-
     const dump = window.getFullAppData();
     expect(dump.settings.appearanceMode).toBe('chromium');
     expect(dump.settings.accentColor).toBe('#2196f3');
     expect(dump.settings.autoBackupEnabled).toBe(true);
     expect(dump.settings.autoBackupFrequency).toBe('daily');
-    expect(dump.settings.notificationsEnabled).toBe(true);
-    expect(dump.settings.notificationTypes.budget).toBe(true);
-    expect(dump.settings.widgetSettings.quickAddSavings).toBe(true);
+    expect(dump.settings.notificationSettings).toBeUndefined();
+    expect(dump.settings.widgetSettings).toBeUndefined();
 });
 
-test('import restores settings and widgets with no ledger drift', () => {
+test('import restores production settings with no ledger drift', () => {
     window.saveBudgets([{ budgetId: 'bimp', totalAllocated: 10000, periodKey: '2026-06-01_to_2026-06-30' }]);
     window.saveExpenses([{ id: 'eimp', type: 'expense', amount: -1200, budgetId: 'bimp', date: '2026-06-01T10:00:00Z' }]);
     window.saveSavings([{ id: 'simp', type: 'deposit', amount: 5000, date: '2026-06-01T10:00:00Z' }]);
@@ -444,21 +413,7 @@ test('import restores settings and widgets with no ledger drift', () => {
             currencyCode: 'INR',
             autoBackupEnabled: true,
             autoBackupFrequency: 'weekly',
-            autoBackupTarget: 'local_download',
-            notificationSettings: {
-                enabled: true,
-                budgetPeriodEnding: true,
-                lowBudgetWarning: true,
-                dailyReminder: false,
-                weeklySummary: true,
-                backupReminder: true
-            },
-            widgetSettings: {
-                budgetSummary: true,
-                dailyEfficiency: true,
-                quickAddExpense: true,
-                quickAddSavings: false
-            }
+            autoBackupTarget: 'local_download'
         }
     };
 
@@ -467,27 +422,14 @@ test('import restores settings and widgets with no ledger drift', () => {
 
     expect(localStorage.getItem('appearanceMode')).toBe('matte');
     expect(localStorage.getItem('accentColor')).toBe('#ef4444');
-
-    const widget = JSON.parse(localStorage.getItem('widgetSettingsV1'));
-    expect(widget.quickAddSavings).toBe(false);
+    expect(localStorage.getItem('notificationSettingsV1')).toBeNull();
+    expect(localStorage.getItem('widgetSettingsV1')).toBeNull();
 
     const afterExpense = window.getExpenses().map(e => ({ id: e.id, before: e.BalanceBeforeTransaction, after: e.BalanceAfterTransaction }));
     const afterSavings = window.getSavings().map(s => ({ id: s.id, before: s.BalanceBeforeTransaction, after: s.BalanceAfterTransaction }));
 
     expect(afterExpense).toEqual(beforeExpense);
     expect(afterSavings).toEqual(beforeSavings);
-});
-
-test('runtime diagnostics surfaces capability flags independently', () => {
-    window.refreshSettingsPanels();
-    const line = document.getElementById('runtimeSupportState').textContent;
-    const conclusion = document.getElementById('notificationRuntimeConclusion').textContent;
-
-    expect(line).toContain('Notification API:');
-    expect(line).toContain('Service Worker:');
-    expect(line).toContain('Push Manager:');
-    expect(line).toContain('PWA Install Prompt:');
-    expect(conclusion).toContain('Notification status:');
 });
 
 test('import classifies malformed json separately from validation errors', () => {

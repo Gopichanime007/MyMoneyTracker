@@ -2079,9 +2079,7 @@ window.addEventListener("load", function () {
         renderBudgetEntries();
         renderCategoryBreakdown();
         startHeadline();
-        updateNotificationButtonState();
         if (typeof refreshSettingsPanels === "function") refreshSettingsPanels();
-        renderHomeWidgets();
         startAutoBackup();
 
     } catch (e) {
@@ -2106,9 +2104,6 @@ window.showScreen = function showScreen(id) {
     }
     if (id === "settings" && typeof window.refreshSettingsPanels === "function") {
         window.refreshSettingsPanels();
-    }
-    if (id === "home") {
-        renderHomeWidgets();
     }
 }
 
@@ -3342,11 +3337,6 @@ function hexToRgb(hex) {
                 document.body.appendChild(s);
             }
 
-            // schedule light daily summary notification (runs while app is open)
-            try {
-                scheduleDailySummary(20); // 20:00 local
-            } catch (e) {/* ignore */ }
-
             const bubble = createBubble();
             const panel = createPanel();
 
@@ -3856,55 +3846,10 @@ async function storeAttachmentWithStatus(inputId) {
     }
 }
 
-function scheduleDailySummary(hour = 20) {
-    if (!('Notification' in window)) return;
-    function computeSummary() {
-        const expenses = (typeof getExpenses === 'function') ? getExpenses() : [];
-        const now = new Date();
-        const start = new Date(now); start.setHours(0, 0, 0, 0);
-        const end = new Date(now); end.setHours(23, 59, 59, 999);
-        const ins = expenses.filter(e => Number(e.amount) > 0 && new Date(e.date) >= start && new Date(e.date) <= end);
-        const outs = expenses.filter(e => Number(e.amount) < 0 && new Date(e.date) >= start && new Date(e.date) <= end);
-        const inAmt = ins.reduce((s, e) => s + Number(e.amount || 0), 0);
-        const outAmt = outs.reduce((s, e) => s + Number(e.amount || 0), 0);
-        return `Today: ${ins.length} incomes ${formatCurrencyShort(inAmt)} · ${outs.length} expenses ${formatCurrencyShort(Math.abs(outAmt))}`;
-    }
-    function scheduleNext() {
-        const now = new Date();
-        const next = new Date(now);
-        next.setHours(hour, 0, 0, 0);
-        if (next <= now) next.setDate(next.getDate() + 1);
-        const ms = next - now;
-        setTimeout(async () => {
-            if (Notification.permission !== 'granted') {
-                try { await Notification.requestPermission(); } catch (e) { }
-            }
-            if (Notification.permission === 'granted') {
-                const body = computeSummary();
-                const n = new Notification('ReMo Daily Summary', { body });
-                n.onclick = () => window.focus();
-            }
-            scheduleNext();
-        }, ms);
-    }
-    scheduleNext();
-}
-
-const NOTIF_ENABLED_KEY = "notificationsEnabled";
-const NOTIF_SETTINGS_KEY = "notificationSettingsV1";
-let beforeInstallPromptDetected = false;
-
-if (typeof window !== "undefined") {
-    window.addEventListener("beforeinstallprompt", () => {
-        beforeInstallPromptDetected = true;
-    });
-}
-
 function getRuntimeDiagnostics() {
     let ua = (typeof navigator !== "undefined" && navigator.userAgent) ? navigator.userAgent : "";
     let isAndroid = /Android/i.test(ua);
     let isWebView = /;\s?wv\)|\bwv\b|WebView|Version\/\d+\.\d+\s+Chrome\/\d+/i.test(ua);
-    let hasNotification = typeof window !== "undefined" && ("Notification" in window);
     let webShareFiles = false;
 
     try {
@@ -3919,248 +3864,17 @@ function getRuntimeDiagnostics() {
         userAgent: ua,
         isAndroid,
         isWebView,
-        notificationApi: hasNotification,
-        notificationPermission: hasNotification ? Notification.permission : "unavailable",
-        serviceWorkerApi: typeof navigator !== "undefined" && ("serviceWorker" in navigator),
-        pushManagerApi: typeof window !== "undefined" && ("PushManager" in window),
-        beforeinstallprompt: beforeInstallPromptDetected || (typeof window !== "undefined" && "onbeforeinstallprompt" in window),
         downloadAttribute: "download" in document.createElement("a"),
         showSaveFilePicker: typeof window !== "undefined" && typeof window.showSaveFilePicker === "function",
         webShareFiles
     };
 }
 
-function getDefaultNotificationSettings() {
-    return {
-        enabled: false,
-        budgetPeriodEnding: true,
-        lowBudgetWarning: true,
-        dailyReminder: false,
-        weeklySummary: true,
-        backupReminder: true
-    };
-}
-
-function getNotificationSettings() {
-    try {
-        const parsed = JSON.parse(localStorage.getItem(NOTIF_SETTINGS_KEY) || "null");
-        return Object.assign(getDefaultNotificationSettings(), parsed || {});
-    } catch (_err) {
-        return getDefaultNotificationSettings();
-    }
-}
-
-function saveNotificationSettings(settings) {
-    const merged = Object.assign(getDefaultNotificationSettings(), settings || {});
-    localStorage.setItem(NOTIF_SETTINGS_KEY, JSON.stringify(merged));
-    localStorage.setItem(NOTIF_ENABLED_KEY, merged.enabled ? "1" : "0");
-}
-
-async function dispatchNotification(title, body) {
-    if (!("Notification" in window)) return false;
-    if (Notification.permission !== "granted") return false;
-
-    try {
-        const reg = await navigator.serviceWorker?.getRegistration?.();
-        if (reg && typeof reg.showNotification === "function") {
-            await reg.showNotification(title, {
-                body,
-                icon: "assets/images/remo-logo.svg",
-                badge: "assets/images/remo-logo.svg"
-            });
-            return true;
-        }
-    } catch (_err) {
-        // fallback below
-    }
-
-    try {
-        const n = new Notification(title, {
-            body,
-            icon: "assets/images/remo-logo.svg"
-        });
-        n.onclick = () => window.focus();
-        return true;
-    } catch (_err) {
-        return false;
-    }
-}
-
-async function requestNotificationPermissionFromSettings() {
-    if (!("Notification" in window)) {
-        showToast("Notifications not supported on this device", "warning");
-        refreshNotificationSettingsUI();
-        return;
-    }
-
-    try {
-        await Notification.requestPermission();
-    } catch (_err) {
-        // UI state refresh below
-    }
-    refreshNotificationSettingsUI();
-}
-
-function refreshNotificationSettingsUI() {
-    const settings = getNotificationSettings();
-    const runtime = getRuntimeDiagnostics();
-
-    const enabled = document.getElementById("notificationsEnabled");
-    const periodEnding = document.getElementById("notifBudgetPeriodEnding");
-    const lowBudget = document.getElementById("notifLowBudgetWarning");
-    const daily = document.getElementById("notifDailyReminder");
-    const weekly = document.getElementById("notifWeeklySummary");
-    const backup = document.getElementById("notifBackupReminder");
-    const permission = document.getElementById("notificationPermissionState");
-    const runtimeState = document.getElementById("runtimeSupportState");
-    const runtimeConclusion = document.getElementById("notificationRuntimeConclusion");
-
-    if (enabled) enabled.checked = !!settings.enabled;
-    if (periodEnding) periodEnding.checked = !!settings.budgetPeriodEnding;
-    if (lowBudget) lowBudget.checked = !!settings.lowBudgetWarning;
-    if (daily) daily.checked = !!settings.dailyReminder;
-    if (weekly) weekly.checked = !!settings.weeklySummary;
-    if (backup) backup.checked = !!settings.backupReminder;
-
-    if (permission) {
-        if (!runtime.notificationApi) {
-            permission.textContent = "Permission: unsupported (Notification API unavailable in this runtime)";
-        } else {
-            permission.textContent = `Permission: ${Notification.permission}`;
-        }
-    }
-
-    if (runtimeState) {
-        runtimeState.textContent = [
-            `Runtime: ${runtime.isWebView ? "Android WebView" : "Browser"}`,
-            `Notification API: ${runtime.notificationApi ? "Supported" : "Unsupported"}`,
-            `Service Worker: ${runtime.serviceWorkerApi ? "Supported" : "Unsupported"}`,
-            `Push Manager: ${runtime.pushManagerApi ? "Supported" : "Unsupported"}`,
-            `PWA Install Prompt: ${runtime.beforeinstallprompt ? "Supported" : "Unsupported"}`
-        ].join(" | ");
-    }
-
-    if (runtimeConclusion) {
-        runtimeConclusion.textContent = getNotificationRuntimeConclusion(runtime);
-    }
-
-    window.__moneyTrackerRuntimeDiagnostics = runtime;
-}
-
-function getNotificationRuntimeConclusion(runtime) {
-    if (!runtime.notificationApi || !runtime.serviceWorkerApi || !runtime.pushManagerApi) {
-        if (runtime.isWebView) {
-            return "Notification status: constrained by WebIntoApp runtime capabilities (not fully app-fixable).";
-        }
-        return "Notification status: runtime capability gap detected.";
-    }
-
-    if (runtime.notificationPermission !== "granted") {
-        return "Notification status: APIs are available; user permission is required.";
-    }
-
-    return "Notification status: APIs available in current runtime.";
-}
-
-async function applyNotificationSettings() {
-    const next = {
-        enabled: !!document.getElementById("notificationsEnabled")?.checked,
-        budgetPeriodEnding: !!document.getElementById("notifBudgetPeriodEnding")?.checked,
-        lowBudgetWarning: !!document.getElementById("notifLowBudgetWarning")?.checked,
-        dailyReminder: !!document.getElementById("notifDailyReminder")?.checked,
-        weeklySummary: !!document.getElementById("notifWeeklySummary")?.checked,
-        backupReminder: !!document.getElementById("notifBackupReminder")?.checked
-    };
-
-    if (next.enabled && "Notification" in window && Notification.permission !== "granted") {
-        await requestNotificationPermissionFromSettings();
-        if (Notification.permission !== "granted") {
-            next.enabled = false;
-            showToast("Notification permission is required to enable alerts", "warning");
-        }
-    }
-
-    saveNotificationSettings(next);
-    updateNotificationButtonState();
-    refreshNotificationSettingsUI();
-}
-
-function updateNotificationButtonState() {
-    const btn = document.getElementById("notifToggleBtn");
-    const enabled = getNotificationSettings().enabled;
-
-    if (btn) btn.textContent = enabled ? "Disable" : "Enable";
-}
-
-async function enableNotifications() {
-    if (!("Notification" in window)) {
-        showToast("Notifications not supported on this device", "warning");
-        return;
-    }
-
-    try {
-        const permission = await Notification.requestPermission();
-        if (permission === "granted") {
-            const settings = getNotificationSettings();
-            settings.enabled = true;
-            saveNotificationSettings(settings);
-            updateNotificationButtonState();
-            refreshNotificationSettingsUI();
-            showToast("Notifications enabled", "success");
-        } else {
-            showToast("Notification permission denied", "warning");
-        }
-    } catch (err) {
-        console.warn("enableNotifications failed", err);
-        showToast("Unable to enable notifications", "error");
-    }
-}
-
-function toggleNotifications() {
-    const settings = getNotificationSettings();
-    settings.enabled = !settings.enabled;
-    saveNotificationSettings(settings);
-    updateNotificationButtonState();
-    refreshNotificationSettingsUI();
-    showToast(settings.enabled ? "Notifications enabled" : "Notifications disabled", "info");
-}
-
-function testNotification() {
-    if (!("Notification" in window)) {
-        showToast("Notifications not supported", "warning");
-        return;
-    }
-
-    if (!getNotificationSettings().enabled) {
-        showToast("Enable notifications first", "warning");
-        return;
-    }
-
-    if (Notification.permission !== "granted") {
-        showToast("Allow notification permission first", "warning");
-        return;
-    }
-
-    dispatchNotification("Money Tracker", "Test notification is working.").then((ok) => {
-        if (!ok) showToast("Test notification failed", "error");
-    }).catch((err) => {
-        console.warn("testNotification failed", err);
-        showToast("Test notification failed", "error");
-    });
-}
-
 function refreshSettingsPanels() {
     if (typeof refreshAutoBackupSettingsUI === "function") refreshAutoBackupSettingsUI();
-    refreshNotificationSettingsUI();
-    refreshWidgetSettingsUI();
 }
 
 try {
-    window.enableNotifications = enableNotifications;
-    window.toggleNotifications = toggleNotifications;
-    window.testNotification = testNotification;
-    window.requestNotificationPermissionFromSettings = requestNotificationPermissionFromSettings;
-    window.applyNotificationSettings = applyNotificationSettings;
     window.refreshSettingsPanels = refreshSettingsPanels;
     window.changeTheme = changeTheme;
     window.setAppearanceMode = setAppearanceMode;
@@ -4168,271 +3882,6 @@ try {
     window.injectGlobalFooter = injectGlobalFooter;
 } catch (e) {
     // ignore non-browser contexts
-}
-
-const WIDGET_SETTINGS_KEY = "widgetSettingsV1";
-
-function getDefaultWidgetSettings() {
-    return {
-        budgetSummary: true,
-        dailyEfficiency: true,
-        quickAddExpense: true,
-        quickAddSavings: true
-    };
-}
-
-function getWidgetSettings() {
-    try {
-        const parsed = JSON.parse(localStorage.getItem(WIDGET_SETTINGS_KEY) || "null");
-        return Object.assign(getDefaultWidgetSettings(), parsed || {});
-    } catch (_err) {
-        return getDefaultWidgetSettings();
-    }
-}
-
-function saveWidgetSettings(settings) {
-    const merged = Object.assign(getDefaultWidgetSettings(), settings || {});
-    localStorage.setItem(WIDGET_SETTINGS_KEY, JSON.stringify(merged));
-}
-
-function applyWidgetSettingsFromUI() {
-    const next = {
-        budgetSummary: !!document.getElementById("widgetBudgetSummary")?.checked,
-        dailyEfficiency: !!document.getElementById("widgetDailyEfficiency")?.checked,
-        quickAddExpense: !!document.getElementById("widgetQuickAddExpense")?.checked,
-        quickAddSavings: !!document.getElementById("widgetQuickAddSavings")?.checked
-    };
-
-    saveWidgetSettings(next);
-    renderHomeWidgets();
-}
-
-function refreshWidgetSettingsUI() {
-    const settings = getWidgetSettings();
-    let elBudget = document.getElementById("widgetBudgetSummary");
-    let elDaily = document.getElementById("widgetDailyEfficiency");
-    let elQuickExpense = document.getElementById("widgetQuickAddExpense");
-    let elQuickSavings = document.getElementById("widgetQuickAddSavings");
-    let capability = document.getElementById("widgetCapabilityState");
-
-    if (elBudget) elBudget.checked = !!settings.budgetSummary;
-    if (elDaily) elDaily.checked = !!settings.dailyEfficiency;
-    if (elQuickExpense) elQuickExpense.checked = !!settings.quickAddExpense;
-    if (elQuickSavings) elQuickSavings.checked = !!settings.quickAddSavings;
-    if (capability) {
-        capability.textContent = "Android home-screen widgets are not available in this WebIntoApp runtime. These controls manage in-app dashboard cards only.";
-    }
-}
-
-function getQuickSavingsSourceOptions() {
-    let savings = getSavingsSafe();
-    return savings.filter(s => s && !s.sourceId && Number(s.amount || 0) > 0 && (s.type === "income" || s.type === "deposit"));
-}
-
-function refreshQuickSourceOptions() {
-    let select = document.getElementById("quickSavingsSource");
-    if (!select) return;
-
-    select.innerHTML = "<option value=''>Select source</option>";
-    getQuickSavingsSourceOptions().forEach(s => {
-        let opt = document.createElement("option");
-        opt.value = String(s.id);
-        opt.textContent = `${s.note || s.entity || s.id}`;
-        select.appendChild(opt);
-    });
-}
-
-function handleQuickSavingsTypeChange() {
-    let type = document.getElementById("quickSavingsType")?.value || "deposit";
-    let sourceWrap = document.getElementById("quickSavingsSourceWrap");
-    if (sourceWrap) sourceWrap.style.display = type === "deposit" ? "none" : "block";
-    refreshQuickSourceOptions();
-}
-
-function refreshAllPrimaryViews() {
-    loadDashboard();
-    loadHistory();
-    loadGraph();
-    renderBudgetEntries();
-    updateBudgetEfficiency();
-    loadBudgetOptions();
-    if (typeof loadSavings === "function") loadSavings();
-}
-
-function saveQuickExpense() {
-    let amount = Number(document.getElementById("quickExpenseAmount")?.value || 0);
-    let category = document.getElementById("quickExpenseCategory")?.value || "Others";
-
-    if (!(amount > 0)) {
-        showToast("Enter valid quick expense amount", "warning");
-        return;
-    }
-
-    addExpense({
-        amount: -Math.abs(amount),
-        category,
-        purpose: "Quick Add Widget",
-        type: "expense",
-        date: new Date().toISOString(),
-        paymentType: "Cash",
-        entity: "Cash"
-    });
-
-    let amt = document.getElementById("quickExpenseAmount");
-    if (amt) amt.value = "";
-
-    refreshAllPrimaryViews();
-    renderHomeWidgets();
-    showToast("Quick expense saved ✅", "success");
-}
-
-function saveQuickSavings() {
-    let type = document.getElementById("quickSavingsType")?.value || "deposit";
-    let amount = Number(document.getElementById("quickSavingsAmount")?.value || 0);
-    let sourceId = String(document.getElementById("quickSavingsSource")?.value || "");
-
-    if (!(amount > 0)) {
-        showToast("Enter valid quick savings amount", "warning");
-        return;
-    }
-
-    let savings = getSavingsSafe();
-    let nowIso = new Date().toISOString();
-    let monthKey = nowIso.slice(0, 7);
-
-    if (type !== "deposit" && !sourceId) {
-        showToast("Select savings source", "warning");
-        return;
-    }
-
-    if (type === "transfer") {
-        let remaining = typeof getSourceRemainingById === "function" ? getSourceRemainingById(sourceId, savings) : Number.MAX_SAFE_INTEGER;
-        if (Math.abs(amount) > remaining) {
-            showToast("Insufficient source balance", "warning");
-            return;
-        }
-    }
-
-    let entry = {
-        id: (typeof crypto !== "undefined" && crypto.randomUUID) ? crypto.randomUUID() : `sav_${Date.now()}_${Math.random()}`,
-        type,
-        amount: type === "transfer" ? -Math.abs(amount) : Math.abs(amount),
-        sourceId: type === "deposit" ? null : sourceId,
-        entity: "Quick Widget",
-        paymentType: "Cash",
-        note: "Quick Add Widget",
-        date: nowIso,
-        monthKey,
-        periodKey: (typeof getActivePeriodKey === "function") ? getActivePeriodKey() : null,
-        createdAt: nowIso,
-        updatedAt: nowIso
-    };
-
-    savings.push(entry);
-    if (typeof saveSavings === "function") {
-        saveSavings(savings);
-    } else {
-        localStorage.setItem("savingsTransactions", JSON.stringify(savings));
-    }
-
-    let amt = document.getElementById("quickSavingsAmount");
-    if (amt) amt.value = "";
-
-    refreshAllPrimaryViews();
-    renderHomeWidgets();
-    showToast("Quick savings saved ✅", "success");
-}
-
-function renderHomeWidgets() {
-    let host = document.getElementById("widgetContainer");
-    if (!host) return;
-
-    let settings = getWidgetSettings();
-    let blocks = [];
-
-    let budgets = filterBudgetsByActivePeriod(getBudgets());
-    let expenses = filterByActivePeriod(getExpenses());
-    let allocated = budgets.reduce((sum, b) => sum + Number(b.totalAllocated || 0), 0);
-    let spent = budgets.reduce((sum, b) => sum + getNetSpentForBudget(b.budgetId, expenses), 0);
-    spent = Math.max(0, spent);
-    let remaining = allocated - spent;
-
-    if (settings.budgetSummary) {
-        blocks.push(`
-          <div class="widget-card">
-            <h4>Budget Summary</h4>
-            <div class="widget-metrics">
-              <div><small>Allocated</small><strong>${formatCurrency(allocated)}</strong></div>
-              <div><small>Spent</small><strong>${formatCurrency(spent)}</strong></div>
-              <div><small>Remaining</small><strong>${formatCurrency(remaining)}</strong></div>
-            </div>
-          </div>
-        `);
-    }
-
-    if (settings.dailyEfficiency) {
-        let metrics = (typeof computeBudgetEfficiencyMetrics === "function") ? computeBudgetEfficiencyMetrics(new Date()) : { dailyLimit: 0, spentToday: 0, dailyRemaining: 0 };
-        blocks.push(`
-          <div class="widget-card">
-            <h4>Daily Efficiency</h4>
-            <div class="widget-metrics">
-              <div><small>Daily Limit</small><strong>${formatCurrency(metrics.dailyLimit || 0)}</strong></div>
-              <div><small>Spent Today</small><strong>${formatCurrency(metrics.spentToday || 0)}</strong></div>
-              <div><small>Remaining Today</small><strong>${formatCurrency(metrics.dailyRemaining || 0)}</strong></div>
-            </div>
-          </div>
-        `);
-    }
-
-    if (settings.quickAddExpense) {
-        let categoryOptions = (getCategories() || []).map(c => `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join("") || "<option value='Others'>Others</option>";
-        blocks.push(`
-          <div class="widget-card">
-            <h4>Quick Add Expense</h4>
-            <div class="widget-form-row">
-              <input id="quickExpenseAmount" type="number" placeholder="Amount" />
-              <select id="quickExpenseCategory">${categoryOptions}</select>
-            </div>
-            <button class="secondary widget-action" type="button" onclick="saveQuickExpense()">Save</button>
-          </div>
-        `);
-    }
-
-    if (settings.quickAddSavings) {
-        blocks.push(`
-          <div class="widget-card">
-            <h4>Quick Add Savings</h4>
-            <div class="widget-form-row">
-              <select id="quickSavingsType" onchange="handleQuickSavingsTypeChange()">
-                <option value="deposit">Deposit</option>
-                <option value="transfer">Transfer</option>
-                <option value="refund">Refund</option>
-              </select>
-              <input id="quickSavingsAmount" type="number" placeholder="Amount" />
-            </div>
-            <div id="quickSavingsSourceWrap" class="widget-form-row" style="display:none;">
-              <select id="quickSavingsSource"></select>
-            </div>
-            <button class="secondary widget-action" type="button" onclick="saveQuickSavings()">Save</button>
-          </div>
-        `);
-    }
-
-    host.innerHTML = blocks.length
-        ? `<div class="widget-grid">${blocks.join("")}</div>`
-        : `<p class="muted-note">Dashboard cards are currently disabled in settings.</p>`;
-
-    handleQuickSavingsTypeChange();
-}
-
-try {
-    window.applyWidgetSettingsFromUI = applyWidgetSettingsFromUI;
-    window.saveQuickExpense = saveQuickExpense;
-    window.saveQuickSavings = saveQuickSavings;
-    window.handleQuickSavingsTypeChange = handleQuickSavingsTypeChange;
-    window.renderHomeWidgets = renderHomeWidgets;
-} catch (_err) {
-    // ignore
 }
 
 // Cleanup orphaned attachments not referenced by any transaction
@@ -4961,14 +4410,6 @@ function validateImportPayload(parsed) {
         }
     });
 
-    if (Object.prototype.hasOwnProperty.call(settings, "notificationSettings") && (typeof settings.notificationSettings !== "object" || settings.notificationSettings === null || Array.isArray(settings.notificationSettings))) {
-        errors.push("Invalid Settings Structure: notificationSettings must be an object");
-    }
-
-    if (Object.prototype.hasOwnProperty.call(settings, "widgetSettings") && (typeof settings.widgetSettings !== "object" || settings.widgetSettings === null || Array.isArray(settings.widgetSettings))) {
-        errors.push("Invalid Settings Structure: widgetSettings must be an object");
-    }
-
     function validateTransactions(rows, label) {
         if (!Array.isArray(rows)) return;
 
@@ -5125,24 +4566,12 @@ function importData() {
                 });
             }
 
-            if (data.settings.notificationSettings && typeof data.settings.notificationSettings === "object") {
-                saveNotificationSettings(data.settings.notificationSettings);
-            } else if (Object.prototype.hasOwnProperty.call(data.settings, "notificationsEnabled")) {
-                let baseNotif = getDefaultNotificationSettings();
-                baseNotif.enabled = !!data.settings.notificationsEnabled;
-                saveNotificationSettings(baseNotif);
-            }
-
-            if (data.settings.widgetSettings && typeof data.settings.widgetSettings === "object") {
-                saveWidgetSettings(data.settings.widgetSettings);
-            }
         }
 
         runIntegrityRepairSilently();
         loadTheme();
         syncThemeSelectors();
         refreshSettingsPanels();
-        renderHomeWidgets();
 
         loadHistory();
         loadBudgetOptions();
@@ -5445,7 +4874,6 @@ function loadDashboard() {
     );
 
     updateProgressBar();
-    renderHomeWidgets();
 }
 // =========================
 // 📦 LOAD BUDGET SCREEN
@@ -7186,173 +6614,6 @@ function injectGlobalFooter() {
     document.querySelector(".app")?.appendChild(footer);
 }
 
-// // =========================
-// // 🔔 CONFIG
-// // =========================
-// const NOTIF_KEY = "notificationsEnabled";
-// const CHECK_INTERVAL = 15000; // 15 sec
-// const INSIGHT_INTERVAL = 3600000; // 1 hour
-
-// let lastAlertTime = 0;
-// let lastUsageLevel = 0;
-
-// // =========================
-// // 🔐 PERMISSION
-// // =========================
-// async function requestNotificationPermission() {
-//     if (!("Notification" in window)) return;
-
-//     try {
-//         const permission = await Notification.requestPermission();
-//         console.log("🔐 Permission:", permission);
-//         updateNotificationStatus();
-//     } catch (err) {
-//         console.error("Permission Error:", err);
-//     }
-// }
-
-// // =========================
-// // 📩 UNIVERSAL NOTIFY
-// // =========================
-// function notify(title, body) {
-//     try {
-//         // 📱 Android bridge (if exists)
-//         if (window.Android && typeof Android.showNotification === "function") {
-//             Android.showNotification(title, body);
-//             return;
-//         }
-
-//         // 🌐 Browser notification
-//         if ("Notification" in window && Notification.permission === "granted") {
-//             new Notification(title, { body });
-//             return;
-//         }
-
-//         // 🔄 fallback
-//         toast(`${title} - ${body}`);
-
-//     } catch (e) {
-//         console.error("Notify error:", e);
-//         toast(body);
-//     }
-// }
-
-// // =========================
-// // 📊 BUDGET ALERT ENGINE
-// // =========================
-// function checkBudgetUsage() {
-//     const expenses = JSON.parse(localStorage.getItem("expenses")) || [];
-//     const budgets = JSON.parse(localStorage.getItem("budgets")) || [];
-
-//     if (!budgets.length) return;
-
-//     const totalSpent = expenses.reduce((sum, e) =>
-//         sum + (e.amount < 0 ? Math.abs(e.amount) : 0), 0);
-
-//     const totalBudget = budgets.reduce((sum, b) =>
-//         sum + (b.totalAllocated || 0), 0);
-
-//     if (!totalBudget) return;
-
-//     const usage = totalSpent / totalBudget;
-
-//     // 🔥 Trigger only on crossing threshold
-//     if (usage > 0.8 && lastUsageLevel <= 0.8) {
-//         notify("⚠️ Budget Alert", `You crossed 80% usage`);
-//     }
-
-//     lastUsageLevel = usage;
-// }
-
-// // =========================
-// // 💡 SMART INSIGHT ENGINE
-// // =========================
-// function generateInsight() {
-//     const expenses = JSON.parse(localStorage.getItem("expenses")) || [];
-
-//     if (!expenses.length) {
-//         return "Start tracking your expenses to unlock insights 📊";
-//     }
-
-//     const total = expenses.reduce((s, e) => s + Math.abs(e.amount), 0);
-
-//     const today = new Date().toISOString().split("T")[0];
-//     const todaySpent = expenses
-//         .filter(e => e.date === today)
-//         .reduce((s, e) => s + Math.abs(e.amount), 0);
-
-//     const insights = [
-//         "💡 You're building a strong habit. Keep going!",
-//         "📉 Cutting one small expense daily saves big monthly",
-//         `💰 Total tracked spending: ₹${total}`,
-//         `📅 Today you spent ₹${todaySpent}`,
-//         "🎯 Try a 'No Spend Day' challenge today",
-//         "📊 Review your top category and optimize it",
-//         "⚡ Smart move: Track every rupee, even small ones",
-//         "🧠 Awareness = Control. You're improving already",
-//         "📈 Consistency beats motivation",
-//         "🔍 Look for one expense you can eliminate today"
-//     ];
-
-//     return insights[Math.floor(Math.random() * insights.length)];
-// }
-
-// // =========================
-// // ⏱️ HOURLY INSIGHT ENGINE
-// // =========================
-// function startInsights() {
-//     setInterval(() => {
-//         const enabled = localStorage.getItem(NOTIF_KEY) !== "false";
-//         if (!enabled) return;
-
-//         notify("💡 Smart Insight", generateInsight());
-
-//     }, INSIGHT_INTERVAL);
-// }
-
-// // =========================
-// // 🔘 TOGGLE CONTROL
-// // =========================
-// function toggleNotifications() {
-//     let enabled = localStorage.getItem(NOTIF_KEY) !== "false";
-
-//     enabled = !enabled;
-//     localStorage.setItem(NOTIF_KEY, enabled);
-
-//     updateToggleButton();
-
-//     toast(enabled ? "Notifications ON 🔔" : "Notifications OFF ⛔");
-// }
-
-// function updateToggleButton() {
-//     const btn = document.getElementById("notifToggleBtn");
-//     if (!btn) return;
-
-//     const enabled = localStorage.getItem(NOTIF_KEY) !== "false";
-//     btn.innerText = enabled ? "Stop Notifications" : "Start Notifications";
-// }
-
-// // =========================
-// // 📊 STATUS UI
-// // =========================
-// function updateNotificationStatus() {
-//     const el = document.getElementById("notifStatus");
-//     if (!el) return;
-
-//     if (!("Notification" in window)) {
-//         el.innerText = "Status: Not supported ❌";
-//         return;
-//     }
-
-//     el.innerText = "Status: " + Notification.permission;
-// }
-
-// // =========================
-// // 🧪 TEST
-// // =========================
-// function testNotification() {
-//     notify("🧪 Test Notification", "Everything working perfectly 🎉");
-// }
 
 // // =========================
 // // 🎨 TOAST (fallback)
@@ -8658,8 +7919,6 @@ function isParentSplitContainer(entry) {
 function getFullAppData() {
 
     let autoBackup = getAutoBackupSettings();
-    let notifications = getNotificationSettings();
-    let widgets = getWidgetSettings();
 
     let settingsSnapshot = {
         theme: localStorage.getItem("theme") || "",
@@ -8670,15 +7929,7 @@ function getFullAppData() {
         backupFrequency: autoBackup.frequency || "weekly",
         autoBackupEnabled: !!autoBackup.enabled,
         autoBackupFrequency: autoBackup.frequency || "weekly",
-        autoBackupTarget: autoBackup.target || "local_download",
-        notificationsEnabled: !!notifications.enabled,
-        notificationTypes: {
-            budget: !!notifications.budgetPeriodEnding,
-            savings: !!notifications.lowBudgetWarning,
-            reminders: !!(notifications.dailyReminder || notifications.weeklySummary || notifications.backupReminder)
-        },
-        notificationSettings: notifications,
-        widgetSettings: widgets
+        autoBackupTarget: autoBackup.target || "local_download"
     };
 
     return {

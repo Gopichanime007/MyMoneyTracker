@@ -82,8 +82,6 @@
 
         </div>
 
-        <div id="widgetContainer"></div>
-
         <!-- Progress -->
         <div class="progress-wrapper">
           <div class="progress-bar">
@@ -373,66 +371,6 @@
           <small id="autoBackupRuntimeState" class="muted-note">Export runtime: checking capabilities...</small>
 
           <button class="secondary" type="button" onclick="runAutoBackupNow()">Run Backup Now</button>
-        </div>
-
-        <h4>Notification Settings</h4>
-        <div class="form-group">
-          <label for="notificationsEnabled">
-            <input id="notificationsEnabled" type="checkbox" onchange="applyNotificationSettings()" class="inline-checkbox" />
-            Enable Notifications
-          </label>
-
-          <label for="notifBudgetPeriodEnding">
-            <input id="notifBudgetPeriodEnding" type="checkbox" onchange="applyNotificationSettings()" class="inline-checkbox" />
-            Budget Period Ending
-          </label>
-
-          <label for="notifLowBudgetWarning">
-            <input id="notifLowBudgetWarning" type="checkbox" onchange="applyNotificationSettings()" class="inline-checkbox" />
-            Low Budget Warning
-          </label>
-
-          <label for="notifDailyReminder">
-            <input id="notifDailyReminder" type="checkbox" onchange="applyNotificationSettings()" class="inline-checkbox" />
-            Daily Reminder
-          </label>
-
-          <label for="notifWeeklySummary">
-            <input id="notifWeeklySummary" type="checkbox" onchange="applyNotificationSettings()" class="inline-checkbox" />
-            Weekly Summary
-          </label>
-
-          <label for="notifBackupReminder">
-            <input id="notifBackupReminder" type="checkbox" onchange="applyNotificationSettings()" class="inline-checkbox" />
-            Backup Reminder
-          </label>
-
-          <small id="notificationPermissionState" class="muted-note">Permission: unknown</small>
-          <small id="runtimeSupportState" class="muted-note">Runtime: checking capabilities...</small>
-          <small id="notificationRuntimeConclusion" class="muted-note">Notification status: checking runtime support...</small>
-          <button class="secondary" type="button" onclick="requestNotificationPermissionFromSettings()">Request Browser Permission</button>
-          <button class="secondary" type="button" onclick="testNotification()">Send Test Notification</button>
-        </div>
-
-        <h4>Dashboard Card Settings</h4>
-        <small id="widgetCapabilityState" class="muted-note">Android home-screen widgets are not provided by this runtime.</small>
-        <div class="form-group">
-          <label for="widgetBudgetSummary">
-            <input id="widgetBudgetSummary" type="checkbox" onchange="applyWidgetSettingsFromUI()" class="inline-checkbox" />
-            Budget Summary Card
-          </label>
-          <label for="widgetDailyEfficiency">
-            <input id="widgetDailyEfficiency" type="checkbox" onchange="applyWidgetSettingsFromUI()" class="inline-checkbox" />
-            Daily Efficiency Card
-          </label>
-          <label for="widgetQuickAddExpense">
-            <input id="widgetQuickAddExpense" type="checkbox" onchange="applyWidgetSettingsFromUI()" class="inline-checkbox" />
-            Quick Add Expense Card
-          </label>
-          <label for="widgetQuickAddSavings">
-            <input id="widgetQuickAddSavings" type="checkbox" onchange="applyWidgetSettingsFromUI()" class="inline-checkbox" />
-            Quick Add Savings Card
-          </label>
         </div>
 
         <!-- <h4>💸 Loans / Recoveries</h4>
