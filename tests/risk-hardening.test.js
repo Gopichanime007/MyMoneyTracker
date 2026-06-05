@@ -19,7 +19,8 @@ beforeEach(() => {
       <input id="purpose" />
       <input id="expenseDate" />
       <select id="linkedTransactionSelect"></select>
-      <select id="refundResolutionType"><option value="partial_refund">partial</option></select>
+    <select id="refundResolutionType"><option value="open">open</option></select>
+    <select id="refundType"><option value="custom">custom</option></select>
       <small id="linkedRemainingText"></small>
       <input id="expenseAttachment" type="file" />
       <img id="expenseAttachmentPreview" src="x" />
@@ -39,7 +40,8 @@ beforeEach(() => {
       <input id="sDate" />
       <select id="sourceSelect"></select>
       <select id="refundSelect"></select>
-      <select id="sRefundResolutionType"><option value="partial_refund">partial</option></select>
+    <select id="sRefundResolutionType"><option value="open">open</option></select>
+    <select id="sRefundType"><option value="custom">custom</option></select>
       <small id="sRefundInfo"></small>
       <input id="sAttachment" type="file" />
       <img id="sAttachmentPreview" src="x" />
@@ -630,6 +632,49 @@ test('legacy v1 import is migrated and accepted', () => {
     expect(localStorage.getItem('accentColor')).toBe('#22c55e');
     expect(localStorage.getItem('currencyCode')).toBe('INR');
     expect(window.getExpenses().length).toBe(1);
+});
+
+test('import defaults refundType and normalizes legacy resolution values', () => {
+    const payload = {
+        expenses: [
+            {
+                id: 'e-root',
+                type: 'expense',
+                amount: -1200,
+                budgetId: 'b-x',
+                date: '2026-06-01T10:00:00Z'
+            },
+            {
+                id: 'e-ref',
+                type: 'refund',
+                amount: 500,
+                linkedTransactionId: 'e-root',
+                date: '2026-06-01T11:00:00Z'
+            },
+            {
+                id: 'e-res',
+                type: 'expense_resolution',
+                amount: 0,
+                linkedTransactionId: 'e-root',
+                resolutionType: 'complete_refund',
+                date: '2026-06-01T12:00:00Z'
+            }
+        ],
+        savings: [],
+        budgets: [{ budgetId: 'b-x', totalAllocated: 5000, monthKey: '2026-06' }],
+        settings: {},
+        meta: { version: 'v2' }
+    };
+
+    document.getElementById('importText').value = JSON.stringify(payload);
+    window.importData();
+
+    const imported = window.getExpenses();
+    const refund = imported.find(x => x.id === 'e-ref');
+    const resolution = imported.find(x => x.id === 'e-res');
+
+    expect(refund.refundType).toBe('custom');
+    expect(resolution.resolutionType).toBe('fully_refunded');
 });
 
 test('footer injects once without legacy inline style and remains centered class-bound', () => {

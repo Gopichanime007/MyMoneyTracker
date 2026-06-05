@@ -619,6 +619,7 @@ function createSavingsEntry({
     date = new Date().toISOString(),
     attachmentId = null,
     linkedTransactionId = null,
+    refundType = null,
     resolutionType = null,
     resolvedAmount = 0,
     lossAmount = 0
@@ -648,7 +649,8 @@ function createSavingsEntry({
         updatedAt: new Date().toISOString(),
         attachmentId: attachmentId || null,
         linkedTransactionId: linkedTransactionId || null,
-        resolutionType: resolutionType || null,
+        refundType: (type === "refund" || refundType) ? (typeof normalizeRefundType === "function" ? normalizeRefundType(refundType) : String(refundType || "custom")) : null,
+        resolutionType: resolutionType ? (typeof normalizeResolutionType === "function" ? normalizeResolutionType(resolutionType) : String(resolutionType)) : null,
         resolvedAmount: Number(resolvedAmount || 0),
         lossAmount: Number(lossAmount || 0)
     };
@@ -685,12 +687,16 @@ function getSavingsResolutionSnapshot(originalId, savingsList) {
 
     let remainingRefundable = Math.max(0, originalAmount - refunded - loss);
 
-    let consumed = resolutionEntries.some(e => e.resolutionType === "consumed");
-    let cancelledWithCharges = resolutionEntries.some(e => e.resolutionType === "cancelled_with_charges");
+    let consumed = resolutionEntries.some(e => (typeof normalizeResolutionType === "function" ? normalizeResolutionType(e.resolutionType) : e.resolutionType) === "consumed");
+    let cancelledWithCharges = resolutionEntries.some(e => (typeof normalizeResolutionType === "function" ? normalizeResolutionType(e.resolutionType) : e.resolutionType) === "cancelled_with_charges");
+    let writtenOff = resolutionEntries.some(e => (typeof normalizeResolutionType === "function" ? normalizeResolutionType(e.resolutionType) : e.resolutionType) === "written_off");
+    let settled = resolutionEntries.some(e => (typeof normalizeResolutionType === "function" ? normalizeResolutionType(e.resolutionType) : e.resolutionType) === "settled");
 
     let status = "OPEN";
     if (consumed) status = "CONSUMED";
     else if (cancelledWithCharges) status = "CANCELLED_WITH_CHARGES";
+    else if (writtenOff) status = "WRITTEN_OFF";
+    else if (settled) status = "SETTLED";
     else if (remainingRefundable <= 0 && refunded > 0) status = "FULLY_REFUNDED";
     else if (refunded > 0) status = "PARTIALLY_REFUNDED";
 
@@ -710,6 +716,8 @@ function formatSavingsResolutionStatus(status) {
         PARTIALLY_REFUNDED: "Partially Refunded",
         FULLY_REFUNDED: "Fully Refunded",
         CONSUMED: "Consumed",
+        WRITTEN_OFF: "Written Off",
+        SETTLED: "Settled",
         CANCELLED_WITH_CHARGES: "Cancelled With Charges",
         UNKNOWN: "-"
     };
@@ -743,17 +751,19 @@ function handleSavingsRefundResolutionChange() {
         return;
     }
 
-    let mode = resolutionEl.value || "partial_refund";
+    let mode = (typeof normalizeResolutionType === "function")
+        ? normalizeResolutionType(resolutionEl.value || "open")
+        : (resolutionEl.value || "open");
     let pending = Number(snapshot.remainingRefundable || 0);
 
-    if (mode === "complete_refund") {
+    if (mode === "fully_refunded") {
         amountEl.value = pending ? String(pending) : "";
         amountEl.disabled = true;
         amountEl.placeholder = "Auto-filled complete refund";
-    } else if (mode === "consumed") {
+    } else if (mode === "consumed" || mode === "written_off") {
         amountEl.value = "0";
         amountEl.disabled = true;
-        amountEl.placeholder = "No wallet credit for consumed";
+        amountEl.placeholder = "No wallet credit for this closure";
     } else {
         amountEl.disabled = false;
         amountEl.placeholder = "Amount";
@@ -900,13 +910,18 @@ async function addSavings() {
             return;
         }
 
-        let resolutionType = document.getElementById("sRefundResolutionType")?.value || "partial_refund";
+        let resolutionType = (typeof normalizeResolutionType === "function")
+            ? normalizeResolutionType(document.getElementById("sRefundResolutionType")?.value || "open")
+            : (document.getElementById("sRefundResolutionType")?.value || "open");
+        let refundType = (typeof normalizeRefundType === "function")
+            ? normalizeRefundType(document.getElementById("sRefundType")?.value || "custom")
+            : String(document.getElementById("sRefundType")?.value || "custom");
         let creditAmount = Math.abs(Number(amount || 0));
 
-        if (resolutionType === "complete_refund") {
+        if (resolutionType === "fully_refunded") {
             creditAmount = pending;
         }
-        if (resolutionType === "consumed") {
+        if (resolutionType === "consumed" || resolutionType === "written_off") {
             creditAmount = 0;
         }
 
@@ -915,7 +930,7 @@ async function addSavings() {
             return;
         }
 
-        if (resolutionType === "partial_refund" || resolutionType === "complete_refund" || resolutionType === "cancelled_with_charges") {
+        if (["open", "partially_refunded", "fully_refunded", "cancelled_with_charges", "settled"].includes(resolutionType)) {
             if (creditAmount > 0) {
                 const refundEntry = createSavingsEntry({
                     type: "refund",
@@ -926,6 +941,7 @@ async function addSavings() {
                     note,
                     date,
                     linkedTransactionId: refId,
+                    refundType,
                     resolutionType,
                     resolvedAmount: creditAmount,
                     lossAmount: 0
@@ -937,10 +953,10 @@ async function addSavings() {
             }
         }
 
-        if (resolutionType === "consumed" || resolutionType === "cancelled_with_charges") {
+        if (["consumed", "cancelled_with_charges", "written_off", "settled"].includes(resolutionType)) {
             let lossAmount = resolutionType === "cancelled_with_charges"
                 ? Math.max(0, pending - creditAmount)
-                : 0;
+            : (resolutionType === "written_off" ? pending : 0);
 
             const resolutionEntry = createSavingsEntry({
                 type: "expense_resolution",
@@ -1413,10 +1429,17 @@ function renderSavingsHistory(data) {
                 let amountClass = t.amount < 0 ? "negative" : "positive";
                 let date = new Date(t.date).toLocaleString("en-IN");
                 let runningBalance = formatCurrency(Number(t.runningBalance || 0));
+                let meta = [];
+                if (t.type === "refund" && typeof formatRefundType === "function") meta.push(`Refund Type: ${formatRefundType(t.refundType)}`);
+                if (t.resolutionType && typeof normalizeResolutionType === "function") {
+                    const key = normalizeResolutionType(t.resolutionType);
+                    meta.push(`Resolution: ${(typeof RESOLUTION_TYPE_LABELS === "object" && RESOLUTION_TYPE_LABELS[key]) ? RESOLUTION_TYPE_LABELS[key] : key}`);
+                }
 
         div.innerHTML = `
         <div class="history-main">
             <div class="history-type">${label}</div>
+            ${meta.length ? `<div class="history-note">${meta.join(" • ")}</div>` : ""}
             <div class="history-meta">${date}</div>
             <div class="history-running">Running Balance: ${runningBalance}</div>
     </div>
@@ -1605,7 +1628,8 @@ function resetSavingsForm() {
     document.getElementById("sNote").value = "";
     document.getElementById("sourceSelect").value = "";
     if (document.getElementById("refundSelect")) document.getElementById("refundSelect").value = "";
-    if (document.getElementById("sRefundResolutionType")) document.getElementById("sRefundResolutionType").value = "partial_refund";
+    if (document.getElementById("sRefundResolutionType")) document.getElementById("sRefundResolutionType").value = "open";
+    if (document.getElementById("sRefundType")) document.getElementById("sRefundType").value = "custom";
     if (document.getElementById("sRefundInfo")) document.getElementById("sRefundInfo").textContent = "";
     if (document.getElementById("sAmount")) {
         document.getElementById("sAmount").disabled = false;
@@ -2417,7 +2441,14 @@ function exportSavingsPDF() {
         let date = new Date(t.date).toLocaleDateString("en-IN");
         let type = t.type || "-";
         let entity = t.entity || "-";
-        let purpose = t.note || "-";
+        let details = [];
+        if (t.type === "refund" && typeof formatRefundType === "function") details.push(`Type: ${formatRefundType(t.refundType)}`);
+        if (t.resolutionType && typeof normalizeResolutionType === "function") {
+            const key = normalizeResolutionType(t.resolutionType);
+            const label = (typeof RESOLUTION_TYPE_LABELS === "object" && RESOLUTION_TYPE_LABELS[key]) ? RESOLUTION_TYPE_LABELS[key] : key;
+            details.push(`Resolution: ${label}`);
+        }
+        let purpose = [t.note || "-"].concat(details).join(" | ");
         let amount = t.amount || 0;
 
         // Totals

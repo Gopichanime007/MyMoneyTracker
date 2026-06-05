@@ -169,10 +169,24 @@
           </select>
           <label class="field-label">Resolution Type</label>
           <select id="sRefundResolutionType" onchange="handleSavingsRefundResolutionChange()">
-            <option value="partial_refund">Partial Refund</option>
-            <option value="complete_refund">Complete Refund</option>
-            <option value="consumed">No Refund / Consumed</option>
+            <option value="open">Open</option>
+            <option value="partially_refunded">Partially Refunded</option>
+            <option value="fully_refunded">Fully Refunded</option>
             <option value="cancelled_with_charges">Cancelled With Charges</option>
+            <option value="consumed">Consumed</option>
+            <option value="written_off">Written Off</option>
+            <option value="settled">Settled</option>
+          </select>
+          <label class="field-label">Refund Type</label>
+          <select id="sRefundType">
+            <option value="cancellation">Cancellation</option>
+            <option value="return">Return</option>
+            <option value="recovery">Recovery</option>
+            <option value="reversal">Reversal</option>
+            <option value="adjustment">Adjustment</option>
+            <option value="cashback">Cashback</option>
+            <option value="correction">Correction</option>
+            <option value="custom" selected>Custom</option>
           </select>
           <small id="sRefundInfo" class="muted-note refund-info"></small>
         </div>

@@ -500,6 +500,30 @@ button:active {
   color: var(--muted);
 }
 
+.refund-type-card {
+  margin-top: var(--space-md);
+  padding: 12px;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border);
+  background: color-mix(in srgb, var(--surface-alt), var(--theme) 8%);
+}
+
+.refund-type-card h4 {
+  margin: 0 0 8px;
+}
+
+.refund-type-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 6px 0;
+  border-bottom: 1px dashed color-mix(in srgb, var(--border), transparent 30%);
+}
+
+.refund-type-row:last-child {
+  border-bottom: none;
+}
+
 .expense-item {
   display: grid;
   grid-template-columns: 1fr auto;
