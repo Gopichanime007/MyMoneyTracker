@@ -1551,15 +1551,17 @@ function buildTransferBackPlan(requestAmount) {
 
     let budgets = filterBudgetsByActivePeriod(getBudgets())
         .filter(b => b && b.budgetId && b.sourceId);
+    let savingsEntries = (typeof getSavings === "function") ? getSavings() : [];
 
     let expenses = getExpenses();
     let candidates = budgets.map(b => {
         let spent = Math.max(0, getNetSpentForBudget(b.budgetId, expenses));
         let allocated = Math.max(0, Number(b.totalAllocated || 0));
         let available = Math.max(0, allocated - spent);
+        let resolvedSourceId = resolveBudgetSourceIdForTransferBack(b, savingsEntries) || String(b.sourceId || "");
         return {
             budgetId: b.budgetId,
-            sourceId: String(b.sourceId),
+            sourceId: resolvedSourceId,
             available
         };
     }).filter(c => c.available > 0);
@@ -3813,6 +3815,32 @@ function scheduleDailySummary(hour = 20) {
 
 const NOTIF_ENABLED_KEY = "notificationsEnabled";
 const NOTIF_SETTINGS_KEY = "notificationSettingsV1";
+let beforeInstallPromptDetected = false;
+
+if (typeof window !== "undefined") {
+    window.addEventListener("beforeinstallprompt", () => {
+        beforeInstallPromptDetected = true;
+    });
+}
+
+function getRuntimeDiagnostics() {
+    let ua = (typeof navigator !== "undefined" && navigator.userAgent) ? navigator.userAgent : "";
+    let isAndroid = /Android/i.test(ua);
+    let isWebView = /;\s?wv\)|\bwv\b|WebView|Version\/\d+\.\d+\s+Chrome\/\d+/i.test(ua);
+    let hasNotification = typeof window !== "undefined" && ("Notification" in window);
+
+    return {
+        userAgent: ua,
+        isAndroid,
+        isWebView,
+        notificationApi: hasNotification,
+        notificationPermission: hasNotification ? Notification.permission : "unavailable",
+        serviceWorkerApi: typeof navigator !== "undefined" && ("serviceWorker" in navigator),
+        beforeinstallprompt: beforeInstallPromptDetected || (typeof window !== "undefined" && "onbeforeinstallprompt" in window),
+        downloadAttribute: "download" in document.createElement("a"),
+        showSaveFilePicker: typeof window !== "undefined" && typeof window.showSaveFilePicker === "function"
+    };
+}
 
 function getDefaultNotificationSettings() {
     return {
@@ -3887,6 +3915,7 @@ async function requestNotificationPermissionFromSettings() {
 
 function refreshNotificationSettingsUI() {
     const settings = getNotificationSettings();
+    const runtime = getRuntimeDiagnostics();
 
     const enabled = document.getElementById("notificationsEnabled");
     const periodEnding = document.getElementById("notifBudgetPeriodEnding");
@@ -3895,6 +3924,7 @@ function refreshNotificationSettingsUI() {
     const weekly = document.getElementById("notifWeeklySummary");
     const backup = document.getElementById("notifBackupReminder");
     const permission = document.getElementById("notificationPermissionState");
+    const runtimeState = document.getElementById("runtimeSupportState");
 
     if (enabled) enabled.checked = !!settings.enabled;
     if (periodEnding) periodEnding.checked = !!settings.budgetPeriodEnding;
@@ -3904,12 +3934,22 @@ function refreshNotificationSettingsUI() {
     if (backup) backup.checked = !!settings.backupReminder;
 
     if (permission) {
-        if (!("Notification" in window)) {
-            permission.textContent = "Permission: unsupported on this device";
+        if (!runtime.notificationApi) {
+            permission.textContent = "Permission: unsupported (Notification API unavailable in this runtime)";
         } else {
             permission.textContent = `Permission: ${Notification.permission}`;
         }
     }
+
+    if (runtimeState) {
+        runtimeState.textContent = [
+            `Runtime: ${runtime.isWebView ? "Android WebView" : "Browser"}`,
+            `Service Worker: ${runtime.serviceWorkerApi ? "supported" : "not supported"}`,
+            `beforeinstallprompt: ${runtime.beforeinstallprompt ? "available" : "not available"}`
+        ].join(" | ");
+    }
+
+    window.__moneyTrackerRuntimeDiagnostics = runtime;
 }
 
 async function applyNotificationSettings() {
@@ -4266,15 +4306,21 @@ function sharePDF() {
 }
 // Handles theme selection
 function handleTheme(val) {
+    let picker = document.getElementById("colorPicker");
+    let hexInput = document.getElementById("hexInput");
     if (val === "custom") {
-        document.getElementById("colorPicker").style.display = "flex"
+        if (picker) picker.style.display = "flex";
+        if (hexInput) hexInput.focus();
     } else {
+        if (picker) picker.style.display = "none";
         changeTheme(val);
     }
 }
 // Applies custom color theme
 function applyCustomColor(color) {
     changeTheme(color);
+    let picker = document.getElementById("colorPicker");
+    if (picker) picker.style.display = "none";
 }
 
 // Opens category modal
@@ -4852,6 +4898,25 @@ function renderBudgetEntries() {
 
     let list = Object.values(map).reverse();
 
+    function derivePeriodBounds(group) {
+        if (group.periodKey && String(group.periodKey).includes("_to_")) {
+            let [from, to] = String(group.periodKey).split("_to_");
+            return { from, to };
+        }
+
+        if (group.monthKey) {
+            let [y, m] = String(group.monthKey).split("-").map(Number);
+            if (Number.isFinite(y) && Number.isFinite(m)) {
+                let from = `${y}-${String(m).padStart(2, "0")}-01`;
+                let toDate = new Date(y, m, 0);
+                let to = `${toDate.getFullYear()}-${String(toDate.getMonth() + 1).padStart(2, "0")}-${String(toDate.getDate()).padStart(2, "0")}`;
+                return { from, to };
+            }
+        }
+
+        return { from: "-", to: "-" };
+    }
+
     list.forEach(g => {
 
         // 🔥 Use periodKey/monthKey-aware matching
@@ -4874,79 +4939,41 @@ function renderBudgetEntries() {
         let source = savings.find(s => String(s.id) === String(g.sourceId));
         let name = source ? (source.note || source.entity) : "Budget";
 
-        // 🔥 Proper label
-        let label = "No Date";
-
-        if (g.periodKey) {
-            let [start, end] = g.periodKey.split("_to_");
-            label = `${formatDateShort(start)} → ${formatDateShort(end)}`;
-        } else if (g.monthKey) {
-            label = formatMonth(g.monthKey);
-        }
-
-        // Responsive: render table on narrow screens
-        const isMobile = window.innerWidth && window.innerWidth <= 640;
-        if (isMobile) {
-            // create table if not exists
-            let table = container.querySelector('table.budgets-table');
-            if (!table) {
-                table = document.createElement('table');
-                table.className = 'budgets-table';
-                table.style.width = '100%';
-                table.style.borderCollapse = 'collapse';
-                table.innerHTML = `
-                    <thead>
-                        <tr style="background:#f0f0f0; text-align:left;">
-                            <th style="padding:8px;">Name</th>
-                            <th style="padding:8px;">Period</th>
-                            <th style="padding:8px; text-align:right;">Allocated</th>
-                            <th style="padding:8px; text-align:right;">Used</th>
-                            <th style="padding:8px; text-align:right;">Remaining</th>
-                        </tr>
-                    </thead>
-                    <tbody></tbody>
-                `;
-                container.appendChild(table);
+        let transactionCount = expenses.filter(e => {
+            if (Array.isArray(e.allocationTrail) && e.allocationTrail.length) {
+                return e.allocationTrail.some(a => relatedBudgetIds.includes(a.budgetId));
             }
+            return relatedBudgetIds.includes(e.budgetId);
+        }).length;
 
-            const tbody = table.querySelector('tbody');
-            const row = document.createElement('tr');
-            row.innerHTML = `
-                <td style="padding:8px; border-bottom:1px solid #eee;">${name}</td>
-                <td style="padding:8px; border-bottom:1px solid #eee;">${label}</td>
-                <td style="padding:8px; border-bottom:1px solid #eee; text-align:right;">${formatCurrency(g.totalAllocated)}</td>
-                <td style="padding:8px; border-bottom:1px solid #eee; text-align:right;">${formatCurrency(used)}</td>
-                <td style="padding:8px; border-bottom:1px solid #eee; text-align:right;">${formatCurrency(remaining)}</td>
-            `;
-            row.onclick = () => openBudgetDetails(g);
-            tbody.appendChild(row);
-        } else {
-            let div = document.createElement("div");
-            div.className = "income-card";
+        let period = derivePeriodBounds(g);
 
-            div.innerHTML = `
-            <div class="budget-card">
+        let div = document.createElement("div");
+        div.className = "budget-period-card";
 
-                <div class="budget-left">
-                    <div class="budget-title">${name}</div>
-                    <div class="budget-sub">${label}</div>
+        div.innerHTML = `
+            <div class="budget-period-head">
+                <div>
+                    <h4>${escapeHtml(name)}</h4>
+                    <small>From ${escapeHtml(period.from === "-" ? "-" : formatDateShort(period.from))} • To ${escapeHtml(period.to === "-" ? "-" : formatDateShort(period.to))}</small>
                 </div>
-
-                <div class="budget-right">
-                    <div class="budget-amount">${formatCurrency(g.totalAllocated)}</div>
-                    <div class="budget-status ${remaining <= 0 ? "exhausted" : "active"}">
-                        ${remaining <= 0 ? "Exhausted" : `${formatCurrency(remaining)} left`}
-                    </div>
-                </div>
-
+                <span class="budget-status-pill ${remaining <= 0 ? "is-exhausted" : "is-active"}">
+                    ${remaining <= 0 ? "Exhausted" : "Healthy"}
+                </span>
             </div>
-            `;
 
-            div.style.cursor = "pointer";
-            div.onclick = () => openBudgetDetails(g);
+            <div class="budget-period-metrics">
+                <div><small>Assigned</small><strong>${escapeHtml(formatCurrency(g.totalAllocated))}</strong></div>
+                <div><small>Spent</small><strong>${escapeHtml(formatCurrency(used))}</strong></div>
+                <div><small>Remaining</small><strong>${escapeHtml(formatCurrency(remaining))}</strong></div>
+                <div><small>Transactions</small><strong>${escapeHtml(String(transactionCount))}</strong></div>
+            </div>
+        `;
 
-            container.appendChild(div);
-        }
+        div.style.cursor = "pointer";
+        div.onclick = () => openBudgetDetails(g);
+
+        container.appendChild(div);
     });
 }
 
@@ -8065,18 +8092,64 @@ function getFullAppData() {
 // 📅 SAFE FILE DATE
 // =========================
 
-function getSafeDate() {
+function getSafeDate(dateInput = new Date()) {
 
-    return new Date()
-        .toISOString()
-        .replace(/[:.]/g, "-");
+    let d = new Date(dateInput);
+
+    let y = d.getFullYear();
+    let m = String(d.getMonth() + 1).padStart(2, "0");
+    let day = String(d.getDate()).padStart(2, "0");
+    let hh = String(d.getHours()).padStart(2, "0");
+    let mm = String(d.getMinutes()).padStart(2, "0");
+
+    return `${y}-${m}-${day}_${hh}-${mm}`;
+}
+
+async function downloadBlobWithBestEffort(blob, filename) {
+    let runtime = getRuntimeDiagnostics();
+
+    if (typeof window.showSaveFilePicker === "function") {
+        try {
+            let handle = await window.showSaveFilePicker({
+                suggestedName: filename,
+                types: [{
+                    description: "JSON backup",
+                    accept: { "application/json": [".json"] }
+                }]
+            });
+            let writable = await handle.createWritable();
+            await writable.write(blob);
+            await writable.close();
+            return "file-picker";
+        } catch (_err) {
+            // continue to next fallback
+        }
+    }
+
+    let url = URL.createObjectURL(blob);
+    let a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+
+    setTimeout(() => {
+        URL.revokeObjectURL(url);
+    }, 1000);
+
+    if (runtime.isAndroid && runtime.isWebView && !runtime.showSaveFilePicker) {
+        showToast("Android WebView may ignore suggested filename in Save dialog", "warning");
+    }
+
+    return "download-attribute";
 }
 
 // =========================
 // 📤 MANUAL EXPORT
 // =========================
 
-function exportDataAsJSON() {
+async function exportDataAsJSON() {
 
     try {
 
@@ -8099,29 +8172,8 @@ function exportDataAsJSON() {
                 }
             );
 
-        const url =
-            URL.createObjectURL(blob);
-
-        const a =
-            document.createElement("a");
-
-        a.href = url;
-
-        a.download =
-            `money-tracker-backup-${getSafeDate()
-            }.json`;
-
-        document.body.appendChild(a);
-
-        a.click();
-
-        document.body.removeChild(a);
-
-        setTimeout(() => {
-
-            URL.revokeObjectURL(url);
-
-        }, 1000);
+        let filename = `MoneyTracker_${getSafeDate()}.json`;
+        await downloadBlobWithBestEffort(blob, filename);
 
         console.log(
             "✅ Manual export completed"

@@ -304,10 +304,13 @@
         </select>
         <!-- Theme -->
         <h4>Theme</h4>
-        <select onchange="handleTheme(this.value)">
+        <select id="themeSelect" onchange="handleTheme(this.value)">
           <option value="#4caf50">Green</option>
           <option value="#ff5722">Orange</option>
           <option value="#2196f3">Blue</option>
+          <option value="metallic">Metallic</option>
+          <option value="matte">Matte</option>
+          <option value="chromium">Chromium</option>
           <option value="custom">Custom</option>
         </select>
         <input type="text" id="hexInput" placeholder="Apply custom theme using hex code (e.g. #4caf50)">
@@ -394,6 +397,7 @@
           </label>
 
           <small id="notificationPermissionState" class="muted-note">Permission: unknown</small>
+          <small id="runtimeSupportState" class="muted-note">Runtime: checking capabilities...</small>
           <button class="secondary" type="button" onclick="requestNotificationPermissionFromSettings()">Request Browser Permission</button>
           <button class="secondary" type="button" onclick="testNotification()">Send Test Notification</button>
         </div>
