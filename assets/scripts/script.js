@@ -4406,6 +4406,27 @@ function getImportTextSignature(text) {
     };
 }
 
+function getImportByteSignature(input) {
+    let bytes;
+    if (input instanceof Uint8Array) {
+        bytes = input;
+    } else if (input instanceof ArrayBuffer) {
+        bytes = new Uint8Array(input);
+    } else {
+        bytes = new Uint8Array(0);
+    }
+
+    let hash = 0;
+    for (let i = 0; i < bytes.length; i += 1) {
+        hash = (hash * 31 + bytes[i]) >>> 0;
+    }
+
+    return {
+        length: bytes.length,
+        hash32: hash.toString(16).padStart(8, "0")
+    };
+}
+
 function getImportCharCodes(text, from, to) {
     const raw = String(text || "");
     const start = Math.max(0, Number(from) || 0);
@@ -4415,6 +4436,103 @@ function getImportCharCodes(text, from, to) {
         out.push({ index: i, code: raw.charCodeAt(i) });
     }
     return out;
+}
+
+function decodeImportTextCandidates(input) {
+    const bytes = input instanceof Uint8Array
+        ? input
+        : (input instanceof ArrayBuffer ? new Uint8Array(input) : new Uint8Array(0));
+
+    const candidates = [];
+    const seen = new Set();
+
+    function pushCandidate(encoding, decodedText) {
+        const text = typeof decodedText === "string" ? decodedText : "";
+        const signature = getImportTextSignature(text);
+        const key = `${signature.length}:${signature.hash32}`;
+        if (seen.has(key)) return;
+        seen.add(key);
+        candidates.push({ encoding, text, signature });
+    }
+
+    if (typeof TextDecoder !== "undefined") {
+        ["utf-8", "utf-16le", "utf-16be"].forEach((encoding) => {
+            try {
+                const decoder = new TextDecoder(encoding, { fatal: false });
+                pushCandidate(encoding, decoder.decode(bytes));
+            } catch (_err) {
+                // Ignore unsupported decoders on older engines.
+            }
+        });
+    }
+
+    if (!candidates.length && typeof bytes.length === "number") {
+        // Last-resort decode for runtimes without TextDecoder.
+        let fallback = "";
+        for (let i = 0; i < bytes.length; i += 1) {
+            fallback += String.fromCharCode(bytes[i]);
+        }
+        pushCandidate("byte-charcode-fallback", fallback);
+    }
+
+    return candidates;
+}
+
+function chooseImportDecodedText(input) {
+    const candidates = decodeImportTextCandidates(input);
+    const attempts = [];
+
+    let selected = null;
+    for (let i = 0; i < candidates.length; i += 1) {
+        const candidate = candidates[i];
+        const normalizedText = normalizeImportRawText(candidate.text);
+        const normalizedSignature = getImportTextSignature(normalizedText);
+        let parseable = false;
+
+        try {
+            JSON.parse(normalizedText);
+            parseable = true;
+        } catch (_err) {
+            parseable = false;
+        }
+
+        attempts.push({
+            encoding: candidate.encoding,
+            rawLength: candidate.signature.length,
+            rawHash32: candidate.signature.hash32,
+            normalizedLength: normalizedSignature.length,
+            normalizedHash32: normalizedSignature.hash32,
+            parseable
+        });
+
+        if (!selected || (parseable && !selected.parseable)) {
+            selected = {
+                encoding: candidate.encoding,
+                rawText: candidate.text,
+                normalizedText,
+                rawSignature: candidate.signature,
+                normalizedSignature,
+                parseable
+            };
+            if (parseable) break;
+        }
+    }
+
+    if (!selected) {
+        selected = {
+            encoding: "none",
+            rawText: "",
+            normalizedText: "",
+            rawSignature: getImportTextSignature(""),
+            normalizedSignature: getImportTextSignature(""),
+            parseable: false
+        };
+    }
+
+    return {
+        selected,
+        attempts
+    };
 }
 
 function setImportStage(stage, payload) {
@@ -4871,13 +4989,14 @@ function importData() {
     setImportStage("validation-input");
     let text = normalizeImportRawText(document.getElementById("importText")?.value || "");
     const baselineSignature = getImportTextSignature(text);
-    const hashBeforeParse = `${text.length}:${text.charCodeAt(7055)}`;
+    const hashBeforeParse = `${baselineSignature.length}:${baselineSignature.hash32}`;
 
     // Requested UAT diagnostics immediately before parse.
     console.log(window.__lastImportFileMeta?.fileName || "manual_text");
     console.log(Number(window.__lastImportFileMeta?.fileSize || 0));
     console.log(text.length);
     console.log(text.substring(7000, 7100));
+    console.log("hashDisk", window.__lastImportPipeline?.disk?.hash || "n/a");
     console.log("hashBeforeParse", hashBeforeParse);
 
     console.info("Import raw diagnostics", {
@@ -5063,6 +5182,9 @@ function importData() {
 if (typeof window !== "undefined") {
     window.importData = importData;
     window.exportDataAsJSON = exportDataAsJSON;
+    window.decodeImportTextCandidates = decodeImportTextCandidates;
+    window.chooseImportDecodedText = chooseImportDecodedText;
+    window.getImportByteSignature = getImportByteSignature;
 }
 // Fixes old data structure to new system
 function runMigration() {
@@ -6980,15 +7102,24 @@ function handleFileImport(event) {
     };
 
     reader.onload = function (e) {
-        let text = typeof e.target.result === "string" ? e.target.result : "";
-        const rawSignature = getImportTextSignature(text);
-        const hashFileReaderRaw = `${text.length}:${text.charCodeAt(7055)}`;
+        const result = e && e.target ? e.target.result : null;
+        const buffer = result instanceof ArrayBuffer ? result : new ArrayBuffer(0);
+        const byteSignature = getImportByteSignature(buffer);
+        const diskHash = `${byteSignature.length}:${byteSignature.hash32}`;
+
+        const decodeResult = chooseImportDecodedText(buffer);
+        const selected = decodeResult.selected;
+        const text = selected.rawText;
+        const normalizedText = selected.normalizedText;
+        const rawSignature = selected.rawSignature;
+        const normalizedSignature = selected.normalizedSignature;
+        const hashFileReaderRaw = `${rawSignature.length}:${rawSignature.hash32}`;
+        const hashFileReaderNormalized = `${normalizedSignature.length}:${normalizedSignature.hash32}`;
         const nullByteCount = (text.match(/\u0000/g) || []).length;
         const hadBom = text.charCodeAt(0) === 65279;
-        const normalizedText = normalizeImportRawText(text);
-        const normalizedSignature = getImportTextSignature(normalizedText);
-        const hashFileReaderNormalized = `${normalizedText.length}:${normalizedText.charCodeAt(7055)}`;
         window.__lastImportNormalizationMeta = {
+            selectedEncoding: selected.encoding,
+            selectedParseableAtRead: selected.parseable,
             hadBom,
             nullByteCount,
             rawLength: rawSignature.length,
@@ -7008,6 +7139,10 @@ function handleFileImport(event) {
                 size: Number(file.size || 0),
                 lastModified: Number(file.lastModified || 0)
             },
+            disk: {
+                length: byteSignature.length,
+                hash: diskHash
+            },
             fileReaderRaw: {
                 length: text.length,
                 sample7000: text.substring(7000, 7100),
@@ -7020,7 +7155,8 @@ function handleFileImport(event) {
                 hash: hashFileReaderNormalized,
                 signature: normalizedSignature
             },
-            changedDuringNormalization: text !== normalizedText
+            changedDuringNormalization: text !== normalizedText,
+            decodeAttempts: decodeResult.attempts
         };
 
         // Requested stage diagnostics after FileReader load.
@@ -7028,6 +7164,7 @@ function handleFileImport(event) {
         console.log(Number(file.size || 0));
         console.log(text.length);
         console.log(text.substring(7000, 7100));
+        console.log("hashDisk", diskHash);
         console.log("hashFileReaderRaw", hashFileReaderRaw);
         console.log("hashFileReaderNormalized", hashFileReaderNormalized);
         window.__lastImportFileMeta = {
@@ -7055,7 +7192,7 @@ function handleFileImport(event) {
         }
     };
 
-    reader.readAsText(file, "UTF-8");
+    reader.readAsArrayBuffer(file);
 }
 
 
