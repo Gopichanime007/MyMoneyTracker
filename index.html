@@ -82,8 +82,6 @@
 
         </div>
 
-        <div id="widgetContainer"></div>
-
         <!-- Progress -->
         <div class="progress-wrapper">
           <div class="progress-bar">
@@ -311,6 +309,9 @@
           <option value="matte">Matte</option>
           <option value="glossy">Glossy</option>
           <option value="chromium">Chromium</option>
+          <option value="glass">Glass</option>
+          <option value="paper">Paper</option>
+          <option value="neon">Neon</option>
         </select>
 
         <h4>Accent Color</h4>
@@ -369,66 +370,10 @@
 
           <small id="autoBackupLastRun" class="muted-note">Last Backup: Not available</small>
           <small id="autoBackupNextRun" class="muted-note">Next Scheduled Backup: Not available</small>
+          <small id="autoBackupRetentionState" class="muted-note">Retention: Not available</small>
+          <small id="autoBackupRuntimeState" class="muted-note">Export runtime: checking capabilities...</small>
 
           <button class="secondary" type="button" onclick="runAutoBackupNow()">Run Backup Now</button>
-        </div>
-
-        <h4>Notification Settings</h4>
-        <div class="form-group">
-          <label for="notificationsEnabled">
-            <input id="notificationsEnabled" type="checkbox" onchange="applyNotificationSettings()" class="inline-checkbox" />
-            Enable Notifications
-          </label>
-
-          <label for="notifBudgetPeriodEnding">
-            <input id="notifBudgetPeriodEnding" type="checkbox" onchange="applyNotificationSettings()" class="inline-checkbox" />
-            Budget Period Ending
-          </label>
-
-          <label for="notifLowBudgetWarning">
-            <input id="notifLowBudgetWarning" type="checkbox" onchange="applyNotificationSettings()" class="inline-checkbox" />
-            Low Budget Warning
-          </label>
-
-          <label for="notifDailyReminder">
-            <input id="notifDailyReminder" type="checkbox" onchange="applyNotificationSettings()" class="inline-checkbox" />
-            Daily Reminder
-          </label>
-
-          <label for="notifWeeklySummary">
-            <input id="notifWeeklySummary" type="checkbox" onchange="applyNotificationSettings()" class="inline-checkbox" />
-            Weekly Summary
-          </label>
-
-          <label for="notifBackupReminder">
-            <input id="notifBackupReminder" type="checkbox" onchange="applyNotificationSettings()" class="inline-checkbox" />
-            Backup Reminder
-          </label>
-
-          <small id="notificationPermissionState" class="muted-note">Permission: unknown</small>
-          <small id="runtimeSupportState" class="muted-note">Runtime: checking capabilities...</small>
-          <button class="secondary" type="button" onclick="requestNotificationPermissionFromSettings()">Request Browser Permission</button>
-          <button class="secondary" type="button" onclick="testNotification()">Send Test Notification</button>
-        </div>
-
-        <h4>Widget Settings</h4>
-        <div class="form-group">
-          <label for="widgetBudgetSummary">
-            <input id="widgetBudgetSummary" type="checkbox" onchange="applyWidgetSettingsFromUI()" class="inline-checkbox" />
-            Budget Summary Widget
-          </label>
-          <label for="widgetDailyEfficiency">
-            <input id="widgetDailyEfficiency" type="checkbox" onchange="applyWidgetSettingsFromUI()" class="inline-checkbox" />
-            Daily Efficiency Widget
-          </label>
-          <label for="widgetQuickAddExpense">
-            <input id="widgetQuickAddExpense" type="checkbox" onchange="applyWidgetSettingsFromUI()" class="inline-checkbox" />
-            Quick Add Expense Widget
-          </label>
-          <label for="widgetQuickAddSavings">
-            <input id="widgetQuickAddSavings" type="checkbox" onchange="applyWidgetSettingsFromUI()" class="inline-checkbox" />
-            Quick Add Savings Widget
-          </label>
         </div>
 
         <!-- <h4>💸 Loans / Recoveries</h4>
@@ -495,6 +440,7 @@
       <h3>Import Data</h3>
 
       <textarea id="importText" placeholder="Paste JSON here" class="import-textarea"></textarea>
+      <pre id="importValidationReport" class="muted-note" aria-live="polite">Import report will appear here.</pre>
 
       <input type="file" accept=".json" onchange="handleFileImport(event)">
 

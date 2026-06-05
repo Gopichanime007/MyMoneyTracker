@@ -52,31 +52,25 @@ beforeEach(() => {
       <h4 id="savedToday">0</h4>
       <h4 id="savedWeek">0</h4>
       <h4 id="savedPeriod">0</h4>
-            <div id="widgetContainer"></div>
             <select id="appearanceModeSelect"></select>
             <select id="accentColorSelect"></select>
             <input id="autoBackupEnabled" type="checkbox" />
             <select id="autoBackupFrequency"><option value="weekly">weekly</option></select>
             <select id="autoBackupTarget"><option value="local_download">local_download</option></select>
-            <small id="notificationPermissionState"></small>
-            <small id="runtimeSupportState"></small>
-            <input id="notificationsEnabled" type="checkbox" />
-            <input id="notifBudgetPeriodEnding" type="checkbox" />
-            <input id="notifLowBudgetWarning" type="checkbox" />
-            <input id="notifDailyReminder" type="checkbox" />
-            <input id="notifWeeklySummary" type="checkbox" />
-            <input id="notifBackupReminder" type="checkbox" />
-            <input id="widgetBudgetSummary" type="checkbox" />
-            <input id="widgetDailyEfficiency" type="checkbox" />
-            <input id="widgetQuickAddExpense" type="checkbox" />
-            <input id="widgetQuickAddSavings" type="checkbox" />
+            <small id="autoBackupLastRun"></small>
+            <small id="autoBackupNextRun"></small>
+            <small id="autoBackupRetentionState"></small>
+            <small id="autoBackupRuntimeState"></small>
             <div id="importModal" style="display:block"></div>
             <textarea id="importText"></textarea>
+            <pre id="importValidationReport"></pre>
     `;
 
     window.open = jest.fn();
     if (!URL.createObjectURL) URL.createObjectURL = jest.fn(() => 'blob:test');
     if (!URL.revokeObjectURL) URL.revokeObjectURL = jest.fn();
+    if (!window.navigator.share) window.navigator.share = jest.fn(async () => {});
+    if (!window.navigator.canShare) window.navigator.canShare = jest.fn(() => false);
 });
 
 function localDateKey(date) {
@@ -386,39 +380,23 @@ test('attachment overlay stays above transaction modal and restores modal intera
     expect(modal.classList.contains('modal-layer-muted')).toBe(false);
 });
 
-test('backup serializer includes full settings envelope and widgets settings', () => {
+test('backup serializer includes simplified production settings envelope', () => {
     localStorage.setItem('appearanceMode', 'chromium');
     localStorage.setItem('accentColor', '#2196f3');
     localStorage.setItem('theme', '#2196f3');
     localStorage.setItem('currencyCode', 'INR');
 
     localStorage.setItem('autoBackupSettingsV1', JSON.stringify({ enabled: true, frequency: 'daily', target: 'local_download' }));
-    localStorage.setItem('notificationSettingsV1', JSON.stringify({
-        enabled: true,
-        budgetPeriodEnding: true,
-        lowBudgetWarning: true,
-        dailyReminder: true,
-        weeklySummary: true,
-        backupReminder: false
-    }));
-    localStorage.setItem('widgetSettingsV1', JSON.stringify({
-        budgetSummary: true,
-        dailyEfficiency: true,
-        quickAddExpense: true,
-        quickAddSavings: true
-    }));
-
     const dump = window.getFullAppData();
     expect(dump.settings.appearanceMode).toBe('chromium');
     expect(dump.settings.accentColor).toBe('#2196f3');
     expect(dump.settings.autoBackupEnabled).toBe(true);
     expect(dump.settings.autoBackupFrequency).toBe('daily');
-    expect(dump.settings.notificationsEnabled).toBe(true);
-    expect(dump.settings.notificationTypes.budget).toBe(true);
-    expect(dump.settings.widgetSettings.quickAddSavings).toBe(true);
+    expect(dump.settings.notificationSettings).toBeUndefined();
+    expect(dump.settings.widgetSettings).toBeUndefined();
 });
 
-test('import restores settings and widgets with no ledger drift', () => {
+test('import restores production settings with no ledger drift', () => {
     window.saveBudgets([{ budgetId: 'bimp', totalAllocated: 10000, periodKey: '2026-06-01_to_2026-06-30' }]);
     window.saveExpenses([{ id: 'eimp', type: 'expense', amount: -1200, budgetId: 'bimp', date: '2026-06-01T10:00:00Z' }]);
     window.saveSavings([{ id: 'simp', type: 'deposit', amount: 5000, date: '2026-06-01T10:00:00Z' }]);
@@ -435,21 +413,7 @@ test('import restores settings and widgets with no ledger drift', () => {
             currencyCode: 'INR',
             autoBackupEnabled: true,
             autoBackupFrequency: 'weekly',
-            autoBackupTarget: 'local_download',
-            notificationSettings: {
-                enabled: true,
-                budgetPeriodEnding: true,
-                lowBudgetWarning: true,
-                dailyReminder: false,
-                weeklySummary: true,
-                backupReminder: true
-            },
-            widgetSettings: {
-                budgetSummary: true,
-                dailyEfficiency: true,
-                quickAddExpense: true,
-                quickAddSavings: false
-            }
+            autoBackupTarget: 'local_download'
         }
     };
 
@@ -458,9 +422,8 @@ test('import restores settings and widgets with no ledger drift', () => {
 
     expect(localStorage.getItem('appearanceMode')).toBe('matte');
     expect(localStorage.getItem('accentColor')).toBe('#ef4444');
-
-    const widget = JSON.parse(localStorage.getItem('widgetSettingsV1'));
-    expect(widget.quickAddSavings).toBe(false);
+    expect(localStorage.getItem('notificationSettingsV1')).toBeNull();
+    expect(localStorage.getItem('widgetSettingsV1')).toBeNull();
 
     const afterExpense = window.getExpenses().map(e => ({ id: e.id, before: e.BalanceBeforeTransaction, after: e.BalanceAfterTransaction }));
     const afterSavings = window.getSavings().map(s => ({ id: s.id, before: s.BalanceBeforeTransaction, after: s.BalanceAfterTransaction }));
@@ -469,12 +432,177 @@ test('import restores settings and widgets with no ledger drift', () => {
     expect(afterSavings).toEqual(beforeSavings);
 });
 
-test('runtime diagnostics surfaces capability flags independently', () => {
-    window.refreshSettingsPanels();
-    const line = document.getElementById('runtimeSupportState').textContent;
+test('import classifies malformed json separately from validation errors', () => {
+    document.getElementById('importText').value = '{"expenses":';
+    window.importData();
 
-    expect(line).toContain('Notifications:');
-    expect(line).toContain('Service Worker:');
-    expect(line).toContain('Push Manager:');
-    expect(line).toContain('PWA Install Prompt:');
+    const report = window.__lastImportValidationReport;
+    expect(report).toBeTruthy();
+    expect(report.errors).toContain('Malformed JSON');
+});
+
+test('import rejects unsupported version and invalid schema with validation report', () => {
+    const payload = {
+        meta: { version: 'v9' },
+        expenses: {},
+        savings: [],
+        budgets: []
+    };
+
+    document.getElementById('importText').value = JSON.stringify(payload);
+    window.importData();
+
+    const report = window.__lastImportValidationReport;
+    expect(report.errors.some(e => e.includes('Unsupported Version'))).toBe(true);
+    expect(report.errors.some(e => e.includes('expenses must be an array'))).toBe(true);
+});
+
+test('import accepts numeric string guid ids and null linkage fields', () => {
+    const payload = {
+        expenses: [
+            {
+                id: 1780644309293,
+                type: 'expense',
+                amount: -200,
+                budgetId: 'b-id-1',
+                person: null,
+                sourceId: null,
+                linkedTransactionId: null,
+                date: '2026-06-01T10:00:00Z'
+            },
+            {
+                id: 'bcc1a037-8dc7-4101-b975-4e591dbd2e81',
+                type: 'expense',
+                amount: -100,
+                budgetId: 'b-id-1',
+                person: 'self',
+                date: '2026-06-01T11:00:00Z'
+            }
+        ],
+        savings: [
+            {
+                id: 'savings_wallet',
+                type: 'deposit',
+                amount: 2000,
+                autoRecovered: true,
+                sourceId: null,
+                linkedTransactionId: null,
+                date: '2026-06-01T09:00:00Z'
+            }
+        ],
+        budgets: [
+            {
+                budgetId: 'b-id-1',
+                totalAllocated: 5000,
+                periodKey: '2026-06-01_to_2026-06-30'
+            }
+        ],
+        budgetPeriods: [
+            {
+                id: 'bp1',
+                periodKey: '2026-06-01_to_2026-06-30',
+                status: 'active'
+            }
+        ],
+        settings: {
+            theme: '#2196f3',
+            currencyCode: 'INR'
+        },
+        categories: [],
+        persons: [],
+        meta: { version: 'v2' }
+    };
+
+    document.getElementById('importText').value = JSON.stringify(payload);
+    window.importData();
+
+    const report = window.__lastImportValidationReport;
+    expect(report.errors).toEqual([]);
+    expect(report.imported.expenses).toBe(2);
+    expect(report.imported.savings).toBe(1);
+    expect(window.getExpenses().length).toBe(2);
+    expect(window.getSavings().length).toBe(1);
+});
+
+test('legacy v1 import is migrated and accepted', () => {
+    const payload = {
+        expenses: [
+            {
+                id: 1,
+                type: 'expense',
+                amount: -300,
+                budgetId: 'b-legacy',
+                date: '2026-06-01T10:00:00Z'
+            }
+        ],
+        savings: [
+            {
+                id: 's-legacy',
+                type: 'deposit',
+                amount: 1000,
+                date: '2026-06-01T09:00:00Z'
+            }
+        ],
+        budgets: [
+            {
+                budgetId: 'b-legacy',
+                totalAllocated: 5000,
+                monthKey: '2026-06'
+            }
+        ],
+        settings: {
+            theme: '#22c55e',
+            currencyCode: 'INR'
+        },
+        meta: { version: 'v1' }
+    };
+
+    document.getElementById('importText').value = JSON.stringify(payload);
+    window.importData();
+
+    const report = window.__lastImportValidationReport;
+    expect(report.errors).toEqual([]);
+    expect(localStorage.getItem('accentColor')).toBe('#22c55e');
+    expect(localStorage.getItem('currencyCode')).toBe('INR');
+    expect(window.getExpenses().length).toBe(1);
+});
+
+test('footer injects once without legacy inline style and remains centered class-bound', () => {
+    const app = document.createElement('div');
+    app.className = 'app';
+    document.body.appendChild(app);
+
+    window.injectGlobalFooter();
+    window.injectGlobalFooter();
+
+    const footers = app.querySelectorAll('#appSignatureFooter');
+    expect(footers.length).toBe(1);
+    expect(footers[0].innerHTML.includes('style=')).toBe(false);
+    expect(footers[0].className).toContain('app-signature');
+});
+
+test('accent plus appearance persist together after reload simulation', () => {
+    window.changeTheme('#7c3aed');
+    window.setAppearanceMode('chromium');
+
+    expect(localStorage.getItem('accentColor')).toBe('#7c3aed');
+    expect(localStorage.getItem('appearanceMode')).toBe('chromium');
+
+    document.documentElement.style.removeProperty('--theme');
+    document.documentElement.style.removeProperty('--accent-color');
+    delete document.documentElement.dataset.appearance;
+
+    window.loadTheme();
+
+    expect(document.documentElement.style.getPropertyValue('--theme')).toBe('#7c3aed');
+    expect(document.documentElement.style.getPropertyValue('--accent-color')).toBe('#7c3aed');
+    expect(document.documentElement.dataset.appearance).toBe('chromium');
+});
+
+test('export generates filename metadata and updates backup runtime state', async () => {
+    await window.exportDataAsJSON();
+
+    expect(window.__lastBackupExportStatus).toBeTruthy();
+    expect(window.__lastBackupExportStatus.filename).toMatch(/^MoneyTracker_\d{4}-\d{2}-\d{2}_\d{2}-\d{2}\.json$/);
+    expect(document.getElementById('autoBackupRuntimeState').textContent.length).toBeGreaterThan(0);
 });
