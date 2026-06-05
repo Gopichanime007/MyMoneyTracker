@@ -240,7 +240,7 @@ h4 {
 
 .dash-card {
   border-radius: var(--radius-lg);
-  padding: 10px;
+  padding: 9px;
   box-shadow: var(--shadow-sm);
   filter: var(--dash-finish-filter);
 }
@@ -673,7 +673,7 @@ button:active {
   display: none;
   justify-content: center;
   align-items: center;
-  padding: 20px;
+  padding: max(12px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-right)) max(12px, env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left));
   z-index: 9999;
   background: var(--overlay);
   backdrop-filter: blur(4px);
@@ -681,9 +681,12 @@ button:active {
 
 .modal-content,
 .modal-box {
-  width: min(92vw, 440px);
-  max-height: 88vh;
+  width: 100%;
+  max-width: 440px;
+  max-height: calc(100vh - max(24px, env(safe-area-inset-top) + env(safe-area-inset-bottom) + 24px));
   overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
   border-radius: var(--radius-xl);
   background: var(--surface);
   border: 1px solid color-mix(in srgb, var(--border), var(--theme) 10%);
@@ -740,12 +743,13 @@ button:active {
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 12px;
+  padding: max(10px, env(safe-area-inset-top)) max(10px, env(safe-area-inset-right)) max(10px, env(safe-area-inset-bottom)) max(10px, env(safe-area-inset-left));
 }
 
 .attachment-viewer-panel {
-  width: min(96vw, 980px);
-  height: min(94vh, 820px);
+  width: 100%;
+  max-width: 980px;
+  height: min(820px, calc(100vh - max(20px, env(safe-area-inset-top) + env(safe-area-inset-bottom) + 20px)));
   border-radius: var(--radius-lg);
   border: 1px solid var(--border);
   background: var(--surface);
@@ -985,6 +989,21 @@ button:active {
     padding: 12px;
   }
 
+  .modal-content,
+  .modal-box {
+    border-radius: var(--radius-lg);
+    padding: 12px;
+  }
+
+  .modal-actions {
+    gap: 8px;
+  }
+
+  .modal-actions button {
+    min-width: 0;
+    flex: 1 1 calc(50% - 4px);
+  }
+
   .budget-insights {
     grid-template-columns: 1fr;
   }
@@ -1011,23 +1030,81 @@ button:active {
 
 }
 
-@media (min-width: 390px) {
+@media (max-width: 412px) {
+  .app {
+    padding: 8px;
+  }
+
+  .card {
+    padding: 10px;
+  }
+
   .dashboard-grid {
-    gap: 10px;
+    gap: 6px;
   }
 
   .dash-card {
-    padding: 12px;
+    padding: 8px;
   }
-}
 
-@media (min-width: 412px) {
-  .dashboard-grid {
-    gap: 12px;
+  .dash-card span {
+    font-size: 10px;
   }
 
   .dash-card h2 {
-    font-size: 1rem;
+    font-size: .88rem;
+  }
+
+  .refund-type-card {
+    margin-top: 10px;
+    padding: 10px;
+  }
+}
+
+@media (max-width: 390px) {
+  .dashboard-grid {
+    gap: 5px;
+  }
+
+  .dash-card {
+    padding: 7px;
+  }
+
+  .dash-card h2 {
+    font-size: .84rem;
+  }
+}
+
+@media (max-width: 360px) {
+  .app {
+    padding: 6px;
+  }
+
+  .nav button {
+    min-height: 46px;
+    padding: 8px 6px;
+    font-size: 18px;
+  }
+
+  .dashboard-grid {
+    gap: 4px;
+  }
+
+  .dash-card {
+    padding: 6px;
+    border-radius: 12px;
+  }
+
+  .dash-card span {
+    font-size: 9px;
+  }
+
+  .dash-card h2 {
+    font-size: .8rem;
+  }
+
+  .modal-actions button {
+    flex-basis: 100%;
   }
 }
 

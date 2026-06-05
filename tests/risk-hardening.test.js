@@ -508,6 +508,33 @@ test('import accepts content containing null-byte separators from non-standard r
     expect(window.__lastImportStage.stage).toBe('completed');
 });
 
+test('import decode fallback selects utf-16 candidate when utf-8 decode is not parseable', () => {
+    const payload = {
+        expenses: [],
+        savings: [],
+        budgets: [],
+        budgetPeriods: [],
+        settings: { theme: '#4caf50', currencyCode: 'INR' },
+        categories: [],
+        persons: [],
+        meta: { version: 'v2' }
+    };
+
+    const json = JSON.stringify(payload);
+    const bytes = new Uint8Array(json.length * 2);
+    for (let i = 0; i < json.length; i += 1) {
+        const code = json.charCodeAt(i);
+        bytes[i * 2] = code & 0xff;
+        bytes[i * 2 + 1] = code >> 8;
+    }
+
+    const decoded = window.chooseImportDecodedText(bytes.buffer);
+    expect(decoded.selected).toBeTruthy();
+    expect(decoded.selected.parseable).toBe(true);
+    expect(JSON.parse(decoded.selected.normalizedText).meta.version).toBe('v2');
+    expect(decoded.attempts.some(a => a.parseable)).toBe(true);
+});
+
 test('import rejects unsupported version and recovers invalid root collections via normalization', () => {
     const payload = {
         meta: { version: 'v9' },
