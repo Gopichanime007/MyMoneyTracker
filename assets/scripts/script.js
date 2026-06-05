@@ -2229,7 +2229,7 @@ function showDate() {
     if (el) el.innerText = new Date().toLocaleString();
 }
 
-const APPEARANCE_MODES = ["metallic", "matte", "glossy", "chromium"];
+const APPEARANCE_MODES = ["metallic", "matte", "glossy", "chromium", "glass", "paper", "neon"];
 const ACCENT_PRESETS = {
     purple: "#7c3aed",
     blue: "#2196f3",
