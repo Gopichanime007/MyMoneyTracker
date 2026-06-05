@@ -11,6 +11,8 @@ function getOrders() {
 // =========================
 function renderOrders() {
   const orders = getOrders();
+  // guard: only run on orders page
+  if (!document.getElementById || !document.getElementById("ordersList")) return;
   const container = document.getElementById("ordersList");
 
   if (!orders.length) {
@@ -110,9 +112,8 @@ let deleteTargetId = null;
 // =========================
 function openDeleteModal(id) {
   deleteTargetId = id;
-
-  document.getElementById("deleteReason").value = "";
-  document.getElementById("deleteModal").classList.remove("hidden");
+  if (document.getElementById("deleteReason")) document.getElementById("deleteReason").value = "";
+  if (document.getElementById("deleteModal")) document.getElementById("deleteModal").classList.remove("hidden");
 }
 
 // =========================
@@ -120,7 +121,7 @@ function openDeleteModal(id) {
 // =========================
 function closeDeleteModal() {
   deleteTargetId = null;
-  document.getElementById("deleteModal").classList.add("hidden");
+  if (document.getElementById("deleteModal")) document.getElementById("deleteModal").classList.add("hidden");
 }
 
 // =========================
@@ -129,8 +130,10 @@ function closeDeleteModal() {
 function confirmDelete() {
 
   if (!deleteTargetId) return;
-
-  let reason = document.getElementById("deleteReason").value.trim();
+  let reason = "Order deleted";
+  if (document.getElementById("deleteReason") && document.getElementById("deleteReason").value) {
+    reason = document.getElementById("deleteReason").value.trim() || reason;
+  }
   if (!reason) reason = "Order deleted";
 
   let orders = JSON.parse(localStorage.getItem("orders")) || [];

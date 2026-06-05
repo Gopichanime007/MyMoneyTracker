@@ -1,0 +1,12 @@
+#!/usr/bin/env sh
+set -eu
+
+branch="$(git rev-parse --abbrev-ref HEAD)"
+
+if [ "$branch" = "main" ]; then
+  echo "ERROR: Direct commits to main are prohibited."
+  echo "Create/use a feature branch and open PR to development first."
+  exit 1
+fi
+
+exit 0

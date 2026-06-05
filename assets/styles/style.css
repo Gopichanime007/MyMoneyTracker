@@ -230,6 +230,90 @@ select:focus {
 }
 
 /* =========================
+   🧩 FORM SYSTEM
+========================= */
+
+.form-group {
+  display: grid;
+  gap: 8px;
+}
+
+.form-group label {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--muted);
+}
+
+.muted-note {
+  font-size: 12px;
+  color: var(--muted);
+  margin-top: 2px;
+  display: block;
+}
+
+.audit-modal-content {
+  max-width: 640px;
+  width: min(92vw, 640px);
+}
+
+.audit-details-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 8px;
+}
+
+.audit-details-grid > div {
+  background: #f7f8fa;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px;
+}
+
+.audit-details-grid small {
+  color: var(--muted);
+  display: block;
+  margin-bottom: 4px;
+}
+
+.audit-attachments {
+  margin-top: 12px;
+}
+
+.audit-attachment-card {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px;
+  background: #fff;
+}
+
+.audit-attachment-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.audit-attachment-actions .secondary {
+  margin-top: 0;
+  width: auto;
+  padding: 8px 12px;
+}
+
+@media (max-width: 640px) {
+  .audit-details-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .audit-attachment-actions {
+    flex-direction: column;
+  }
+
+  .audit-attachment-actions .secondary {
+    width: 100%;
+  }
+}
+
+/* =========================
    📜 HISTORY
 ========================= */
 

@@ -1,267 +1,5 @@
-/*
-====================================================================================================
-MONEY TRACKER CORE ENGINE
-MASTER ARCHITECTURE + ANDROID MIGRATION DOCUMENTATION
-====================================================================================================
-
-FILE NAME
-----------------------------------------------------------------------------------------------------
-script.js
-
-ROLE
-/* === COMMENTED OLD DOWNLOAD START ===
-function downloadPDF() {
-    const dataSource = (window.currentFilteredExpenses && window.currentFilteredExpenses.length) ? window.currentFilteredExpenses : (typeof getExpenses === 'function' ? getExpenses() : []);
-    if (typeof window.generatePdfReport === 'function') {
-        window.generatePdfReport({ data: dataSource });
-        return;
-    }
-
-    // Fallback to legacy simple export if new generator not available
-    const { jsPDF } = window.jspdf;
-    const doc = new jsPDF();
-    doc.text('Money Tracker (legacy) - No advanced PDF engine available', 10, 20);
-    doc.save('money-tracker-report.pdf');
-}
-----------------------------------------------------------------------------------------------------
-exportDataAsExcel()
-
-Purpose:
-----------------------------------------------------------------------------------------------------
-Exports:
-✔ Expenses
-✔ Budgets
-✔ Orders
-✔ Savings
-
-Current Library:
-----------------------------------------------------------------------------------------------------
-XLSX.js
-
-Android Equivalent:
-----------------------------------------------------------------------------------------------------
-Apache POI
-
-====================================================================================================
-FILTER ENGINE ARCHITECTURE
-====================================================================================================
-
-Core Functions:
-----------------------------------------------------------------------------------------------------
-handleFilter()
-applyDateFilter()
-applyPeriod()
-filterDataByType()
-
-Purpose:
-----------------------------------------------------------------------------------------------------
-Supports:
-✔ day
-✔ week
-✔ month
-✔ custom period
-
-====================================================================================================
-GRAPH DATA ARCHITECTURE
-====================================================================================================
-
-Graph Data Structure:
-----------------------------------------------------------------------------------------------------
-
-{
-    label,
-    exp,
-    inc,
-    budget
-}
-
-====================================================================================================
-SCREEN NAVIGATION ARCHITECTURE
-====================================================================================================
-
-Current:
-----------------------------------------------------------------------------------------------------
-showScreen(id)
-
-HTML Architecture:
-----------------------------------------------------------------------------------------------------
-Single Page Application Simulation
-
-Android Migration:
-----------------------------------------------------------------------------------------------------
-Fragments
-+
-Navigation Component
-
-====================================================================================================
-ANDROID FRAGMENT MAPPING
-====================================================================================================
-
-Dashboard Screen
-→ DashboardFragment
-
-Expense History
-→ ExpenseHistoryFragment
-
-Budget Screen
-→ BudgetFragment
-
-Budget Details
-→ BudgetDetailsFragment
-
-Analytics
-→ AnalyticsFragment
-
-Settings
-→ SettingsFragment
-
-====================================================================================================
-ANDROID MANAGER MAPPING
-====================================================================================================
-
-script.js Section
-----------------------------------------------------------------------------------------------------
-Currency Engine
-→ CurrencyManager
-
-Expense Engine
-→ ExpenseManager
-
-Budget Engine
-→ BudgetManager
-
-Dashboard Engine
-→ DashboardManager
-
-Analytics Engine
-→ AnalyticsManager
-
-Backup Engine
-→ BackupManager
-
-====================================================================================================
-ANDROID REPOSITORY MAPPING
-====================================================================================================
-
-HTML Storage
-----------------------------------------------------------------------------------------------------
-localStorage
-
-Android Equivalent:
-----------------------------------------------------------------------------------------------------
-ExpenseRepository
-BudgetRepository
-SavingsRepository
-SettingsRepository
-
-====================================================================================================
-ANDROID ADAPTER MAPPING
-====================================================================================================
-
-Dynamic HTML Rendering
-----------------------------------------------------------------------------------------------------
-→ RecyclerView Adapter
-
-Examples:
-----------------------------------------------------------------------------------------------------
-renderBudgetEntries()
-→ BudgetAdapter
-
-loadHistory()
-→ ExpenseHistoryAdapter
-
-====================================================================================================
-IMPORTANT ENGINEERING RULES
-====================================================================================================
-
-1.
-DO NOT place business logic inside Android Fragments.
-
-2.
-Move calculations into:
-Managers / Domain Layer
-
-3.
-Move storage into:
-Repositories
-
-4.
-Move rendering into:
-RecyclerView Adapters
-
-5.
-Use:
-Room Database
-
-instead of:
-SharedPreferences
-
-for transactions.
-
-6.
-All financial calculations must remain:
-PERIOD AWARE
-
-7.
-Currency conversion should happen:
-ONLY in presentation layer
-
-8.
-Store all values in:
-BASE CURRENCY
-
-9.
-Avoid direct UI manipulation in Android.
-
-10.
-UI should observe:
-LiveData / StateFlow
-
-====================================================================================================
-FUTURE SCALING CAPABILITIES
-====================================================================================================
-
-This architecture supports:
-----------------------------------------------------------------------------------------------------
-✔ Multi-period accounting
-✔ Financial forecasting
-✔ AI insights
-✔ Loan management
-✔ Subscription budgets
-✔ Smart analytics
-✔ Enterprise finance workflows
-✔ Offline-first architecture
-
-====================================================================================================
-AUTHOR NOTES
-====================================================================================================
-
-Core Architecture Designed By:
-----------------------------------------------------------------------------------------------------
-Gopichanime 🐉
-
-Purpose:
-----------------------------------------------------------------------------------------------------
-To maintain synchronized:
-✔ HTML architecture
-✔ Android architecture
-✔ Financial domain structure
-✔ Budget period system
-✔ Analytics workflows
-
-====================================================================================================
-END OF MONEY TRACKER CORE ENGINE DOCUMENTATION
-====================================================================================================
-*/
-// Budget Expense Module Start script.js
-const isSavingsPage = window.location.pathname.includes("savings");
+const isSavingsPage = (typeof window !== 'undefined' && window.location && typeof window.location.pathname === 'string' && window.location.pathname.includes("savings")) || false;
 let currentFilteredExpenses = [];
-let currentHistoryFilter = {
-
-    type: "all",
-
-    label: "All Entries"
-};
 // =========================
 // 💱 CURRENCY CORE SYSTEM
 // =========================
@@ -295,6 +33,7 @@ function getCurrencyCode() {
         let code = localStorage.getItem("currencyCode") || "INR";
         return code;
     } catch (err) {
+        console.warn('getCurrencyCode failed, defaulting to INR', err);
         return "INR";
     }
 }
@@ -303,6 +42,7 @@ function setCurrencyCode(code) {
     try {
         localStorage.setItem("currencyCode", code);
     } catch (err) {
+        console.warn('setCurrencyCode failed', err);
     }
 }
 // =========================
@@ -318,6 +58,7 @@ function convertFromBase(amount) {
 
         return result;
     } catch (err) {
+        console.warn('convertFromBase failed', err);
         return amount;
     }
 }
@@ -330,6 +71,7 @@ function convertToBase(amount) {
         let result = amount / rate;
         return result;
     } catch (err) {
+        console.warn('convertToBase failed', err);
         return amount;
     }
 }
@@ -350,6 +92,7 @@ function formatCurrency(amount) {
         return result;
 
     } catch (err) {
+        console.warn('formatCurrency failed', err);
         return amount;
     }
 }
@@ -369,6 +112,7 @@ function changeCurrency(code) {
 
 
     } catch (err) {
+        console.warn('changeCurrency failed', err);
     }
 }
 
@@ -377,47 +121,9 @@ function changeCurrency(code) {
 ========================= */
 
 function getExpenses() {
+
     try {
         let data = JSON.parse(localStorage.getItem("expenses")) || [];
-
-        // Migration / compatibility guards
-        data = data.map(e => {
-            // ensure object
-            e = e || {};
-
-            // preserve old data but ensure type exists
-            if (!e.type) {
-                e.type = (typeof e.amount === "number" && e.amount < 0) ? "expense" : "income";
-            }
-
-            // normalize type values to allowed set
-            if (!["expense", "income", "recovery", "loss"].includes(e.type)) {
-                // fallback mapping for legacy types
-                e.type = normalizeTransactionType(e.type) || (e.type ? String(e.type) : "expense");
-                if (!["expense", "income", "recovery", "loss"].includes(e.type)) {
-                    // last resort: derive from sign
-                    e.type = (typeof e.amount === "number" && e.amount < 0) ? "expense" : "income";
-                }
-            }
-
-            // ensure allocationTrail exists
-            if (!e.allocationTrail) e.allocationTrail = [];
-
-            // ensure sign consistency for stored amounts (legacy safety)
-            if (typeof e.amount === "number") {
-                if (e.type === "expense" || e.type === "loss") {
-                    e.amount = -Math.abs(e.amount);
-                } else {
-                    e.amount = Math.abs(e.amount);
-                }
-            } else {
-                // if missing amount, set 0
-                e.amount = 0;
-            }
-
-            return e;
-        });
-
         return data;
     } catch (err) {
         return [];
@@ -427,10 +133,31 @@ function calculateSpentForPeriod(start, end) {
 
     let expenses = JSON.parse(localStorage.getItem("expenses")) || [];
 
-    let startTime = new Date(start).getTime();
+    function parseRangeBoundary(value, isEnd) {
+        if (!value) return null;
+        let str = String(value);
+        let hasTime = str.includes("T") || /\d{2}:\d{2}/.test(str);
+
+        if (hasTime) {
+            return new Date(str).getTime();
+        }
+
+        let day = new Date(str);
+        if (Number.isNaN(day.getTime())) return null;
+        if (isEnd) {
+            day.setHours(23, 59, 59, 999);
+        } else {
+            day.setHours(0, 0, 0, 0);
+        }
+        return day.getTime();
+    }
+
+    let startTime = parseRangeBoundary(start, false);
     let endTime = end
-        ? new Date(end).getTime()
+        ? parseRangeBoundary(end, true)
         : new Date().getTime();
+
+    if (startTime == null || endTime == null) return 0;
 
     return expenses
         .filter(e => {
@@ -510,16 +237,137 @@ function getBudgetForPeriod(start, end) {
 function saveExpenses(data) {
 
     try {
-        localStorage.setItem("expenses", JSON.stringify(data));
+        let safe = Array.isArray(data) ? data : [];
+        let rebalanced = rebalanceExpenseLedger(safe, getBudgets());
+        localStorage.setItem("expenses", JSON.stringify(rebalanced));
     } catch (err) {
+        console.error('saveExpenses failed', err);
     }
+}
+
+function collectExpenseBudgetIds(entry) {
+    let ids = new Set();
+    if (!entry || typeof entry !== "object") return ids;
+
+    if (entry.budgetId) ids.add(String(entry.budgetId));
+    if (Array.isArray(entry.allocationTrail)) {
+        entry.allocationTrail.forEach(a => {
+            if (a && a.budgetId) ids.add(String(a.budgetId));
+        });
+    }
+    return ids;
+}
+
+function resolveExpenseWalletKey(entry, budgetById) {
+    if (!entry || typeof entry !== "object") return "global";
+
+    let directBudgetId = entry.budgetId ? String(entry.budgetId) : null;
+    let budgetRow = directBudgetId ? budgetById.get(directBudgetId) : null;
+
+    if (entry.periodKey) return `period:${String(entry.periodKey)}`;
+    if (budgetRow && budgetRow.periodKey) return `period:${String(budgetRow.periodKey)}`;
+
+    if (entry.monthKey) return `month:${String(entry.monthKey)}`;
+    if (budgetRow && budgetRow.monthKey) return `month:${String(budgetRow.monthKey)}`;
+
+    if (entry.date) {
+        let d = new Date(entry.date);
+        if (!Number.isNaN(d.getTime())) {
+            let monthKey = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+            return `month:${monthKey}`;
+        }
+    }
+
+    return "global";
+}
+
+function rebalanceExpenseLedger(expenses, budgetsInput) {
+    let list = Array.isArray(expenses) ? expenses : [];
+    let budgets = Array.isArray(budgetsInput) ? budgetsInput : getBudgets();
+
+    let budgetById = new Map(
+        budgets.map(b => [String((b && (b.budgetId || b.id)) || ""), b])
+    );
+
+    let compareTxn = (a, b) => {
+        let da = new Date((a && a.date) || 0).getTime();
+        let db = new Date((b && b.date) || 0).getTime();
+        if (da !== db) return da - db;
+        return String((a && a.id) || "").localeCompare(String((b && b.id) || ""));
+    };
+
+    let cloned = list.map(e => (e && typeof e === "object") ? Object.assign({}, e) : e);
+    let ordered = cloned.slice().sort(compareTxn);
+
+    let walletMeta = new Map();
+    ordered.forEach(e => {
+        if (!e || typeof e !== "object") return;
+        let key = resolveExpenseWalletKey(e, budgetById);
+        if (!walletMeta.has(key)) walletMeta.set(key, { budgetIds: new Set() });
+        let info = walletMeta.get(key);
+        collectExpenseBudgetIds(e).forEach(id => info.budgetIds.add(id));
+    });
+
+    let openingByWallet = {};
+    for (let [key, info] of walletMeta.entries()) {
+        let opening = 0;
+
+        if (key.startsWith("period:")) {
+            let period = key.slice("period:".length);
+            opening = budgets
+                .filter(b => b && String(b.periodKey || "") === period)
+                .reduce((sum, b) => sum + Number(b.totalAllocated || 0), 0);
+        } else if (key.startsWith("month:")) {
+            let month = key.slice("month:".length);
+            opening = budgets
+                .filter(b => {
+                    if (!b) return false;
+                    if (String(b.monthKey || "") === month) return true;
+                    let bid = String(b.budgetId || b.id || "");
+                    return info.budgetIds.has(bid);
+                })
+                .reduce((sum, b) => sum + Number(b.totalAllocated || 0), 0);
+        } else {
+            opening = budgets
+                .filter(b => {
+                    if (!b) return false;
+                    let bid = String(b.budgetId || b.id || "");
+                    return info.budgetIds.has(bid);
+                })
+                .reduce((sum, b) => sum + Number(b.totalAllocated || 0), 0);
+        }
+
+        openingByWallet[key] = opening;
+    }
+
+    let runningByWallet = Object.assign({}, openingByWallet);
+
+    ordered.forEach(e => {
+        if (!e || typeof e !== "object") return;
+        let key = resolveExpenseWalletKey(e, budgetById);
+        if (runningByWallet[key] == null) runningByWallet[key] = 0;
+
+        let before = Number(runningByWallet[key] || 0);
+        let delta = Number(e.amount || 0);
+        let after = before + delta;
+
+        e.BalanceBeforeTransaction = before;
+        e.BalanceAfterTransaction = after;
+
+        // Backward-compatible field used by some old UI paths.
+        e.runningBalance = after;
+
+        runningByWallet[key] = after;
+    });
+
+    return cloned;
 }
 
 function getBudgets() {
 
     try {
         let data = JSON.parse(localStorage.getItem("budgets")) || [];
-        return data;
+        return normalizeBudgetsSchema(data);
     } catch (err) {
         return [];
     }
@@ -527,9 +375,36 @@ function getBudgets() {
 function saveBudgets(data) {
 
     try {
-        localStorage.setItem("budgets", JSON.stringify(data));
+        localStorage.setItem("budgets", JSON.stringify(normalizeBudgetsSchema(data)));
     } catch (err) {
+        console.error('saveBudgets failed', err);
     }
+}
+
+// Backward-compatible budget schema normalization.
+// Some older backups use `amount` instead of `totalAllocated`.
+function normalizeBudgetsSchema(data) {
+    if (!Array.isArray(data)) return [];
+
+    return data.map(b => {
+        if (!b || typeof b !== 'object') return b;
+
+        let next = b;
+
+        if (next.totalAllocated == null && next.amount != null) {
+            next = Object.assign({}, next, {
+                totalAllocated: Number(next.amount) || 0
+            });
+        }
+
+        if (typeof next.totalAllocated !== 'number') {
+            next = Object.assign({}, next, {
+                totalAllocated: Number(next.totalAllocated) || 0
+            });
+        }
+
+        return next;
+    });
 }
 
 
@@ -537,41 +412,645 @@ function getSavings() {
     return JSON.parse(localStorage.getItem("savingsTransactions")) || [];
 }
 
-function saveSavings(data) {
-    localStorage.setItem("savingsTransactions", JSON.stringify(data));
+function resolveSavingsWalletKey(entry) {
+    if (!entry || typeof entry !== "object") return "global";
+    if (entry.periodKey) return `period:${String(entry.periodKey)}`;
+    if (entry.monthKey) return `month:${String(entry.monthKey)}`;
+    if (entry.date) {
+        let d = new Date(entry.date);
+        if (!Number.isNaN(d.getTime())) {
+            return `month:${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+        }
+    }
+    return "global";
 }
 
-function normalizeTransactionType(type) {
+function rebalanceSavingsLedger(entries) {
+    let list = Array.isArray(entries) ? entries : [];
 
-    switch ((type || "").toLowerCase()) {
+    let compareTxn = (a, b) => {
+        let da = new Date((a && a.date) || 0).getTime();
+        let db = new Date((b && b.date) || 0).getTime();
+        if (da !== db) return da - db;
+        return String((a && a.id) || "").localeCompare(String((b && b.id) || ""));
+    };
 
-        case "refund":
-        case "settlement":
-        case "deposit_return":
-            return "recovery";
+    let cloned = list.map(e => (e && typeof e === "object") ? Object.assign({}, e) : e);
+    let ordered = cloned.slice().sort(compareTxn);
+    let runningByWallet = {};
 
-        case "internal_transfer":
-        case "transfer_reversal":
-            return "transfer";
+    ordered.forEach(e => {
+        if (!e || typeof e !== "object") return;
+        let key = resolveSavingsWalletKey(e);
+        if (runningByWallet[key] == null) runningByWallet[key] = 0;
 
-        case "advance_payment":
-            return "expense";
+        let before = Number(runningByWallet[key] || 0);
+        let delta = Number(e.amount || 0);
+        let after = before + delta;
 
-        default:
-            return type;
+        e.BalanceBeforeTransaction = before;
+        e.BalanceAfterTransaction = after;
+        e.runningBalance = after;
+
+        runningByWallet[key] = after;
+    });
+
+    return cloned;
+}
+
+function saveSavings(data) {
+    try {
+        let safe = Array.isArray(data) ? data : [];
+        let rebalanced = rebalanceSavingsLedger(safe);
+        localStorage.setItem("savingsTransactions", JSON.stringify(rebalanced));
+    } catch (err) {
+        console.error('saveSavings failed', err);
     }
 }
 
-// Helper: identify parent split container rows (audit-only, should be excluded from calculations)
-function isParentSplitContainer(expense) {
-    return (
-        expense &&
-        expense.isSplit === true &&
-        Array.isArray(expense.allocationTrail) &&
-        expense.allocationTrail.length > 0 &&
-        !expense.splitId
-    );
+// Expose core storage helpers on `window` only if not already provided by another module.
+if (typeof window !== 'undefined') {
+    window.getExpenses = window.getExpenses || getExpenses;
+    window.saveExpenses = window.saveExpenses || saveExpenses;
+    window.getBudgets = window.getBudgets || getBudgets;
+    window.saveBudgets = window.saveBudgets || saveBudgets;
+    window.getSavings = window.getSavings || getSavings;
+    window.saveSavings = window.saveSavings || saveSavings;
+    window.getCategories = window.getCategories || (typeof getCategories === 'function' ? getCategories : undefined);
+    window.setCurrencyCode = window.setCurrencyCode || setCurrencyCode;
+    window.convertFromBase = window.convertFromBase || convertFromBase;
+    window.convertToBase = window.convertToBase || convertToBase;
+    window.calculateSpentForPeriod = window.calculateSpentForPeriod || calculateSpentForPeriod;
+    window.rebalanceExpenseLedger = window.rebalanceExpenseLedger || rebalanceExpenseLedger;
+    window.rebalanceSavingsLedger = window.rebalanceSavingsLedger || rebalanceSavingsLedger;
+    window.getExpenseResolutionSnapshot = window.getExpenseResolutionSnapshot || getExpenseResolutionSnapshot;
+    window.getNetSpentForBudget = window.getNetSpentForBudget || getNetSpentForBudget;
+    window.filterDataByType = window.filterDataByType || filterDataByType;
+    window.getActiveBudgetPeriod = window.getActiveBudgetPeriod || getActiveBudgetPeriod;
+    window.selectActiveBudgetPeriod = window.selectActiveBudgetPeriod || selectActiveBudgetPeriod;
+    window.getBudgetPeriodEffectiveEndDate = window.getBudgetPeriodEffectiveEndDate || getBudgetPeriodEffectiveEndDate;
+    window.normalizeBudgetPeriods = window.normalizeBudgetPeriods || normalizeBudgetPeriods;
+    window.calculateGraphAverageExpense = window.calculateGraphAverageExpense || calculateGraphAverageExpense;
+    window.calculateAverageSpendingByType = window.calculateAverageSpendingByType || calculateAverageSpendingByType;
+    window.loadGraph = window.loadGraph || loadGraph;
+    window.updateGraphSummary = window.updateGraphSummary || updateGraphSummary;
+    window.updateBudgetEfficiency = window.updateBudgetEfficiency || updateBudgetEfficiency;
+    window.computeBudgetEfficiencyMetrics = window.computeBudgetEfficiencyMetrics || computeBudgetEfficiencyMetrics;
+    window.setupAttachmentInputs = window.setupAttachmentInputs || setupAttachmentInputs;
+    window.storeAttachmentFromInput = window.storeAttachmentFromInput || storeAttachmentFromInput;
+    window.formatCurrency = window.formatCurrency || formatCurrency;
+    window.addExpense = window.addExpense || addExpense;
+    window.loadHistory = window.loadHistory || loadHistory;
+    window.loadDashboard = window.loadDashboard || loadDashboard;
+    window.resetForm = window.resetForm || resetForm;
+    window.showToast = window.showToast || showToast;
 }
+
+function getSavingsSafe() {
+    try {
+        if (typeof getSavings === "function") return getSavings();
+        return JSON.parse(localStorage.getItem("savingsTransactions")) || [];
+    } catch (err) {
+        return [];
+    }
+}
+
+function getUsedBudgetIdsFromExpense(entry) {
+    if (!entry) return [];
+    if (Array.isArray(entry.allocationTrail) && entry.allocationTrail.length) {
+        return entry.allocationTrail
+            .map(a => String(a && a.budgetId ? a.budgetId : ""))
+            .filter(Boolean);
+    }
+    return entry.budgetId ? [String(entry.budgetId)] : [];
+}
+
+function intersectsSet(values, setObj) {
+    return Array.isArray(values) && values.some(v => setObj.has(String(v)));
+}
+
+function summarizeDeleteImpact(plan) {
+    let parts = [];
+    if ((plan.childExpenses || []).length) parts.push(`${plan.childExpenses.length} linked transactions`);
+    if ((plan.childSavings || []).length) parts.push(`${plan.childSavings.length} linked savings records`);
+    if ((plan.childBudgets || []).length) parts.push(`${plan.childBudgets.length} linked budgets`);
+    if ((plan.attachments || []).length) parts.push(`${plan.attachments.length} attachments`);
+    return parts.length ? parts.join(", ") : "no dependent records";
+}
+
+function validateTransactionDependencies(scope, ids, cascade) {
+    let idSet = new Set((Array.isArray(ids) ? ids : [ids]).map(v => String(v)));
+    let expenses = getExpenses();
+    let savings = getSavingsSafe();
+    let budgets = getBudgets();
+
+    let expenseDelete = new Set();
+    let savingsDelete = new Set();
+    let budgetDelete = new Set();
+
+    if (scope === "expense") {
+        idSet.forEach(id => expenseDelete.add(id));
+
+        let changed = true;
+        while (changed) {
+            changed = false;
+            expenses.forEach(e => {
+                let eid = String(e.id);
+                if (expenseDelete.has(eid)) return;
+                if (e.linkedTransactionId && expenseDelete.has(String(e.linkedTransactionId))) {
+                    if (cascade) {
+                        expenseDelete.add(eid);
+                        changed = true;
+                    }
+                }
+            });
+        }
+
+        savings.forEach(s => {
+            if (s.linkedTransactionId && expenseDelete.has(String(s.linkedTransactionId))) {
+                if (cascade) savingsDelete.add(String(s.id));
+            }
+        });
+    }
+
+    if (scope === "savings") {
+        idSet.forEach(id => savingsDelete.add(id));
+
+        let changed = true;
+        while (changed) {
+            changed = false;
+
+            savings.forEach(s => {
+                let sid = String(s.id);
+                if (savingsDelete.has(sid)) return;
+
+                let linked = s.linkedTransactionId && savingsDelete.has(String(s.linkedTransactionId));
+                let sourced = s.sourceId && savingsDelete.has(String(s.sourceId));
+
+                if (linked || sourced) {
+                    if (cascade) {
+                        savingsDelete.add(sid);
+                        changed = true;
+                    }
+                }
+            });
+
+            let deletedSourceIds = new Set([...savingsDelete]);
+
+            budgets.forEach(b => {
+                if (!b || !b.sourceId) return;
+                let bid = String(b.budgetId || b.id || "");
+                if (!bid || budgetDelete.has(bid)) return;
+                if (deletedSourceIds.has(String(b.sourceId)) && cascade) {
+                    budgetDelete.add(bid);
+                    changed = true;
+                }
+            });
+
+            expenses.forEach(e => {
+                let eid = String(e.id);
+                if (expenseDelete.has(eid)) return;
+
+                let lineageHit =
+                    (e.linkedSourceSavingsId && savingsDelete.has(String(e.linkedSourceSavingsId))) ||
+                    intersectsSet(e.linkedSourceSavingsIds, savingsDelete) ||
+                    (Array.isArray(e.transferBackTrail) && e.transferBackTrail.some(t => savingsDelete.has(String(t.sourceId))));
+
+                let budgetHit = getUsedBudgetIdsFromExpense(e).some(bid => budgetDelete.has(String(bid)));
+
+                let linkedHit = e.linkedTransactionId && expenseDelete.has(String(e.linkedTransactionId));
+
+                if ((lineageHit || budgetHit || linkedHit) && cascade) {
+                    expenseDelete.add(eid);
+                    changed = true;
+                }
+            });
+        }
+    }
+
+    let childExpenses = expenses
+        .filter(e => {
+            let eid = String(e.id);
+            if (expenseDelete.has(eid) && idSet.has(eid)) return false;
+            if (scope === "expense") {
+                return e.linkedTransactionId && idSet.has(String(e.linkedTransactionId));
+            }
+            if (scope === "savings") {
+                return (
+                    (e.linkedSourceSavingsId && idSet.has(String(e.linkedSourceSavingsId))) ||
+                    intersectsSet(e.linkedSourceSavingsIds, idSet) ||
+                    (Array.isArray(e.transferBackTrail) && e.transferBackTrail.some(t => idSet.has(String(t.sourceId))))
+                );
+            }
+            return false;
+        })
+        .map(e => String(e.id));
+
+    let childSavings = savings
+        .filter(s => {
+            let sid = String(s.id);
+            if (savingsDelete.has(sid) && idSet.has(sid)) return false;
+            if (scope === "expense") {
+                return s.linkedTransactionId && idSet.has(String(s.linkedTransactionId));
+            }
+            if (scope === "savings") {
+                return (
+                    (s.linkedTransactionId && idSet.has(String(s.linkedTransactionId))) ||
+                    (s.sourceId && idSet.has(String(s.sourceId)))
+                );
+            }
+            return false;
+        })
+        .map(s => String(s.id));
+
+    let childBudgets = budgets
+        .filter(b => scope === "savings" && b && b.sourceId && idSet.has(String(b.sourceId)))
+        .map(b => String(b.budgetId || b.id || ""))
+        .filter(Boolean);
+
+    let attachments = [];
+    expenses.forEach(e => { if (expenseDelete.has(String(e.id)) && e.attachmentId) attachments.push(String(e.attachmentId)); });
+    savings.forEach(s => { if (savingsDelete.has(String(s.id)) && s.attachmentId) attachments.push(String(s.attachmentId)); });
+
+    let blocked = !cascade && (childExpenses.length > 0 || childSavings.length > 0 || childBudgets.length > 0);
+
+    return {
+        blocked,
+        scope,
+        rootIds: [...idSet],
+        childExpenses,
+        childSavings,
+        childBudgets,
+        attachments,
+        expensesToDelete: [...expenseDelete],
+        savingsToDelete: [...savingsDelete],
+        budgetsToDelete: [...budgetDelete],
+        summary: summarizeDeleteImpact({ childExpenses, childSavings, childBudgets, attachments })
+    };
+}
+
+async function executeDeletePlan(plan) {
+    if (!plan) return;
+
+    let expenseIds = new Set((plan.expensesToDelete || []).map(String));
+    let savingsIds = new Set((plan.savingsToDelete || []).map(String));
+    let budgetIds = new Set((plan.budgetsToDelete || []).map(String));
+
+    let expenses = getExpenses();
+    let savings = getSavingsSafe();
+    let budgets = getBudgets();
+
+    let removedSavings = savings.filter(s => savingsIds.has(String(s.id)));
+
+    if (expenseIds.size) {
+        expenses = expenses.filter(e => !expenseIds.has(String(e.id)));
+    }
+    if (savingsIds.size) {
+        savings = savings.filter(s => !savingsIds.has(String(s.id)));
+    }
+    if (budgetIds.size) {
+        budgets = budgets.filter(b => !budgetIds.has(String(b.budgetId || b.id || "")));
+    }
+
+    if (!budgetIds.size && removedSavings.length && typeof adjustBudgetAfterDelete === "function") {
+        removedSavings.forEach(entry => {
+            if (entry && entry.type === "budget_allocation") {
+                try { adjustBudgetAfterDelete(entry); } catch (e) { }
+            }
+        });
+    }
+
+    saveExpenses(expenses);
+    if (typeof saveSavings === "function") {
+        saveSavings(savings);
+    } else {
+        localStorage.setItem("savingsTransactions", JSON.stringify(savings));
+    }
+    saveBudgets(budgets);
+
+    let at = window.reMoAttachments || window.reMoAttachmentsIndexed;
+    if (at && at.remove) {
+        for (let aid of (plan.attachments || [])) {
+            try { await at.remove(aid); } catch (e) { }
+        }
+    }
+}
+
+function validateLookupDeletion(type, value) {
+    let expenses = getExpenses();
+    let savings = getSavingsSafe();
+    let budgets = getBudgets();
+    let needle = String(value || "").trim();
+    if (!needle) return { blocked: false, summary: "" };
+
+    if (type === "category") {
+        let expenseHits = expenses.filter(e => String(e.category || "") === needle).length;
+        let savingsHits = savings.filter(s => String(s.entity || "") === needle).length;
+        let budgetHits = budgets.filter(b => String(b.entity || "") === needle).length;
+        let total = expenseHits + savingsHits + budgetHits;
+        return {
+            blocked: total > 0,
+            summary: `${total} records use this category (${expenseHits} expenses, ${savingsHits} savings, ${budgetHits} budgets).`
+        };
+    }
+
+    if (type === "person") {
+        let savingsHits = savings.filter(s => String(s.person || "") === needle).length;
+        let total = savingsHits;
+        return {
+            blocked: total > 0,
+            summary: `${total} records use this person (${savingsHits} savings transfers).`
+        };
+    }
+
+    return { blocked: false, summary: "" };
+}
+
+function validateBudgetPeriodDeletion(periodId) {
+    let bp = JSON.parse(localStorage.getItem("bp")) || [];
+    let item = bp.find(x => String(x.id) === String(periodId));
+    if (!item) return { blocked: false, summary: "" };
+
+    let budgets = getBudgets();
+    let expenses = getExpenses();
+    let savings = getSavingsSafe();
+
+    let start = String(item.start || "");
+    let explicitKey = `${item.start}_to_${item.end}`;
+
+    let budgetHits = budgets.filter(b => {
+        let key = String(b.periodKey || "");
+        return key === explicitKey || key.startsWith(`${start}_to_`);
+    }).length;
+
+    let expenseHits = expenses.filter(e => {
+        let key = String(e.periodKey || "");
+        return key && key.startsWith(`${start}_to_`);
+    }).length;
+
+    let savingsHits = savings.filter(s => {
+        let key = String(s.periodKey || "");
+        return key && key.startsWith(`${start}_to_`);
+    }).length;
+
+    let total = budgetHits + expenseHits + savingsHits;
+    return {
+        blocked: total > 0,
+        summary: `${total} records belong to this period (${budgetHits} budgets, ${expenseHits} expenses, ${savingsHits} savings).`
+    };
+}
+
+function parsePeriodKey(periodKey) {
+    let key = String(periodKey || "");
+    let parts = key.split("_to_");
+    if (parts.length !== 2) return null;
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(parts[0]) || !/^\d{4}-\d{2}-\d{2}$/.test(parts[1])) return null;
+    return { start: parts[0], end: parts[1] };
+}
+
+function ensureBudgetPeriodExists(periods, periodKey) {
+    let parsed = parsePeriodKey(periodKey);
+    if (!parsed) return;
+
+    let exists = periods.some(p => String(p.start) === parsed.start && String(p.end) === parsed.end);
+    if (exists) return;
+
+    periods.push({
+        id: Date.now() + Math.floor(Math.random() * 1000),
+        start: parsed.start,
+        end: parsed.end,
+        status: "closed",
+        extraDays: 0,
+        autoRecovered: true
+    });
+}
+
+function repairDataIntegrity() {
+    let expenses = getExpenses();
+    let savings = getSavingsSafe();
+    let budgets = getBudgets();
+    let periods = JSON.parse(localStorage.getItem("bp")) || [];
+
+    let report = {
+        createdSources: 0,
+        createdBudgets: 0,
+        createdPeriods: 0,
+        relinkedSavingsBudgetAllocations: 0,
+        relinkedExpenseParents: 0,
+        relinkedSavingsParents: 0,
+        normalizedExpensePeriodKeys: 0,
+        normalizedExpenseMonthKeys: 0,
+        normalizedExpenseBudgetLinks: 0,
+        removedOrphanExpenses: 0,
+        removedOrphanSavings: 0
+    };
+
+    let savingsById = new Map(savings.map(s => [String(s.id), s]));
+    let budgetById = new Map(budgets.map(b => [String(b.budgetId || b.id), b]));
+    let expenseById = new Map(expenses.map(e => [String(e.id), e]));
+
+    function createPlaceholderSource(sourceId) {
+        if (!sourceId || savingsById.has(String(sourceId))) return;
+        let now = new Date().toISOString();
+        let entry = {
+            id: String(sourceId),
+            type: "income",
+            amount: 0,
+            sourceId: null,
+            entity: "Recovered Source",
+            paymentType: "Unknown",
+            person: null,
+            note: `Auto recovered source ${sourceId}`,
+            date: now,
+            monthKey: now.slice(0, 7),
+            periodKey: null,
+            createdAt: now,
+            updatedAt: now,
+            attachmentId: null,
+            autoRecovered: true
+        };
+        savings.push(entry);
+        savingsById.set(String(entry.id), entry);
+        report.createdSources += 1;
+    }
+
+    function createPlaceholderBudget(budgetId, periodKey, sourceId) {
+        if (!budgetId || budgetById.has(String(budgetId))) return;
+        let now = new Date().toISOString();
+        let b = {
+            id: Date.now() + Math.floor(Math.random() * 1000),
+            type: "budget",
+            budgetId: String(budgetId),
+            sourceId: sourceId ? String(sourceId) : "recovered_source",
+            totalAllocated: 0,
+            entity: "Recovered Budget",
+            note: "Auto recovered budget link",
+            date: now,
+            periodKey: periodKey || null,
+            monthKey: periodKey ? null : now.slice(0, 7),
+            createdAt: now,
+            updatedAt: now,
+            autoRecovered: true
+        };
+        budgets.push(b);
+        budgetById.set(String(b.budgetId), b);
+        report.createdBudgets += 1;
+    }
+
+    // Ensure periods for budget/savings keys.
+    budgets.forEach(b => {
+        if (b && b.periodKey) {
+            let before = periods.length;
+            ensureBudgetPeriodExists(periods, b.periodKey);
+            if (periods.length > before) report.createdPeriods += 1;
+        }
+    });
+    savings.forEach(s => {
+        if (s && s.periodKey) {
+            let before = periods.length;
+            ensureBudgetPeriodExists(periods, s.periodKey);
+            if (periods.length > before) report.createdPeriods += 1;
+        }
+    });
+
+    // Savings source links.
+    savings.forEach(s => {
+        if (s && s.sourceId && !savingsById.has(String(s.sourceId))) {
+            createPlaceholderSource(String(s.sourceId));
+        }
+    });
+
+    // Budget source links.
+    budgets.forEach(b => {
+        if (b && b.sourceId && !savingsById.has(String(b.sourceId))) {
+            createPlaceholderSource(String(b.sourceId));
+        }
+    });
+
+    // Expense budget links (including allocation trail).
+    expenses.forEach(e => {
+        let periodKey = e.periodKey || null;
+        if (e.budgetId && !budgetById.has(String(e.budgetId))) {
+            createPlaceholderBudget(String(e.budgetId), periodKey, null);
+        }
+
+        if (Array.isArray(e.allocationTrail)) {
+            e.allocationTrail.forEach(a => {
+                if (a && a.budgetId && !budgetById.has(String(a.budgetId))) {
+                    createPlaceholderBudget(String(a.budgetId), periodKey, null);
+                }
+            });
+        }
+    });
+
+    // Normalize missing expense period/month keys and align dependent budget links.
+    expenses.forEach(e => {
+        if (!e || typeof e !== "object") return;
+
+        if (!e.monthKey && e.date) {
+            e.monthKey = String(e.date).slice(0, 7);
+            report.normalizedExpenseMonthKeys += 1;
+        }
+
+        if (!e.periodKey) {
+            let fromBudget = e.budgetId ? budgetById.get(String(e.budgetId)) : null;
+            if (fromBudget && fromBudget.periodKey) {
+                e.periodKey = fromBudget.periodKey;
+                report.normalizedExpensePeriodKeys += 1;
+            } else if (e.date && Array.isArray(periods) && periods.length) {
+                let ts = new Date(e.date).getTime();
+                let hit = periods.find(p => {
+                    if (!p || !p.start || !p.end) return false;
+                    let startTs = new Date(`${p.start}T00:00:00`).getTime();
+                    let endTs = new Date(`${p.end}T23:59:59`).getTime();
+                    return Number.isFinite(ts) && ts >= startTs && ts <= endTs;
+                });
+                if (hit) {
+                    e.periodKey = `${hit.start}_to_${hit.end}`;
+                    report.normalizedExpensePeriodKeys += 1;
+                }
+            }
+        }
+
+        if (e.linkedTransactionId) {
+            let parent = expenseById.get(String(e.linkedTransactionId));
+            if (parent && parent.budgetId && e.budgetId !== parent.budgetId) {
+                e.budgetId = parent.budgetId;
+                report.normalizedExpenseBudgetLinks += 1;
+            }
+        }
+    });
+
+    // Relink savings budget allocations with unresolved target budget ids.
+    savings.forEach(s => {
+        if (!s || s.type !== "budget_allocation") return;
+        let current = String(s.targetBudgetId || "");
+        if (current && current !== "__auto__" && budgetById.has(current)) return;
+
+        let candidate = budgets.find(b => {
+            if (!b) return false;
+            if (s.periodKey && b.periodKey !== s.periodKey) return false;
+            return String(b.sourceId || "") === String(s.sourceId || "");
+        });
+
+        if (!candidate) {
+            candidate = budgets.find(b => b && String(b.sourceId || "") === String(s.sourceId || ""));
+        }
+
+        if (candidate) {
+            s.targetBudgetId = candidate.budgetId || candidate.id;
+            s.budgetWalletId = candidate.budgetId || candidate.id;
+            report.relinkedSavingsBudgetAllocations += 1;
+        }
+    });
+
+    // Expense linkedTransaction integrity: remove unresolved dependents if no parent exists.
+    let validExpenseIds = new Set(expenses.map(e => String(e.id)));
+    expenses = expenses.filter(e => {
+        if (!e.linkedTransactionId) return true;
+        if (validExpenseIds.has(String(e.linkedTransactionId))) return true;
+        report.removedOrphanExpenses += 1;
+        return false;
+    });
+
+    // Savings linkedTransaction integrity.
+    let validSavingsIds = new Set(savings.map(s => String(s.id)));
+    savings = savings.filter(s => {
+        if (!s.linkedTransactionId) return true;
+        let id = String(s.linkedTransactionId);
+        if (validSavingsIds.has(id) || expenses.some(e => String(e.id) === id)) return true;
+        report.removedOrphanSavings += 1;
+        return false;
+    });
+
+    saveExpenses(expenses);
+    if (typeof saveSavings === "function") saveSavings(savings); else localStorage.setItem("savingsTransactions", JSON.stringify(savings));
+    saveBudgets(budgets);
+    localStorage.setItem("bp", JSON.stringify(periods));
+
+    return report;
+}
+
+function runIntegrityRepairSilently() {
+    try {
+        return repairDataIntegrity();
+    } catch (err) {
+        console.warn("repairDataIntegrity failed", err);
+        return null;
+    }
+}
+
+if (typeof window !== "undefined") {
+    window.validateDependencies = function validateDependencies(transactionId, scope = "expense", mode = "safe") {
+        return validateTransactionDependencies(scope, [transactionId], mode === "cascade");
+    };
+    window.validateTransactionDependencies = validateTransactionDependencies;
+    window.executeDeletePlan = executeDeletePlan;
+    window.validateLookupDeletion = validateLookupDeletion;
+    window.validateBudgetPeriodDeletion = validateBudgetPeriodDeletion;
+    window.repairDataIntegrity = repairDataIntegrity;
+}
+
 
 /* =========================
    🧠 CORE LOGIC
@@ -585,16 +1064,9 @@ function addExpense(obj) {
 
         let expenses = getExpenses();
 
-        // Determine type (prefer explicit, else fallback to migration by sign)
-        let type = normalizeTransactionType(obj.type || null) || null;
-        if (!type) {
-            type = (typeof obj.amount === "number" && obj.amount < 0) ? "expense" : "income";
-        }
-
-        // enforce allowed types
-        if (!["expense", "income", "recovery", "loss"].includes(type)) {
-            type = "expense";
-        }
+        let type =
+            obj.type ||
+            (obj.amount < 0 ? "expense" : "income");
 
         let category =
             obj.category || "Others";
@@ -602,17 +1074,8 @@ function addExpense(obj) {
         // =========================
         // 💱 BASE CONVERSION
         // =========================
-        // Accept obj.amount as absolute value; storage sign is derived from `type`
-        let inputAmount = typeof obj.amount === "number" ? Math.abs(obj.amount) : 0;
-
-        let baseAmount = convertToBase(inputAmount);
-
-        // adjust sign for storage: expenses/loss are negative, income/recovery positive
-        if (type === "expense" || type === "loss") {
-            baseAmount = -Math.abs(baseAmount);
-        } else {
-            baseAmount = Math.abs(baseAmount);
-        }
+        let baseAmount =
+            convertToBase(obj.amount);
 
         // =========================
         // 📅 SAFE DATE
@@ -679,6 +1142,9 @@ function addExpense(obj) {
             splitIndex: obj.splitIndex || null,
             isSplit: obj.isSplit || false,
             linkedTransactionId: obj.linkedTransactionId || null,
+            resolutionType: obj.resolutionType || null,
+            resolvedAmount: Number(obj.resolvedAmount || 0),
+            lossAmount: Number(obj.lossAmount || 0),
 
             // deep-clone allocationTrail if provided; otherwise, if budgetId provided for expense/loss,
             // create a single allocation entry for backward compatibility
@@ -687,6 +1153,8 @@ function addExpense(obj) {
                 : ((obj.budgetId && (type === "expense" || type === "loss"))
                     ? [{ budgetId: obj.budgetId, amount: Math.abs(baseAmount) }]
                     : [])
+            ,
+            attachmentId: obj.attachmentId || null
         };
 
         expenses.push(newEntry);
@@ -725,42 +1193,56 @@ function addExpense(obj) {
 
 // 📊 Budget Balance
 function getBudgetBalance(budgetId) {
-    let expensesAll = getExpenses();
-    // Exclude parent split container rows from all financial math
-    let expenses = expensesAll.filter(e => !isParentSplitContainer(e));
-
-    // Calculate spent for this budget using allocationTrail when present
-    let spent = 0;
-
-    expenses.forEach(e => {
-        // find contribution of this expense to the budget (from allocationTrail or legacy budgetId)
-        let contribution = 0;
-
-        if (Array.isArray(e.allocationTrail) && e.allocationTrail.length) {
-            let entry = e.allocationTrail.find(a => String(a.budgetId) === String(budgetId));
-            if (entry) contribution = Number(entry.amount) || 0;
-        } else if (String(e.budgetId) === String(budgetId)) {
-            contribution = Math.abs(Number(e.amount) || 0);
-        }
-
-        if (!contribution) return;
-
-        if (e.type === "expense" || e.type === "loss") {
-            spent += contribution;
-        } else if (e.type === "recovery") {
-            // recovery restores budget
-            spent -= contribution;
-        }
-        // income does not affect budget
-    });
-
+    // Use net-spent helper to correctly account for allocationTrail and recoveries
     let budgets = getBudgets();
 
     let allocated = budgets
         .filter(b => b.budgetId === budgetId)
         .reduce((sum, b) => sum + (b.totalAllocated || 0), 0);
 
+    let spent = getNetSpentForBudget(budgetId);
+
     return allocated - spent;
+}
+
+// Returns net spent amount for a budget (expenses minus recoveries),
+// correctly handling `allocationTrail` entries when present.
+function getNetSpentForBudget(budgetId, expensesList) {
+    let expenses = Array.isArray(expensesList) ? expensesList : getExpenses();
+
+    let net = 0;
+
+    for (let e of expenses) {
+
+        let contrib = 0;
+
+        if (Array.isArray(e.allocationTrail) && e.allocationTrail.length) {
+            for (let a of e.allocationTrail) {
+                if (String(a.budgetId) === String(budgetId)) {
+                    contrib += Math.abs(a.amount || 0);
+                }
+            }
+        } else if (String(e.budgetId) === String(budgetId)) {
+            contrib += Math.abs(e.amount || 0);
+        }
+
+        if (!contrib) continue;
+
+        // Inflows increase available budget (reduce net spent).
+        if (e.type === 'recovery' || e.type === 'refund' || e.type === 'income' || e.type === 'budget_income') {
+            net -= contrib;
+        }
+        // Budget outflows consume capacity (increase net spent).
+        else if (e.type === 'transfer_back' || e.amount < 0 || e.type === 'expense' || e.type === 'loss' || e.type === 'transfer') {
+            net += contrib;
+        }
+        // Fallback: positive unknown types are treated as inflow.
+        else if (Number(e.amount || 0) > 0) {
+            net -= contrib;
+        }
+    }
+
+    return net;
 }
 
 
@@ -826,58 +1308,62 @@ function loadHistory(list = getExpenses()) {
             container.innerHTML = `<p style="text-align:center; color:#888;">No data yet 📭</p>`;
             return;
         }
-        list = [...list].sort(
-            (a, b) =>
-                new Date(b.date) - new Date(a.date)
-        );
-        list.forEach((e, index) => {
+
+        let withRunning = rebalanceExpenseLedger(list, getBudgets()).slice().sort((a, b) => {
+            let da = new Date(a.date || 0).getTime();
+            let db = new Date(b.date || 0).getTime();
+            if (da !== db) return da - db;
+            return String(a.id || "").localeCompare(String(b.id || ""));
+        });
+        let chronological = withRunning;
+
+        withRunning.slice().reverse().forEach((e) => {
 
             let div = document.createElement("div");
             div.className = "expense-item";
 
-            // display logic should be type-driven (not amount sign)
             let category = e.category || e.type || "Entry";
             let purpose = e.purpose ? ` • ${e.purpose}` : "";
             let title = category + purpose;
+                        let amount = formatCurrency(Math.abs(Number(e.amount || 0)));
+            let color = e.amount < 0 ? "#ff5252" : "#4caf50";
+            let attachmentCount = e.attachmentId ? 1 : 0;
 
-            let isSpending = (e.type === "expense" || e.type === "loss");
-            let isRecovery = (e.type === "recovery");
-            let isIncome = (e.type === "income");
-
-            // always show absolute value and prefix sign for spending
-            let displayValue = formatCurrency(Math.abs(e.amount));
-            let amount = isSpending ? `- ${displayValue}` : displayValue;
-
-            let color = isSpending ? "#ff5252" : "#4caf50";
-
-            let meta = `${e.paymentType || e.entity || e.sourceName || "-"}`;
             let date = new Date(e.date).toLocaleString("en-IN");
+                        let refundStatusNote = "";
+
+            let isResolvableRoot = (e.type === "expense" || e.type === "transfer" || e.type === "loss") && Number(e.amount || 0) < 0;
+            if (isResolvableRoot) {
+                let rs = getExpenseResolutionSnapshot(e.id, chronological);
+                refundStatusNote = `<br><small style=\"color:#666;\">Refund Status: ${formatResolutionStatus(rs.status)}</small>`;
+            }
 
             div.innerHTML = `
-                <div class="expense-left">
+                <div style="display:flex;gap:8px;align-items:center;">
+                  <div>
                     <strong>${title}</strong><br>
-
-                    <small style="color:#888;">
-                        ${meta} • ${date}
-                    </small>
+                                        <small style="color:#888;">${date}</small><br>
+                                        <small style="color:#888;">Running Balance: ${formatCurrency(Number(e.BalanceAfterTransaction ?? e.runningBalance ?? 0))}</small>
+                                        ${refundStatusNote}
+                                        ${attachmentCount ? `<br><small style="color:#666;">📎 Attachment</small>` : ""}
+                  </div>
                 </div>
 
                 <div style="text-align:right;">
-                    <div style="color:${color}; font-weight:600;">
-                        ${amount}
-                    </div>
-
-                    <button class="delete-btn" onclick="deleteExpenseUI('${e.id}')" title="Delete">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-        <path d="M3 6h18"></path>
-        <path d="M8 6V4h8v2"></path>
-        <path d="M19 6l-1 14H6L5 6"></path>
-        <path d="M10 11v6"></path>
-        <path d="M14 11v6"></path>
-    </svg>
-</button>
+                    <div style="color:${color}; font-weight:600;">${amount}</div>
+                    <button class="delete-btn" onclick="event.stopPropagation(); deleteExpenseUI('${e.id}')" title="Delete"> 
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M3 6h18"></path>
+                        <path d="M8 6V4h8v2"></path>
+                        <path d="M19 6l-1 14H6L5 6"></path>
+                        <path d="M10 11v6"></path>
+                        <path d="M14 11v6"></path>
+                      </svg>
+                    </button>
                 </div>
             `;
+
+            div.addEventListener("click", () => openTransactionAuditDetails("expense", e));
 
             container.appendChild(div);
         });
@@ -888,42 +1374,45 @@ function loadHistory(list = getExpenses()) {
 }
 
 
-function deleteExpenseUI(id) {
+async function deleteExpenseUI(id) {
 
     try {
 
         let expenses = getExpenses();
-        // 🔥 CHECK LINKED RECOVERIES
-        let hasLinkedRecovery = expenses.some(e =>
-            e.linkedTransactionId === id
-        );
-
-        if (hasLinkedRecovery) {
-
-            showToast(
-                "Cannot delete: linked recovery exists"
-            );
-
-            return;
-        }
 
         let entry = getExpenses().find(e => String(e.id) === String(id));
 
         if (!entry) return;
 
-        // 🔥 DELETE SPLIT GROUP
-        if (entry.splitId) {
+        let rootIds = entry.splitId
+            ? expenses.filter(e => e.splitId === entry.splitId).map(e => String(e.id))
+            : [String(entry.id)];
 
-            expenses = expenses.filter(
-                e => e.splitId !== entry.splitId
+        let safePlan = validateTransactionDependencies("expense", rootIds, false);
+        if (safePlan.blocked) {
+            let proceed = window.confirm(
+                `Cannot delete because dependent records exist (${safePlan.summary}).\n\n` +
+                `Use cascade delete and remove all dependents as well?`
             );
+            if (!proceed) return;
 
-        } else {
+            let cascadePlan = validateTransactionDependencies("expense", rootIds, true);
+            await executeDeletePlan(cascadePlan);
 
-            expenses = expenses.filter(
-                e => e.id !== entry.id
-            );
+            loadHistory();
+            loadDashboard();
+            loadGraph();
+            updateBudgetEfficiency();
+            renderBudgetEntries();
+            loadBudgetOptions();
+            if (typeof loadSavings === "function") loadSavings();
+
+            showToast("Deleted with dependents");
+            return;
         }
+
+        let safeDeleteSet = new Set(rootIds.map(String));
+        expenses = expenses.filter(e => !safeDeleteSet.has(String(e.id)));
 
         saveExpenses(expenses);
 
@@ -947,7 +1436,269 @@ function deleteExpenseUI(id) {
    ➕ FORM HANDLER
 ========================= */
 
-function handleAddExpense() {
+function getLinkedPendingAmount(originalId, linkedTypes) {
+    let expenses = getExpenses();
+    let original = expenses.find(e => String(e.id) === String(originalId));
+    if (!original) return 0;
+
+    let originalAmount = Math.abs(Number(original.amount) || 0);
+    let settled = expenses
+        .filter(e => linkedTypes.includes(e.type) && String(e.linkedTransactionId) === String(originalId))
+        .reduce((sum, e) => sum + Math.abs(Number(e.amount) || 0), 0);
+
+    return Math.max(0, originalAmount - settled);
+}
+
+function getExpenseResolutionSnapshot(originalId, expensesList) {
+    let expenses = Array.isArray(expensesList) ? expensesList : getExpenses();
+    let original = expenses.find(e => String(e.id) === String(originalId));
+    if (!original) {
+        return {
+            exists: false,
+            original: null,
+            originalAmount: 0,
+            refunded: 0,
+            loss: 0,
+            remainingRefundable: 0,
+            status: "UNKNOWN",
+            closureType: null
+        };
+    }
+
+    let originalAmount = Math.abs(Number(original.amount || 0));
+    let linked = expenses.filter(e => String(e.linkedTransactionId) === String(originalId));
+
+    let refunded = linked
+        .filter(e => e.type === "refund")
+        .reduce((sum, e) => sum + Math.abs(Number(e.amount || 0)), 0);
+
+    let closure = linked
+        .filter(e => e.type === "expense_resolution")
+        .sort((a, b) => new Date(a.date || 0) - new Date(b.date || 0))
+        .pop() || null;
+
+    let unresolved = Math.max(0, originalAmount - refunded);
+    let closureType = closure ? (closure.resolutionType || null) : null;
+
+    let status = "OPEN";
+    if (closureType === "consumed") {
+        status = "CONSUMED";
+    } else if (closureType === "cancelled_with_charges") {
+        status = "CANCELLED_WITH_CHARGES";
+    } else if (refunded >= originalAmount && originalAmount > 0) {
+        status = "FULLY_REFUNDED";
+    } else if (refunded > 0 && refunded < originalAmount) {
+        status = "PARTIALLY_REFUNDED";
+    }
+
+    let remainingRefundable = (status === "CONSUMED" || status === "CANCELLED_WITH_CHARGES")
+        ? 0
+        : unresolved;
+
+    return {
+        exists: true,
+        original,
+        originalAmount,
+        refunded,
+        loss: unresolved,
+        remainingRefundable,
+        status,
+        closureType
+    };
+}
+
+function formatResolutionStatus(status) {
+    let map = {
+        FULLY_REFUNDED: "Fully Refunded",
+        PARTIALLY_REFUNDED: "Partially Refunded",
+        CONSUMED: "Consumed",
+        CANCELLED_WITH_CHARGES: "Cancelled With Charges",
+        OPEN: "Open"
+    };
+    return map[status] || status || "-";
+}
+
+function handleRefundResolutionChange() {
+    let type = document.getElementById("entryType")?.value;
+    if (type !== "refund") return;
+
+    let resolutionType = document.getElementById("refundResolutionType")?.value || "partial_refund";
+    let amountEl = document.getElementById("amount");
+    let select = document.getElementById("linkedTransactionSelect");
+
+    if (!amountEl || !select) return;
+
+    let selectedOption = select.options[select.selectedIndex];
+    let pending = Number(selectedOption?.dataset?.pending || 0);
+
+    amountEl.disabled = false;
+    amountEl.placeholder = "Amount";
+
+    if (resolutionType === "complete_refund") {
+        if (pending > 0) amountEl.value = String(pending);
+        amountEl.disabled = true;
+    } else if (resolutionType === "consumed") {
+        amountEl.value = "0";
+        amountEl.disabled = true;
+        amountEl.placeholder = "No wallet credit for consumed closure";
+    }
+
+    updateLinkedRemainingUI();
+}
+
+function buildTransferBackPlan(requestAmount) {
+    let amount = Math.abs(Number(requestAmount) || 0);
+    if (!amount) {
+        return { amount: 0, allocations: [], remaining: 0, totalAvailable: 0 };
+    }
+
+    let budgets = filterBudgetsByActivePeriod(getBudgets())
+        .filter(b => b && b.budgetId && b.sourceId);
+
+    let expenses = getExpenses();
+    let candidates = budgets.map(b => {
+        let available = Math.max(0, getNetSpentForBudget(b.budgetId, expenses));
+        return {
+            budgetId: b.budgetId,
+            sourceId: String(b.sourceId),
+            available
+        };
+    }).filter(c => c.available > 0);
+
+    candidates.sort((a, b) => b.available - a.available);
+
+    let allocations = [];
+    let remaining = amount;
+
+    for (let c of candidates) {
+        if (remaining <= 0) break;
+        let use = Math.min(c.available, remaining);
+        if (use <= 0) continue;
+        allocations.push({
+            budgetId: c.budgetId,
+            sourceId: c.sourceId,
+            amount: use
+        });
+        remaining -= use;
+    }
+
+    return {
+        amount,
+        allocations,
+        remaining,
+        totalAvailable: candidates.reduce((sum, c) => sum + c.available, 0)
+    };
+}
+
+function loadLinkedTransactionOptions(type) {
+    let select = document.getElementById("linkedTransactionSelect");
+    if (!select) return;
+
+    let expenses = getExpenses();
+    select.innerHTML = "<option value=''>Select transaction</option>";
+
+    let candidates = [];
+
+    if (type === "refund") {
+        candidates = expenses
+            .filter(e => (e.type === "expense" || e.type === "transfer" || e.type === "loss") && Number(e.amount || 0) < 0)
+            .filter(e => {
+                let s = getExpenseResolutionSnapshot(e.id, expenses);
+                return s.remainingRefundable > 0;
+            });
+    } else {
+        candidates = [];
+    }
+
+    candidates.forEach(e => {
+        let s = getExpenseResolutionSnapshot(e.id, expenses);
+        let option = document.createElement("option");
+        option.value = String(e.id);
+        option.dataset.pending = String(s.remainingRefundable);
+        option.dataset.originalAmount = String(s.originalAmount);
+        option.dataset.refunded = String(s.refunded);
+        option.dataset.loss = String(s.loss);
+        option.dataset.status = String(s.status || "OPEN");
+        option.textContent = `${e.purpose || e.category || e.type} • ${formatCurrency(s.remainingRefundable)} refundable`;
+        select.appendChild(option);
+    });
+
+    updateLinkedRemainingUI();
+}
+
+function updateLinkedRemainingUI() {
+    let text = document.getElementById("linkedRemainingText");
+    let select = document.getElementById("linkedTransactionSelect");
+    if (!text || !select) return;
+
+    let option = select.options[select.selectedIndex];
+    let pending = Number(option?.dataset?.pending || 0);
+    let originalAmount = Number(option?.dataset?.originalAmount || 0);
+    let refunded = Number(option?.dataset?.refunded || 0);
+    let loss = Number(option?.dataset?.loss || 0);
+    let status = option?.dataset?.status || "OPEN";
+
+    if (!option || !option.value) {
+        text.style.display = "none";
+        text.textContent = "";
+        return;
+    }
+
+    text.style.display = "block";
+    text.textContent = `Original: ${formatCurrency(originalAmount)} | Refunded: ${formatCurrency(refunded)} | Remaining Refundable: ${formatCurrency(pending)} | Loss: ${formatCurrency(loss)} | Status: ${formatResolutionStatus(status)}`;
+}
+
+function handleEntryTypeUIChange() {
+    let type = document.getElementById("entryType")?.value || "expense";
+    let amountEl = document.getElementById("amount");
+    if (amountEl) {
+        amountEl.disabled = false;
+        amountEl.placeholder = "Amount";
+    }
+
+    let categoryWrapper = document.getElementById("categoryWrapper");
+    let budgetWrapper = document.getElementById("budgetWrapper");
+    let linkedWrapper = document.getElementById("linkedTransactionWrapper");
+    let paymentWrapper = document.getElementById("paymentWrapper");
+
+    [categoryWrapper, budgetWrapper, linkedWrapper, paymentWrapper]
+        .filter(Boolean)
+        .forEach(el => { el.style.display = "none"; });
+
+    if (type === "expense") {
+        if (categoryWrapper) categoryWrapper.style.display = "block";
+        if (budgetWrapper) budgetWrapper.style.display = "block";
+        if (paymentWrapper) paymentWrapper.style.display = "block";
+        return;
+    }
+
+    if (type === "transfer") {
+        if (categoryWrapper) categoryWrapper.style.display = "block";
+        if (budgetWrapper) budgetWrapper.style.display = "block";
+        if (paymentWrapper) paymentWrapper.style.display = "block";
+        return;
+    }
+
+    if (type === "refund") {
+        if (linkedWrapper) linkedWrapper.style.display = "block";
+        if (paymentWrapper) paymentWrapper.style.display = "block";
+        loadLinkedTransactionOptions(type);
+        handleRefundResolutionChange();
+        return;
+    }
+
+    if (type === "transfer_back") {
+        return;
+    }
+
+    // income and other inflows
+    if (categoryWrapper) categoryWrapper.style.display = "block";
+    if (paymentWrapper) paymentWrapper.style.display = "block";
+}
+
+async function handleAddExpense() {
+    // guard: ensure form exists on current page
+    if (!document.getElementById || !document.getElementById("amount")) return;
 
     let amount = Number(document.getElementById("amount")?.value);
     let category = document.getElementById("category")?.value;
@@ -956,42 +1707,50 @@ function handleAddExpense() {
     let type = document.getElementById("entryType")?.value;
     let paymentType = document.getElementById("paymentType")?.value;
     let budgetId = document.getElementById("budgetSelect")?.value;
-    let linkedTransactionId = document.getElementById("linkedTransaction")?.value || null;
-
-    // 🔥 RECOVERY VALIDATION
-    if (
-        type === "recovery" &&
-        linkedTransactionId
-    ) {
-
-        let remaining =
-            getRemainingAmount(
-                linkedTransactionId
-            );
-
-        if (Math.abs(amount) > remaining) {
-
-            showToast(
-                `Only ${formatCurrency(remaining)} recoverable`
-            );
-
-            return;
-        }
-    }
+    let linkedTransactionId = document.getElementById("linkedTransactionSelect")?.value || null;
+    let refundResolutionType = document.getElementById("refundResolutionType")?.value || "partial_refund";
 
     // ✅ VALIDATION
-    if (!amount) {
+    if (!(type === "refund" && refundResolutionType === "consumed") && !amount) {
         showToast("Enter amount");
         return;
     }
 
-    if (type === "expense" && !budgetId) {
+    if ((type === "expense" || type === "transfer") && !budgetId) {
         showToast("Select budget");
         return;
     }
 
+    if (type === "refund") {
+        if (!linkedTransactionId) {
+            showToast("Select linked transaction");
+            return;
+        }
+
+        let snapshot = getExpenseResolutionSnapshot(linkedTransactionId);
+        let pending = Number(snapshot.remainingRefundable || 0);
+
+        if (refundResolutionType === "consumed") {
+            amount = 0;
+        } else if (refundResolutionType === "complete_refund") {
+            amount = pending;
+        } else {
+            amount = Math.abs(Number(amount) || 0);
+        }
+
+        if (refundResolutionType !== "consumed" && amount <= 0) {
+            showToast("Refund amount must be greater than zero");
+            return;
+        }
+
+        if (refundResolutionType !== "consumed" && amount > pending) {
+            showToast(`Only ${formatCurrency(pending)} available`);
+            return;
+        }
+    }
+
     // ✅ SIGN FIX
-    amount = type === "expense"
+    amount = (type === "expense" || type === "transfer")
         ? -Math.abs(amount)
         : Math.abs(amount);
 
@@ -1023,11 +1782,151 @@ function handleAddExpense() {
     // });
 
     if (type === "expense") {
-
-        handleExpenseSave(Math.abs(amount));
+        // handle possible attachment (store first to get attachmentId)
+        const attachmentId = await storeAttachmentFromInput('expenseAttachment');
+        await handleExpenseSave(Math.abs(amount), attachmentId);
         return;
-
     }
+    // non-expense flows (income, transfer, refund, transfer_back) may still have attachments
+    const nonExpAttachmentId = await storeAttachmentFromInput('expenseAttachment');
+
+    if (type === "transfer") {
+        category = "Transfer";
+        if (!purpose) purpose = "Transfer";
+    } else if (type === "refund") {
+        category = "Refund";
+    } else if (type === "transfer_back") {
+        category = "Transfer Back";
+    }
+
+    if (type === "transfer_back") {
+        let plan = buildTransferBackPlan(amount);
+        if (!plan.allocations.length || plan.remaining > 0) {
+            showToast(`Only ${formatCurrency(plan.totalAvailable)} can be transferred back now`);
+            return;
+        }
+
+        let transferBackTrail = plan.allocations.map(a => ({
+            budgetId: a.budgetId,
+            sourceId: a.sourceId,
+            amount: a.amount
+        }));
+
+        let uniqueSources = [...new Set(transferBackTrail.map(a => a.sourceId))];
+
+        let created = addExpense({
+            amount: -Math.abs(amount),
+            category,
+            purpose: purpose || "Transfer Back",
+            date: selectedDate.toISOString(),
+            type,
+            paymentType,
+            allocationTrail: transferBackTrail.map(a => ({ budgetId: a.budgetId, amount: a.amount })),
+            transferBackTrail,
+            linkedSourceSavingsId: uniqueSources.length === 1 ? uniqueSources[0] : null,
+            linkedSourceSavingsIds: uniqueSources,
+            attachmentId: nonExpAttachmentId
+        });
+
+        if (created && typeof getSavings === "function" && typeof saveSavings === "function") {
+            let savings = getSavings();
+            let grouped = {};
+
+            transferBackTrail.forEach(a => {
+                grouped[a.sourceId] = (grouped[a.sourceId] || 0) + Number(a.amount || 0);
+            });
+
+            Object.keys(grouped).forEach(sourceId => {
+                let val = Math.abs(Number(grouped[sourceId]) || 0);
+                if (!val) return;
+                savings.push({
+                    id: (typeof crypto !== "undefined" && crypto.randomUUID) ? crypto.randomUUID() : `sav_${Date.now()}_${Math.random()}`,
+                    type: "refund",
+                    amount: val,
+                    sourceId,
+                    entity: "Budget Wallet",
+                    paymentType: paymentType || "Cash",
+                    note: purpose || "Transfer Back",
+                    date: selectedDate.toISOString(),
+                    monthKey: selectedDate.toISOString().slice(0, 7),
+                    periodKey: (typeof getActivePeriodKey === "function") ? getActivePeriodKey() : null,
+                    createdAt: new Date().toISOString(),
+                    updatedAt: new Date().toISOString(),
+                    linkedTransactionId: created.id,
+                    linkedSourceSavingsId: sourceId,
+                    autoGenerated: true
+                });
+            });
+
+            saveSavings(savings);
+            if (typeof loadSavings === "function") loadSavings();
+            if (typeof loadSourceOptions === "function") loadSourceOptions();
+            if (typeof loadRefundCandidates === "function") loadRefundCandidates();
+        }
+
+        showToast("Added");
+        resetForm();
+        loadHistory();
+        loadBudgetOptions();
+        loadDashboard();
+        loadGraph();
+        updateProgressBar();
+        updateBudgetEfficiency();
+        renderBudgetEntries();
+        return;
+    }
+
+    if (type === "refund") {
+        let snapshot = getExpenseResolutionSnapshot(linkedTransactionId);
+        let pending = Number(snapshot.remainingRefundable || 0);
+        let refundAmount = Math.abs(Number(amount) || 0);
+
+        if (refundResolutionType !== "consumed") {
+            addExpense({
+                amount: refundAmount,
+                category: "Refund",
+                purpose: purpose || "Refund",
+                date: selectedDate.toISOString(),
+                type: "refund",
+                paymentType,
+                budgetId: snapshot.original ? snapshot.original.budgetId : budgetId,
+                linkedTransactionId,
+                entity: paymentType,
+                attachmentId: nonExpAttachmentId
+            });
+        }
+
+        if (refundResolutionType === "consumed" || refundResolutionType === "cancelled_with_charges") {
+            let unresolvedAfterRefund = Math.max(0, pending - refundAmount);
+            addExpense({
+                amount: 0,
+                category: "Expense Resolution",
+                purpose: purpose || (refundResolutionType === "consumed" ? "Marked consumed" : "Cancelled with charges"),
+                date: selectedDate.toISOString(),
+                type: "expense_resolution",
+                paymentType: paymentType || "N/A",
+                budgetId: snapshot.original ? snapshot.original.budgetId : budgetId,
+                linkedTransactionId,
+                entity: "System",
+                attachmentId: nonExpAttachmentId,
+                resolutionType: refundResolutionType,
+                resolvedAmount: refundAmount,
+                lossAmount: unresolvedAfterRefund
+            });
+        }
+
+        showToast("Added");
+        resetForm();
+        loadHistory();
+        loadBudgetOptions();
+        loadDashboard();
+        loadGraph();
+        updateProgressBar();
+        updateBudgetEfficiency();
+        renderBudgetEntries();
+        return;
+    }
+
     addExpense({
         amount,
         category,
@@ -1036,7 +1935,9 @@ function handleAddExpense() {
         type,
         paymentType,
         budgetId,
-        linkedTransactionId
+        linkedTransactionId,
+        entity: paymentType,
+        attachmentId: nonExpAttachmentId
     });
     // =========================
     // 🔄 UI UPDATES
@@ -1057,11 +1958,33 @@ function handleAddExpense() {
 
 // 🧹 Reset Form
 function resetForm() {
-    document.getElementById("amount").value = "";
-    document.getElementById("purpose").value = "";
+    if (document.getElementById("amount")) document.getElementById("amount").value = "";
+    if (document.getElementById("purpose")) document.getElementById("purpose").value = "";
+    if (document.getElementById("linkedTransactionSelect")) document.getElementById("linkedTransactionSelect").value = "";
+    if (document.getElementById("refundResolutionType")) document.getElementById("refundResolutionType").value = "partial_refund";
+    if (document.getElementById("amount")) document.getElementById("amount").disabled = false;
+    if (document.getElementById("linkedRemainingText")) {
+        document.getElementById("linkedRemainingText").style.display = "none";
+        document.getElementById("linkedRemainingText").textContent = "";
+    }
 
     let today = new Date().toISOString().split("T")[0];
-    document.getElementById("expenseDate").value = today;
+    if (document.getElementById("expenseDate")) document.getElementById("expenseDate").value = today;
+
+    let expInput = document.getElementById("expenseAttachment");
+    let expPreview = document.getElementById("expenseAttachmentPreview");
+    let expWrapper = document.getElementById("expenseAttachmentPreviewWrapper");
+    let expRemove = document.getElementById("expenseAttachmentRemove");
+    if (expInput) expInput.value = "";
+    if (expPreview && expPreview.dataset && expPreview.dataset._previewUrl) {
+        try { URL.revokeObjectURL(expPreview.dataset._previewUrl); } catch (e) { }
+        expPreview.dataset._previewUrl = "";
+    }
+    if (expPreview) expPreview.src = "";
+    if (expWrapper) expWrapper.style.display = "none";
+    if (expRemove) expRemove.style.display = "none";
+
+    handleEntryTypeUIChange();
 }
 
 function saveExpenseDirect(amount, budget) {
@@ -1076,6 +1999,21 @@ function saveExpenseDirect(amount, budget) {
 
 }
 
+function registerOfflineServiceWorker() {
+    if (!('serviceWorker' in navigator)) return;
+
+    // Service workers do not work on file:// URLs.
+    if (location.protocol === 'file:') return;
+
+    const swPath = location.pathname.includes('/pages/') ? '../service-worker.js' : 'service-worker.js';
+
+    navigator.serviceWorker.register(swPath).catch(err => {
+        console.warn('Service worker registration failed', err);
+    });
+}
+
+registerOfflineServiceWorker();
+
 // ✅ ALWAYS RUN FOOTER (independent)
 window.addEventListener("load", function () {
     if (isSavingsPage) {
@@ -1084,6 +2022,9 @@ window.addEventListener("load", function () {
     }
     try {
         injectGlobalFooter();
+
+        // Keep persisted data chains tied across upgrades/legacy backups.
+        runIntegrityRepairSilently();
 
         loadHistory();
         initCategories();
@@ -1094,44 +2035,12 @@ window.addEventListener("load", function () {
         loadBudgetScreen();
         loadGraph("day");
         updateBudgetEfficiency();
-        loadRecoverableTransactions();
-
-        // 🔥 RECOVERY UI TOGGLE
-        let entryType =
-            document.getElementById(
-                "entryType"
-            );
-
-        if (entryType) {
-
-            entryType.addEventListener(
-                "change",
-                function () {
-
-                    let type = this.value;
-
-                    let wrapper =
-                        document.getElementById(
-                            "linkedTransactionWrapper"
-                        );
-
-                    let isRecovery =
-                        type === "recovery";
-
-                    if (wrapper) {
-
-                        wrapper.style.display =
-                            isRecovery
-                                ? "block"
-                                : "none";
-                    }
-                }
-            );
-        }
 
         let today = new Date().toISOString().split("T")[0];
         let dateInput = document.getElementById("expenseDate");
         if (dateInput) dateInput.value = today;
+
+        handleEntryTypeUIChange();
 
         renderCategoryList();
         setDefaultDate();
@@ -1139,11 +2048,12 @@ window.addEventListener("load", function () {
         renderBudgetEntries();
         renderCategoryBreakdown();
         startHeadline();
+        updateNotificationButtonState();
 
     } catch (e) {
     }
 });
-function showScreen(id) {
+window.showScreen = function showScreen(id) {
     const screens = document.querySelectorAll(".screen");
     const buttons = document.querySelectorAll(".nav button");
 
@@ -1231,6 +2141,15 @@ function addCategory() {
 
 function deleteCategory(index) {
     let categories = getCategories();
+
+    if (index < 0 || index >= categories.length) return;
+
+    let selected = categories[index];
+    let check = validateLookupDeletion("category", selected);
+    if (check.blocked) {
+        showToast(`Cannot delete category. ${check.summary}`);
+        return;
+    }
 
     categories.splice(index, 1);
 
@@ -1432,12 +2351,6 @@ function getInsights() {
     let topCategory = {};
 
     data.forEach(e => {
-        // 🔥 HIDE FULLY RECOVERED
-        let remaining =
-            getRemainingAmount(e.id);
-
-        if (remaining <= 0)
-            return;
         if (!topCategory[e.category]) topCategory[e.category] = 0;
         topCategory[e.category] += Math.abs(e.amount);
     });
@@ -1459,16 +2372,25 @@ function closeDateModal() {
     if (modal) modal.style.display = "none";
 }
 
-/* === COMMENTED OLD DOWNLOAD START ===
-function downloadPDF() {
-    const { jsPDF } = window.jspdf;
-    const doc = new jsPDF();
 
-    const dataSource = currentFilteredExpenses.length
-        ? currentFilteredExpenses
-        : getExpenses();
+function generatePdfReport(opts = {}) {
+    // opts: { data: [] }
+    const { data } = opts || {};
+    const { jsPDF } = window.jspdf || {};
+    const doc = jsPDF ? new jsPDF() : null;
+
+    const dataSource = (Array.isArray(data) && data.length)
+        ? data
+        : (window.currentFilteredExpenses && window.currentFilteredExpenses.length)
+            ? window.currentFilteredExpenses
+            : (typeof getExpenses === 'function' ? getExpenses() : []);
 
     let y = 12;
+
+    if (!doc) {
+        console.warn('generatePdfReport: jsPDF not available, aborting heavy report');
+        return;
+    }
 
     // =========================
     // 🟢 HEADER CARD
@@ -1482,26 +2404,11 @@ function downloadPDF() {
 
     doc.setFontSize(8); // 🔽 reduced
     doc.setTextColor(100);
-    doc.text(
-        `Generated on: ${new Date().toLocaleString()}`,
-        14,
-        22
-    );
-
-    doc.text(
-        `Filter: ${currentHistoryFilter.label}`,
-        14,
-        26
-    );
-
-    doc.text(
-        `Total Entries: ${dataSource.length}`,
-        14,
-        30
-    );
+    doc.text(`Generated on: ${new Date().toLocaleString()}`, 14, 22);
+    doc.text(`Total Entries: ${dataSource.length}`, 14, 26);
 
     doc.setTextColor(0);
-    y = 38;
+    y = 34;
 
     // =========================
     // 💰 SUMMARY CARDS
@@ -1628,119 +2535,61 @@ function downloadPDF() {
     // =========================
     // 🟣 BUDGET SUMMARY
     // =========================
-
-    y += 10;
-
-    if (y > 250) {
-
-        doc.addPage();
-
-        y = 20;
-    }
-
     // =========================
-    // 📏 DIVIDER
+    // 🟣 BUDGET SUMMARY (PERIOD BASED)
     // =========================
-
-    doc.setDrawColor(220);
-
-    doc.line(10, y, 200, y);
-
     y += 8;
 
-
-    // =========================
-    // 🏷 TITLE
-    // =========================
-
-    doc.setFontSize(12);
-
-    doc.setFont(undefined, "bold");
-
-    doc.setTextColor(0);
-
-    doc.text(
-        "Budget Summary",
-        14,
-        y
-    );
+    doc.setDrawColor(200);
+    doc.line(10, y, 200, y);
 
     y += 6;
 
+    doc.setFontSize(11);
+    doc.setFont(undefined, "bold");
+    doc.text("Budget Summary (Active Period)", 14, y);
+
+    y += 5;
     doc.setFontSize(8);
-
     doc.setTextColor(120);
+    doc.text("Overview of budget vs spending", 14, y);
 
-    doc.text(
-        "Budget allocation and spending overview",
-        14,
-        y
-    );
+    doc.setTextColor(0);
+    y += 5;
 
-    y += 8;
-
-
-    // =========================
-    // 📊 TABLE HEADER
-    // =========================
-
+    // 🔥 PERIOD-BASED TOTALS
+    // ensure summaryCols exists
     const summaryCols = {
-
-        name: 15,
-
+        name: 14,
         allocated: 90,
-
-        spent: 140,
-
-        remaining: 195
+        spent: 130,
+        remaining: 170
     };
 
-    doc.setFillColor(
-        Math.max(0, r - 20),
-        Math.max(0, g - 20),
-        Math.max(0, b - 20)
-    );
+    // budgets for this PDF (respect active filter)
+    let budgets = getBudgets().filter(b => dataSource.some(e => e.periodKey === b.periodKey));
 
-    doc.rect(
-        10,
-        y - 5,
-        190,
-        9,
-        "F"
-    );
+    let totalBudget = budgets.reduce((sum, b) => sum + Math.abs(b.totalAllocated || 0), 0);
 
-    doc.setTextColor(255);
+    let totalSpent = dataSource.filter(e => e.amount < 0).reduce((sum, e) => sum + Math.abs(e.amount), 0);
+
+    // Use net-spent helper to compute remaining correctly (handles allocationTrail & recoveries)
+    let totalRemaining = budgets.reduce((sum, b) => {
+        const allocated = Math.abs(b.totalAllocated || 0);
+        const netSpent = getNetSpentForBudget(b.budgetId, dataSource);
+        return sum + (allocated - netSpent);
+    }, 0);
 
     doc.setFont(undefined, "bold");
-
     doc.setFontSize(9);
 
-    doc.text(
-        "Budget",
-        summaryCols.name,
-        y + 1
-    );
+    doc.text("Total Budget:", 14, y);
+    doc.text(formatCurrencyPDF(totalBudget), summaryCols.allocated, y, { align: 'right' });
 
-    doc.text(
-        "Allocated",
-        summaryCols.allocated,
-        y + 1,
-        { align: "right" }
-    );
+    y += 6;
 
-    doc.text(
-        "Spent",
-        summaryCols.spent,
-        y + 1,
-        { align: "right" }
-    );
-
-    doc.text(
-        "Remaining",
-        summaryCols.remaining,
-        y + 1,
-        { align: "right" }
-    );
+    doc.text("Spent", summaryCols.spent, y + 1, { align: "right" });
+    doc.text("Remaining", summaryCols.remaining, y + 1, { align: "right" });
 
     y += 10;
 
@@ -1753,29 +2602,18 @@ function downloadPDF() {
     // 📦 BUDGET ENTRIES
     // =========================
 
-    let budgets =
-        getBudgets()
-
-            .filter(b => {
-
-                // respect active PDF filter
-                return dataSource.some(
-                    e =>
-                        e.periodKey ===
-                        b.periodKey
-                );
-            });
+    // budgets already computed above
 
 
     // =========================
     // 💰 TOTALS
     // =========================
 
-    let totalBudget = 0;
+    //let totalBudget = 0;
 
-    let totalSpent = 0;
+    //let totalSpent = 0;
 
-    let totalRemaining = 0;
+    //let totalRemaining = 0;
 
 
     // =========================
@@ -1864,14 +2702,8 @@ function downloadPDF() {
 
 
         // =========================
-        // 📈 TOTALS
+        // 📈 TOTALS (already computed above)
         // =========================
-
-        totalBudget += allocated;
-
-        totalSpent += spent;
-
-        totalRemaining += remaining;
 
 
         // =========================
@@ -2109,9 +2941,17 @@ function downloadPDF() {
     // =========================
     // 💾 SAVE
     // =========================
-    doc.save("money-tracker-report.pdf");
+    if (doc && typeof doc.save === 'function') {
+        doc.save("money-tracker-report.pdf");
+    } else {
+        console.warn('PDF generation unavailable (jsPDF not loaded)');
+    }
+
 }
-=== COMMENTED OLD DOWNLOAD END === */
+
+// expose generator for new wrapper
+try { window.generatePdfReport = generatePdfReport; } catch (e) { /* ignore */ }
+//=== COMMENTED OLD DOWNLOAD END === */
 
 // New PDF wrapper (calls modular PDF generator when available)
 function downloadPDF() {
@@ -2122,7 +2962,12 @@ function downloadPDF() {
     }
 
     // Fallback to legacy simple export if new generator not available
-    const { jsPDF } = window.jspdf;
+    const jsPdfApi = window.jspdf || {};
+    const jsPDF = jsPdfApi.jsPDF;
+    if (!jsPDF) {
+        showToast("PDF export unavailable offline: jsPDF not loaded", "warning");
+        return;
+    }
     const doc = new jsPDF();
     doc.text('Money Tracker (legacy) - No advanced PDF engine available', 10, 20);
     doc.save('money-tracker-report.pdf');
@@ -2143,6 +2988,784 @@ function hexToRgb(hex) {
 
     return { r, g, b };
 }
+
+// =========================
+// ReMo AI — Floating Companion
+// Lightweight UI + Insight engine (local fallback)
+// =========================
+
+(function registerReMoAI() {
+    // Inject minimal styles so no external CSS changes required
+    const css = `
+    .remo-ai-bubble{position:fixed;right:18px;bottom:78px;z-index:1200;width:56px;height:56px;border-radius:50%;display:flex;align-items:center;justify-content:center;box-shadow:0 6px 18px rgba(16,24,40,0.12);backdrop-filter:blur(6px);cursor:pointer;transition:transform .18s ease,box-shadow .18s;}
+    .remo-ai-bubble:hover{transform:translateY(-4px);box-shadow:0 10px 30px rgba(16,24,40,0.16);}
+    .remo-ai-bubble .icon{width:28px;height:28px}
+    .remo-ai-panel{position:fixed;right:12px;bottom:12px;z-index:1200;width:360px;max-height:78vh;background:var(--remo-panel-bg,#ffffff);color:var(--remo-panel-fg,#111827);border-radius:12px;box-shadow:0 20px 50px rgba(2,6,23,0.3);overflow:hidden;display:flex;flex-direction:column;transform:translateY(12px);opacity:0;pointer-events:none;transition:opacity .18s ease,transform .22s ease}
+    .remo-ai-panel.open{opacity:1;pointer-events:auto;transform:translateY(0)}
+    .remo-ai-header{padding:12px 14px;border-bottom:1px solid rgba(0,0,0,0.06);display:flex;align-items:center;gap:10px}
+    .remo-title{font-weight:700;font-size:14px}
+    .remo-sub{font-size:11px;color:rgba(0,0,0,0.5)}
+    .remo-body{padding:10px;overflow:auto;flex:1;display:flex;flex-direction:column;gap:8px}
+    .remo-chips{display:flex;flex-wrap:wrap;gap:8px}
+    .remo-chip{background:rgba(0,0,0,0.06);padding:6px 10px;border-radius:999px;font-size:12px;cursor:pointer}
+    .remo-messages{display:flex;flex-direction:column;gap:8px}
+    .remo-msg{padding:8px 10px;border-radius:8px;background:rgba(0,0,0,0.03);font-size:13px}
+    .remo-input{display:flex;gap:8px;padding:10px;border-top:1px solid rgba(0,0,0,0.06)}
+    .remo-input input{flex:1;padding:8px;border-radius:8px;border:1px solid rgba(0,0,0,0.08)}
+    .remo-send{background:var(--accent,#0ea5a4);color:#fff;padding:8px 10px;border-radius:8px;cursor:pointer}
+    .remo-attachment-thumb{width:36px;height:36px;border-radius:6px;object-fit:cover}
+    @media (prefers-color-scheme:dark){
+        .remo-ai-bubble{background:linear-gradient(180deg,#0f1724,rgba(15,23,36,0.9));}
+        .remo-ai-panel{--remo-panel-bg:#0b1220;--remo-panel-fg:#e6eef7}
+        .remo-chip{background:rgba(255,255,255,0.04)}
+        .remo-msg{background:rgba(255,255,255,0.02)}
+    }
+    `;
+
+    const style = document.createElement('style');
+    style.setAttribute('data-remo-ai', '1');
+    style.appendChild(document.createTextNode(css));
+    document.head.appendChild(style);
+
+    // Create bubble
+    function createBubble() {
+        const bubble = document.createElement('button');
+        bubble.className = 'remo-ai-bubble';
+        bubble.setAttribute('aria-label', 'Open ReMo AI');
+        bubble.innerHTML = `
+            <svg class="icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <defs>
+                </defs>
+                <circle cx="12" cy="12" r="10" fill="url(#g)" />
+                <g fill="#fff">
+                    <path d="M8 11.5c0-2.5 2-4.5 4.5-4.5S17 9 17 11.5 15 16 12.5 16 8 14 8 11.5z" opacity=".95"/>
+                </g>
+                <defs>
+                    <linearGradient id="g" x1="0" x2="1" y1="0" y2="1">
+                        <stop offset="0" stop-color="#2b6cb0"/>
+                        <stop offset="1" stop-color="#06b6d4"/>
+                    </linearGradient>
+                </defs>
+            </svg>`;
+
+        document.body.appendChild(bubble);
+        return bubble;
+    }
+
+    // Create panel
+    function createPanel() {
+        const panel = document.createElement('div');
+        panel.className = 'remo-ai-panel';
+        panel.innerHTML = `
+            <div class="remo-ai-header">
+                <div style="width:40px;height:40px;border-radius:8px;display:flex;align-items:center;justify-content:center;background:linear-gradient(180deg,#0f1724,#0ea5a4);color:#fff">R</div>
+                <div>
+                    <div class="remo-title">ReMo AI</div>
+                    <div class="remo-sub">Your intelligent finance companion</div>
+                </div>
+            </div>
+            <div class="remo-body">
+                <div class="remo-chips" data-chips></div>
+                <div class="remo-messages" data-messages></div>
+            </div>
+            <div class="remo-input">
+                <input placeholder="Ask ReMo (e.g. 'Where did I spend most this week?')" data-userinput />
+                <button class="remo-send" data-send>Ask</button>
+            </div>
+        `;
+
+        document.body.appendChild(panel);
+        return panel;
+    }
+
+    // Lightweight insight engine
+    function topCategory(expenses, periodStart, periodEnd) {
+        const filtered = expenses.filter(e => {
+            const d = new Date(e.date);
+            if (periodStart && d < periodStart) return false;
+            if (periodEnd && d > periodEnd) return false;
+            return true;
+        });
+        const sums = {};
+        filtered.forEach(e => {
+            const cat = e.category || 'Others';
+            sums[cat] = (sums[cat] || 0) + Math.abs(Number(e.amount || 0));
+        });
+        const entries = Object.entries(sums).sort((a, b) => b[1] - a[1]);
+        return entries[0] ? { category: entries[0][0], amount: entries[0][1] } : null;
+    }
+
+    function sumRange(expenses, periodStart, periodEnd) {
+        return expenses.filter(e => {
+            const d = new Date(e.date);
+            if (periodStart && d < periodStart) return false;
+            if (periodEnd && d > periodEnd) return false;
+            return true;
+        }).reduce((s, e) => s + Number(e.amount || 0), 0);
+    }
+
+    function formatCurrencyShort(v) {
+        try { return formatCurrencyPDF ? formatCurrencyPDF(v) : new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR' }).format(v); } catch (e) { return v }
+    }
+
+    function renderMessage(text, append = true) {
+        const messages = document.querySelector('.remo-messages');
+        if (!messages) return;
+        const el = document.createElement('div');
+        el.className = 'remo-msg';
+        el.textContent = text;
+        if (append) messages.appendChild(el);
+        messages.scrollTop = messages.scrollHeight;
+    }
+
+    function generateInsightIntent(intent) {
+        const expenses = (window.currentFilteredExpenses && window.currentFilteredExpenses.length) ? window.currentFilteredExpenses : (typeof getExpenses === 'function' ? getExpenses() : []);
+        const now = new Date();
+        function sumRangeFor(arr, start, end) {
+            return arr.reduce((s, e) => {
+                const d = new Date(e.date);
+                if (d >= start && d <= end) return s + Number(e.amount || 0); return s;
+            }, 0);
+        }
+        function topCategories(arr, start, end, limit = 3) {
+            const m = {};
+            arr.forEach(e => { const d = new Date(e.date); if (d >= start && d <= end) { const k = e.category || 'Uncategorized'; m[k] = (m[k] || 0) + Math.abs(Number(e.amount || 0)); } });
+            return Object.keys(m).map(k => ({ category: k, amount: m[k] })).sort((a, b) => b.amount - a.amount).slice(0, limit);
+        }
+        if (intent === 'top-spend-week') {
+            const start = new Date(now); start.setDate(now.getDate() - 7);
+            const top = topCategory(expenses, start, now);
+            if (top) return `Top spending in last 7 days: ${top.category} — ${formatCurrencyShort(top.amount)}`;
+            return 'No expenses found in the last 7 days.';
+        }
+        if (intent === 'spending-trends' || intent === 'show-spending-trends') {
+            const day7 = new Date(now); day7.setDate(now.getDate() - 7);
+            const day30 = new Date(now); day30.setDate(now.getDate() - 30);
+            const spend7 = Math.abs(sumRangeFor(expenses.filter(e => Number(e.amount) < 0), day7, now));
+            const spend30 = Math.abs(sumRangeFor(expenses.filter(e => Number(e.amount) < 0), day30, now));
+            const avg7 = (spend7 / 7) || 0;
+            const avg30 = (spend30 / 30) || 0;
+            const trend = avg7 > avg30 ? 'increasing' : (avg7 < avg30 ? 'decreasing' : 'stable');
+            return `7-day avg ${formatCurrencyShort(avg7)}; 30-day avg ${formatCurrencyShort(avg30)} — trend ${trend}.`;
+        }
+        if (intent === 'category-analysis') {
+            const start = new Date(now); start.setDate(now.getDate() - 30);
+            const top = topCategories(expenses, start, now, 5);
+            if (!top.length) return 'No category data for last 30 days.';
+            return 'Top categories (30d): ' + top.map(t => `${t.category} ${formatCurrencyShort(t.amount)}`).join(', ');
+        }
+        if (intent === 'savings-progress') {
+            const savings = (typeof getSavings === 'function') ? getSavings() : [];
+            const total = savings.reduce((s, x) => s + Number(x.amount || 0), 0);
+            return `You have ${formatCurrencyShort(total)} in savings (${savings.length} entries).`;
+        }
+        if (intent === 'end-of-day-summary') {
+            const start = new Date(now); start.setHours(0, 0, 0, 0);
+            const end = new Date(now); end.setHours(23, 59, 59, 999);
+            const incomes = expenses.filter(e => Number(e.amount) > 0 && new Date(e.date) >= start && new Date(e.date) <= end);
+            const outs = expenses.filter(e => Number(e.amount) < 0 && new Date(e.date) >= start && new Date(e.date) <= end);
+            const inAmt = incomes.reduce((s, e) => s + Number(e.amount || 0), 0);
+            const outAmt = outs.reduce((s, e) => s + Number(e.amount || 0), 0);
+            return `Today: ${incomes.length} income(s) ${formatCurrencyShort(inAmt)}; ${outs.length} expense(s) ${formatCurrencyShort(Math.abs(outAmt))}.`;
+        }
+        if (intent === 'savings-month') {
+            const start = new Date(now.getFullYear(), now.getMonth(), 1);
+            const income = sumRange(expenses.filter(e => Number(e.amount) > 0), start, now);
+            const expense = Math.abs(sumRange(expenses.filter(e => Number(e.amount) < 0), start, now));
+            const saved = income - expense;
+            return `This month: Income ${formatCurrencyShort(income)}, Expense ${formatCurrencyShort(expense)}, Savings ${formatCurrencyShort(saved)}`;
+        }
+        if (intent === 'budget-alerts') {
+            const budgets = (typeof getBudgets === 'function') ? getBudgets() : [];
+            const alerts = [];
+            budgets.forEach(b => {
+                const allocated = Math.abs(b.totalAllocated || 0);
+                const spent = getNetSpentForBudget(b.budgetId, expenses);
+                if (allocated > 0 && spent / allocated >= 0.85) alerts.push(`${b.name || b.note || 'Budget'} is ${Math.round((spent / allocated) * 100)}% used`);
+            });
+            return alerts.length ? alerts.join('; ') : 'No budget alerts.';
+        }
+        if (intent === 'compare-last-month') {
+            const thisMonthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+            const lastMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+            const lastMonthEnd = new Date(now.getFullYear(), now.getMonth(), 0);
+            const thisSpend = Math.abs(sumRange(expenses.filter(e => Number(e.amount) < 0), thisMonthStart, now));
+            const lastSpend = Math.abs(sumRange(expenses.filter(e => Number(e.amount) < 0), lastMonthStart, lastMonthEnd));
+            const diff = thisSpend - lastSpend;
+            return `Expense this month ${formatCurrencyShort(thisSpend)}. Last month ${formatCurrencyShort(lastSpend)}. Change ${formatCurrencyShort(diff)}.`;
+        }
+
+        return "I couldn't compute that automatically. Try a quick suggestion.";
+    }
+
+    function handlePreset(promptKey) {
+        const map = {
+            'Where did I spend most this week?': 'top-spend-week',
+            'How much did I save this month?': 'savings-month',
+            'Which category exceeds budget?': 'budget-alerts',
+            'What changed compared to last month?': 'compare-last-month',
+            'Show spending trends': 'spending-trends'
+        };
+        const intent = map[promptKey] || promptKey;
+        renderMessage(promptKey);
+        const reply = generateInsightIntent(intent);
+        setTimeout(() => renderMessage(reply), 200);
+    }
+
+    function openPanel(panel) {
+        panel.classList.add('open');
+        // populate chips
+        const chips = panel.querySelector('[data-chips]');
+        if (chips && chips.children.length === 0) {
+            ['Where did I spend most this week?', 'How much did I save this month?', 'Which category exceeds budget?', 'What changed compared to last month?', 'Show spending trends'].forEach(t => {
+                const b = document.createElement('button');
+                b.className = 'remo-chip';
+                b.textContent = t;
+                b.onclick = () => handlePreset(t);
+                chips.appendChild(b);
+            });
+        }
+        panel.querySelector('[data-messages]').innerHTML = '';
+        renderMessage('Hi — I am ReMo. I can show insights, reminders and quick actions.');
+    }
+
+    function init() {
+        try {
+            // load ReMo styles (lightweight)
+            if (!document.querySelector('link[data-remo-css]')) {
+                const l = document.createElement('link');
+                l.rel = 'stylesheet';
+                l.href = location.pathname.includes('/pages/')
+                    ? '../assets/styles/remo.css'
+                    : 'assets/styles/remo.css';
+                l.setAttribute('data-remo-css', '1');
+                document.head.appendChild(l);
+            }
+
+            // lazy-load attachments module (IndexedDB-backed) for offline-first attachments
+            if (!window.reMoAttachmentsIndexed && !document.querySelector('script[data-remo-attach]')) {
+                const s = document.createElement('script');
+                s.src = location.pathname.includes('/pages/')
+                    ? '../assets/scripts/remo/attachments.js'
+                    : 'assets/scripts/remo/attachments.js';
+                s.setAttribute('data-remo-attach', '1');
+                document.body.appendChild(s);
+            }
+
+            // schedule light daily summary notification (runs while app is open)
+            try {
+                scheduleDailySummary(20); // 20:00 local
+            } catch (e) {/* ignore */ }
+
+            const bubble = createBubble();
+            const panel = createPanel();
+
+            bubble.addEventListener('click', () => {
+                if (panel.classList.contains('open')) { panel.classList.remove('open'); }
+                else { openPanel(panel); }
+            });
+
+            // Send handler
+            panel.querySelector('[data-send]').addEventListener('click', () => {
+                const input = panel.querySelector('[data-userinput]');
+                const text = (input.value || '').trim();
+                if (!text) return;
+                renderMessage(text);
+                // naive intent detection
+                const l = text.toLowerCase();
+                if (l.includes('food') || l.includes('where') || l.includes('most')) handlePreset('Where did I spend most this week?');
+                else if (l.includes('save') || l.includes('saving') || l.includes('how much did i save')) handlePreset('How much did I save this month?');
+                else if (l.includes('budget') || l.includes('exceed')) handlePreset('Which category exceeds budget?');
+                else if (l.includes('compare') || l.includes('changed') || l.includes('last month')) handlePreset('What changed compared to last month?');
+                else {
+                    // fallback: try to compute simple numeric answers
+                    const reply = generateInsightIntent(text);
+                    setTimeout(() => renderMessage(reply), 200);
+                }
+                input.value = '';
+            });
+
+            // keyboard enter
+            panel.querySelector('[data-userinput]').addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') panel.querySelector('[data-send]').click();
+            });
+
+            // gentle entrance animation
+            setTimeout(() => bubble.style.transform = 'translateY(0)', 100);
+        } catch (e) { console.warn('ReMo init failed', e) }
+    }
+
+    // Initialize after load
+    if (document.readyState === 'complete') init(); else window.addEventListener('load', init);
+
+    // Attachment helper (switches to IndexedDB-backed implementation when available)
+    window.reMoAttachments = window.reMoAttachmentsIndexed || {
+        storePreview: async function (transactionId, file) {
+            if (!file) return null;
+            return new Promise((res, rej) => {
+                const fr = new FileReader();
+                fr.onload = () => {
+                    try { const key = `remo:attach:${transactionId}`; localStorage.setItem(key, fr.result); res(fr.result); } catch (err) { rej(err) }
+                };
+                fr.onerror = rej;
+                fr.readAsDataURL(file);
+            });
+        },
+        getPreview: function (transactionId) { return localStorage.getItem(`remo:attach:${transactionId}`); },
+        remove: function (transactionId) { localStorage.removeItem(`remo:attach:${transactionId}`); }
+    };
+
+})();
+
+// =========================
+// Attachment viewer + input wiring
+// =========================
+
+function openAttachmentViewer(src) {
+    // remove existing
+    let existing = document.getElementById('remo-attach-viewer');
+    if (existing) existing.remove();
+
+    const overlay = document.createElement('div');
+    overlay.id = 'remo-attach-viewer';
+    overlay.style.position = 'fixed';
+    overlay.style.inset = '0';
+    overlay.style.background = 'rgba(0,0,0,0.85)';
+    overlay.style.display = 'flex';
+    overlay.style.alignItems = 'center';
+    overlay.style.justifyContent = 'center';
+    overlay.style.zIndex = 1400;
+    overlay.style.cursor = 'zoom-out';
+
+    const img = document.createElement('img');
+    img.src = src;
+    img.style.maxWidth = '94%';
+    img.style.maxHeight = '94%';
+    img.style.borderRadius = '8px';
+    img.style.boxShadow = '0 20px 50px rgba(0,0,0,0.6)';
+    let zoomed = false;
+    img.addEventListener('dblclick', () => {
+        zoomed = !zoomed;
+        img.style.transform = zoomed ? 'scale(1.6)' : 'scale(1)';
+    });
+
+    overlay.addEventListener('click', () => overlay.remove());
+
+    overlay.appendChild(img);
+    document.body.appendChild(overlay);
+}
+
+function escapeHtml(value) {
+    return String(value == null ? "" : value)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/\"/g, "&quot;")
+        .replace(/'/g, "&#39;");
+}
+
+function getAttachmentApi() {
+    return window.reMoAttachments || window.reMoAttachmentsIndexed || null;
+}
+
+function ensureAuditModal() {
+    let existing = document.getElementById("txnDetailsModal");
+    if (existing) return existing;
+
+    let modal = document.createElement("div");
+    modal.id = "txnDetailsModal";
+    modal.className = "modal";
+    modal.innerHTML = `
+      <div class="modal-content audit-modal-content" onclick="event.stopPropagation()">
+        <h3>Transaction Details</h3>
+        <div id="txnDetailsBody" class="audit-details-grid"></div>
+        <div id="txnAttachmentSection" class="audit-attachments" style="display:none;"></div>
+        <div class="modal-actions">
+          <button class="secondary" onclick="closeTransactionAuditDetails()">Close</button>
+        </div>
+      </div>
+    `;
+    modal.addEventListener("click", closeTransactionAuditDetails);
+    document.body.appendChild(modal);
+    return modal;
+}
+
+function closeTransactionAuditDetails() {
+    let modal = document.getElementById("txnDetailsModal");
+    if (modal) modal.style.display = "none";
+}
+
+async function viewAttachmentById(attachmentId) {
+    let at = getAttachmentApi();
+    if (!at || !attachmentId) return;
+
+    try {
+        if (at.getImageUrl) {
+            let src = await at.getImageUrl(attachmentId);
+            if (src) {
+                openAttachmentViewer(src);
+                return;
+            }
+        }
+        if (at.getBlob) {
+            let blob = await at.getBlob(attachmentId);
+            if (!blob) return;
+            let url = URL.createObjectURL(blob);
+            window.open(url, "_blank", "noopener,noreferrer");
+            setTimeout(() => URL.revokeObjectURL(url), 15000);
+        }
+    } catch (err) {
+        console.warn("viewAttachmentById failed", err);
+    }
+}
+
+async function downloadAttachmentById(attachmentId, filenameHint) {
+    let at = getAttachmentApi();
+    if (!at || !attachmentId || !at.getBlob) return;
+
+    try {
+        let blob = await at.getBlob(attachmentId);
+        if (!blob) return;
+        let url = URL.createObjectURL(blob);
+        let a = document.createElement("a");
+        a.href = url;
+        a.download = filenameHint || `attachment_${attachmentId}.bin`;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        setTimeout(() => URL.revokeObjectURL(url), 15000);
+    } catch (err) {
+        console.warn("downloadAttachmentById failed", err);
+    }
+}
+
+async function deleteTransactionAttachment(scope, transactionId, attachmentId) {
+    let at = getAttachmentApi();
+    if (!scope || !transactionId || !attachmentId) return;
+
+    try {
+        if (scope === "expense") {
+            let expenses = getExpenses();
+            let target = expenses.find(e => String(e.id) === String(transactionId));
+            if (!target) return;
+            target.attachmentId = null;
+            target.updatedAt = new Date().toISOString();
+            saveExpenses(expenses);
+            if (typeof loadHistory === "function") loadHistory();
+        } else if (scope === "savings" && typeof getSavings === "function" && typeof saveSavings === "function") {
+            let savings = getSavings();
+            let target = savings.find(s => String(s.id) === String(transactionId));
+            if (!target) return;
+            target.attachmentId = null;
+            target.updatedAt = new Date().toISOString();
+            saveSavings(savings);
+            if (typeof renderSavingsHistory === "function") renderSavingsHistory(savings);
+        }
+
+        if (at.remove) {
+            try { await at.remove(attachmentId); } catch (e) { }
+        }
+
+        closeTransactionAuditDetails();
+        showToast("Attachment deleted");
+    } catch (err) {
+        console.warn("deleteTransactionAttachment failed", err);
+    }
+}
+
+async function openTransactionAuditDetails(scope, transaction) {
+    if (!transaction) return;
+
+    let modal = ensureAuditModal();
+    let body = document.getElementById("txnDetailsBody");
+    let attachmentSection = document.getElementById("txnAttachmentSection");
+    if (!body || !attachmentSection) return;
+
+    let createdAt = transaction.createdAt || transaction.date;
+    let persistedAfter = Number(transaction.BalanceAfterTransaction);
+    let fallbackRunning = Number(transaction.runningBalance);
+    let runningBalanceText = Number.isFinite(persistedAfter)
+        ? formatCurrency(persistedAfter)
+        : (Number.isFinite(fallbackRunning) ? formatCurrency(fallbackRunning) : "-");
+
+    let summary = null;
+    let summaryTarget = null;
+    if ((transaction.type === "expense" || transaction.type === "transfer" || transaction.type === "loss") && Number(transaction.amount || 0) < 0) {
+        summaryTarget = String(transaction.id);
+    } else if (transaction.linkedTransactionId) {
+        summaryTarget = String(transaction.linkedTransactionId);
+    }
+    if (summaryTarget) {
+        if (scope === "savings" && typeof getSavingsResolutionSnapshot === "function") {
+            summary = getSavingsResolutionSnapshot(summaryTarget);
+        } else {
+            summary = getExpenseResolutionSnapshot(summaryTarget);
+        }
+    }
+
+    let summaryStatusText = "-";
+    if (summary && summary.exists) {
+        if (scope === "savings" && typeof formatSavingsResolutionStatus === "function") {
+            summaryStatusText = formatSavingsResolutionStatus(summary.status);
+        } else {
+            summaryStatusText = formatResolutionStatus(summary.status);
+        }
+    }
+
+    body.innerHTML = `
+      <div><small>Transaction ID</small><div>${escapeHtml(transaction.id || "-")}</div></div>
+      <div><small>Date</small><div>${escapeHtml(new Date(transaction.date || Date.now()).toLocaleString("en-IN"))}</div></div>
+      <div><small>Entry Type</small><div>${escapeHtml(transaction.type || "-")}</div></div>
+      <div><small>Amount</small><div>${escapeHtml(formatCurrency(Number(transaction.amount || 0)))}</div></div>
+      <div><small>Running Balance</small><div>${escapeHtml(runningBalanceText)}</div></div>
+      <div><small>Notes</small><div>${escapeHtml(transaction.purpose || transaction.note || "-")}</div></div>
+      <div><small>Linked Transaction</small><div>${escapeHtml(transaction.linkedTransactionId || "-")}</div></div>
+      <div><small>Created At</small><div>${escapeHtml(new Date(createdAt || Date.now()).toLocaleString("en-IN"))}</div></div>
+      ${summary && summary.exists ? `<div><small>Original Amount</small><div>${escapeHtml(formatCurrency(summary.originalAmount))}</div></div>` : ""}
+      ${summary && summary.exists ? `<div><small>Refunded</small><div>${escapeHtml(formatCurrency(summary.refunded))}</div></div>` : ""}
+      ${summary && summary.exists ? `<div><small>Loss</small><div>${escapeHtml(formatCurrency(summary.loss))}</div></div>` : ""}
+            ${summary && summary.exists ? `<div><small>Status</small><div>${escapeHtml(summaryStatusText)}</div></div>` : ""}
+      ${summary && summary.exists ? `<div><small>Remaining Refundable</small><div>${escapeHtml(formatCurrency(summary.remainingRefundable))}</div></div>` : ""}
+    `;
+
+    if (!transaction.attachmentId) {
+        attachmentSection.style.display = "none";
+    } else {
+        let at = getAttachmentApi();
+        let name = `attachment_${transaction.attachmentId}`;
+        let mime = "unknown";
+        let uploadDate = transaction.createdAt || transaction.date;
+
+        if (at && at.getRecord) {
+            try {
+                let rec = await at.getRecord(transaction.attachmentId);
+                if (rec) {
+                    name = rec.filename || name;
+                    mime = rec.mime || mime;
+                    uploadDate = rec.createdAt ? new Date(rec.createdAt).toISOString() : uploadDate;
+                }
+            } catch (err) {
+                console.warn("Attachment metadata read failed", err);
+            }
+        }
+
+        attachmentSection.style.display = "block";
+        attachmentSection.innerHTML = `
+          <h4>Attachments</h4>
+          <div class="audit-attachment-card">
+            <div><strong>${escapeHtml(name)}</strong></div>
+            <div><small>Type: ${escapeHtml(mime)}</small></div>
+            <div><small>Uploaded: ${escapeHtml(new Date(uploadDate || Date.now()).toLocaleString("en-IN"))}</small></div>
+            <div class="audit-attachment-actions">
+              <button class="secondary" onclick="viewAttachmentById('${escapeHtml(transaction.attachmentId)}')">View</button>
+              <button class="secondary" onclick="downloadAttachmentById('${escapeHtml(transaction.attachmentId)}', '${escapeHtml(name)}')">Download</button>
+              <button class="secondary" onclick="deleteTransactionAttachment('${escapeHtml(scope)}', '${escapeHtml(transaction.id)}', '${escapeHtml(transaction.attachmentId)}')">Delete</button>
+            </div>
+          </div>
+        `;
+    }
+
+    modal.style.display = "flex";
+}
+
+try {
+    window.openTransactionAuditDetails = openTransactionAuditDetails;
+    window.closeTransactionAuditDetails = closeTransactionAuditDetails;
+    window.viewAttachmentById = viewAttachmentById;
+    window.downloadAttachmentById = downloadAttachmentById;
+    window.deleteTransactionAttachment = deleteTransactionAttachment;
+} catch (e) {
+    // ignore
+}
+
+function setupAttachmentInputs() {
+    // expense attachment
+    const expInput = document.getElementById('expenseAttachment');
+    const expPreview = document.getElementById('expenseAttachmentPreview');
+    const expWrapper = document.getElementById('expenseAttachmentPreviewWrapper');
+    const expRemove = document.getElementById('expenseAttachmentRemove');
+    if (expInput) {
+        expInput.addEventListener('change', async function () {
+            const file = this.files && this.files[0];
+            if (!file) return;
+            // show temporary preview using object URL
+            // revoke previous preview url if present
+            if (expPreview && expPreview.dataset._previewUrl) { try { URL.revokeObjectURL(expPreview.dataset._previewUrl); } catch (e) { } }
+            const url = URL.createObjectURL(file);
+            if (expPreview) { expPreview.src = url; expPreview.dataset._previewUrl = url; expWrapper.style.display = 'block'; expRemove.style.display = 'inline'; }
+            expPreview.onclick = () => openAttachmentViewer(url);
+        });
+        if (expRemove) expRemove.addEventListener('click', () => { if (expPreview && expPreview.dataset._previewUrl) { try { URL.revokeObjectURL(expPreview.dataset._previewUrl); } catch (e) { } expPreview.dataset._previewUrl = ''; } expInput.value = ''; if (expWrapper) expWrapper.style.display = 'none'; expRemove.style.display = 'none'; });
+    }
+
+    const sInput = document.getElementById('sAttachment');
+    const sPreview = document.getElementById('sAttachmentPreview');
+    const sWrapper = document.getElementById('sAttachmentPreviewWrapper');
+    const sRemove = document.getElementById('sAttachmentRemove');
+    if (sInput) {
+        sInput.addEventListener('change', function () {
+            const file = this.files && this.files[0];
+            if (!file) return;
+            if (sPreview && sPreview.dataset._previewUrl) { try { URL.revokeObjectURL(sPreview.dataset._previewUrl); } catch (e) { } }
+            const url = URL.createObjectURL(file);
+            if (sPreview) { sPreview.src = url; sPreview.dataset._previewUrl = url; sWrapper.style.display = 'block'; sRemove.style.display = 'inline'; }
+            sPreview.onclick = () => openAttachmentViewer(url);
+        });
+        if (sRemove) sRemove.addEventListener('click', () => { if (sPreview && sPreview.dataset._previewUrl) { try { URL.revokeObjectURL(sPreview.dataset._previewUrl); } catch (e) { } sPreview.dataset._previewUrl = ''; } sInput.value = ''; if (sWrapper) sWrapper.style.display = 'none'; sRemove.style.display = 'none'; });
+    }
+}
+
+// initialize attachment inputs on DOM ready
+if (document.readyState === 'complete') setupAttachmentInputs(); else window.addEventListener('load', setupAttachmentInputs);
+
+// Helper: store attachment from a file input element id and return attachmentId (or null)
+async function storeAttachmentFromInput(inputId) {
+    const fileInput = document.getElementById(inputId);
+    const file = fileInput && fileInput.files && fileInput.files[0] ? fileInput.files[0] : null;
+    if (!file) return null;
+    const store = window.reMoAttachments && window.reMoAttachments.storeImage ? window.reMoAttachments.storeImage : (window.reMoAttachmentsIndexed && window.reMoAttachmentsIndexed.storeImage);
+    if (!store) return null;
+    try {
+        const res = await store(null, file);
+        return res && res.id ? res.id : null;
+    } catch (err) {
+        console.warn('Attachment store failed', err);
+        return null;
+    }
+}
+
+function scheduleDailySummary(hour = 20) {
+    if (!('Notification' in window)) return;
+    function computeSummary() {
+        const expenses = (typeof getExpenses === 'function') ? getExpenses() : [];
+        const now = new Date();
+        const start = new Date(now); start.setHours(0, 0, 0, 0);
+        const end = new Date(now); end.setHours(23, 59, 59, 999);
+        const ins = expenses.filter(e => Number(e.amount) > 0 && new Date(e.date) >= start && new Date(e.date) <= end);
+        const outs = expenses.filter(e => Number(e.amount) < 0 && new Date(e.date) >= start && new Date(e.date) <= end);
+        const inAmt = ins.reduce((s, e) => s + Number(e.amount || 0), 0);
+        const outAmt = outs.reduce((s, e) => s + Number(e.amount || 0), 0);
+        return `Today: ${ins.length} incomes ${formatCurrencyShort(inAmt)} · ${outs.length} expenses ${formatCurrencyShort(Math.abs(outAmt))}`;
+    }
+    function scheduleNext() {
+        const now = new Date();
+        const next = new Date(now);
+        next.setHours(hour, 0, 0, 0);
+        if (next <= now) next.setDate(next.getDate() + 1);
+        const ms = next - now;
+        setTimeout(async () => {
+            if (Notification.permission !== 'granted') {
+                try { await Notification.requestPermission(); } catch (e) { }
+            }
+            if (Notification.permission === 'granted') {
+                const body = computeSummary();
+                const n = new Notification('ReMo Daily Summary', { body });
+                n.onclick = () => window.focus();
+            }
+            scheduleNext();
+        }, ms);
+    }
+    scheduleNext();
+}
+
+const NOTIF_ENABLED_KEY = "notificationsEnabled";
+
+function updateNotificationButtonState() {
+    const btn = document.getElementById("notifToggleBtn");
+    if (!btn) return;
+
+    const enabled = localStorage.getItem(NOTIF_ENABLED_KEY) === "1";
+    btn.textContent = enabled ? "Disable" : "Enable";
+}
+
+async function enableNotifications() {
+    if (!("Notification" in window)) {
+        showToast("Notifications not supported on this device", "warning");
+        return;
+    }
+
+    try {
+        const permission = await Notification.requestPermission();
+        if (permission === "granted") {
+            localStorage.setItem(NOTIF_ENABLED_KEY, "1");
+            updateNotificationButtonState();
+            showToast("Notifications enabled", "success");
+        } else {
+            showToast("Notification permission denied", "warning");
+        }
+    } catch (err) {
+        console.warn("enableNotifications failed", err);
+        showToast("Unable to enable notifications", "error");
+    }
+}
+
+function toggleNotifications() {
+    const enabled = localStorage.getItem(NOTIF_ENABLED_KEY) === "1";
+    localStorage.setItem(NOTIF_ENABLED_KEY, enabled ? "0" : "1");
+    updateNotificationButtonState();
+    showToast(enabled ? "Notifications disabled" : "Notifications enabled", "info");
+}
+
+function testNotification() {
+    if (!("Notification" in window)) {
+        showToast("Notifications not supported", "warning");
+        return;
+    }
+
+    if (localStorage.getItem(NOTIF_ENABLED_KEY) !== "1") {
+        showToast("Enable notifications first", "warning");
+        return;
+    }
+
+    if (Notification.permission !== "granted") {
+        showToast("Allow notification permission first", "warning");
+        return;
+    }
+
+    try {
+        const n = new Notification("Money Tracker", {
+            body: "Test notification is working.",
+            icon: "assets/images/remo-logo.svg"
+        });
+        n.onclick = () => window.focus();
+    } catch (err) {
+        console.warn("testNotification failed", err);
+        showToast("Test notification failed", "error");
+    }
+}
+
+try {
+    window.enableNotifications = enableNotifications;
+    window.toggleNotifications = toggleNotifications;
+    window.testNotification = testNotification;
+} catch (e) {
+    // ignore non-browser contexts
+}
+
+// Cleanup orphaned attachments not referenced by any transaction
+async function cleanupOrphanAttachments(olderThanDays = 30) {
+    const at = window.reMoAttachments || window.reMoAttachmentsIndexed;
+    if (!at || !at.listIds) return;
+    try {
+        const ids = await at.listIds();
+        const used = new Set();
+        if (typeof getExpenses === 'function') getExpenses().forEach(e => { if (e.attachmentId) used.add(String(e.attachmentId)); });
+        if (typeof getSavings === 'function') getSavings().forEach(s => { if (s.attachmentId) used.add(String(s.attachmentId)); });
+        const cutoff = Date.now() - (olderThanDays * 24 * 60 * 60 * 1000);
+        for (const id of ids) {
+            if (used.has(String(id))) continue;
+            let rec = null;
+            try { rec = await at.getRecord(id); } catch (e) { }
+            const created = rec && rec.createdAt ? Number(rec.createdAt) : null;
+            if (created && created > 0 && created < cutoff) {
+                try { await at.remove(id); console.info('Removed orphan attachment', id); } catch (e) { console.warn('Failed remove orphan', id, e) }
+            }
+        }
+    } catch (err) { console.warn('cleanupOrphanAttachments failed', err); }
+}
+
+// run a light cleanup on startup (non-blocking)
+setTimeout(() => cleanupOrphanAttachments(30), 2000);
 
 function getTotalBudget(monthKey) {
     let budgets = getBudgets();
@@ -2237,8 +3860,7 @@ function loadBudgetOptions() {
     if (!select) return;
 
     let budgets = getBudgets();
-    let expensesAll = getExpenses();
-    let expenses = expensesAll.filter(e => !isParentSplitContainer(e));
+    let expenses = getExpenses();
 
     select.innerHTML = "";
 
@@ -2255,23 +3877,7 @@ function loadBudgetOptions() {
     filtered.forEach(b => {
 
         // 🔥 Calculate spent per budget
-        let spent = 0;
-
-        expenses.forEach(e => {
-
-            if (Array.isArray(e.allocationTrail) && e.allocationTrail.length) {
-                e.allocationTrail.forEach(a => {
-                    if (String(a.budgetId) === String(b.budgetId) && (e.type === 'expense' || e.type === 'loss')) {
-                        spent += Number(a.amount) || 0;
-                    }
-                    if (String(a.budgetId) === String(b.budgetId) && e.type === 'recovery') {
-                        spent -= Number(a.amount) || 0;
-                    }
-                });
-            } else if (String(e.budgetId) === String(b.budgetId) && e.amount < 0) {
-                spent += Math.abs(e.amount);
-            }
-        });
+        let spent = getNetSpentForBudget(b.budgetId, expenses);
 
         let remaining = (b.totalAllocated || 0) - spent;
 
@@ -2485,62 +4091,7 @@ function closePeriod() {
 //         prompt("Copy your backup manually:", json);
 //     }
 // }
-function exportDataAsJSON() {
 
-    let data = {
-        expenses: getExpenses() || [],
-        budgets: getBudgets() || [],
-        savings: getSavings() || [],
-        orders: JSON.parse(localStorage.getItem("orders")) || [],
-
-        // 🔥 NEW (IMPORTANT)
-        categories: JSON.parse(localStorage.getItem("categories")) || [],
-        persons: JSON.parse(localStorage.getItem("persons")) || [],
-        budgetPeriods: JSON.parse(localStorage.getItem("bp")) || [],
-
-        settings: {
-            theme: localStorage.getItem("theme") || "",
-            currencyCode: localStorage.getItem("currencyCode") || "INR"
-        },
-
-        meta: {
-            exportedAt: new Date().toISOString(),
-            version: "v2"
-        }
-    };
-
-    try {
-        let json = JSON.stringify(data, null, 2);
-
-        let blob = new Blob([json], { type: "application/json" });
-        let url = URL.createObjectURL(blob);
-
-        let a = document.createElement("a");
-        a.href = url;
-        a.download = `money-tracker-backup-${new Date().toISOString().slice(0, 10)}.json`;
-
-        document.body.appendChild(a);
-        a.click();
-
-        // fallback first
-        setTimeout(() => {
-            window.open(url, "_blank");
-        }, 500);
-
-        // cleanup later
-        setTimeout(() => {
-
-            document.body.removeChild(a);
-
-            URL.revokeObjectURL(url);
-
-        }, 3000);
-
-    } catch (err) {
-        let json = JSON.stringify(data, null, 2);
-        prompt("Copy your backup manually:", json);
-    }
-}
 // Imports JSON backup into localStorage
 // function importData() {
 //     let text = document.getElementById("importText").value;
@@ -2667,6 +4218,9 @@ function importData() {
         if (data.meta) {
             console.log("Imported version:", data.meta.version);
         }
+
+        // Repair and re-tie legacy references after import.
+        runIntegrityRepairSilently();
 
         showToast("Import successful ✅");
 
@@ -2875,31 +4429,15 @@ function loadDashboard() {
         .reduce((sum, b) =>
             sum + (b.totalAllocated || 0), 0);
 
-    // total income only counts 'income' type
     let totalIncome = filteredExpenses
-        .filter(e => e.type === "income")
-        .reduce((sum, e) => sum + Math.abs(Number(e.amount) || 0), 0);
+        .filter(e => e.amount > 0)
+        .reduce((sum, e) =>
+            sum + e.amount, 0);
 
-    // totalSpent aggregates expense/loss minus recoveries. If allocationTrail exists, prefer summed allocations.
-    let totalSpent = 0;
-
-    filteredExpenses.forEach(e => {
-        if (e.type === "expense" || e.type === "loss") {
-            if (Array.isArray(e.allocationTrail) && e.allocationTrail.length) {
-                totalSpent += e.allocationTrail.reduce((s, a) => s + (Number(a.amount) || 0), 0);
-            } else {
-                totalSpent += Math.abs(Number(e.amount) || 0);
-            }
-        } else if (e.type === "recovery") {
-            // recoveries reduce spent
-            // prefer allocationTrail on recovery if present, else use amount
-            if (Array.isArray(e.allocationTrail) && e.allocationTrail.length) {
-                totalSpent -= e.allocationTrail.reduce((s, a) => s + (Number(a.amount) || 0), 0);
-            } else {
-                totalSpent -= Math.abs(Number(e.amount) || 0);
-            }
-        }
-    });
+    let totalSpent = filteredExpenses
+        .filter(e => e.amount < 0)
+        .reduce((sum, e) =>
+            sum + Math.abs(e.amount), 0);
 
     let remaining =
         totalBudget - totalSpent;
@@ -3004,8 +4542,9 @@ function loadBudgetScreen() {
 // Displays all budget entries
 function renderBudgetEntries() {
 
-    let budgets = JSON.parse(localStorage.getItem("budgets")) || [];
-    let expenses = JSON.parse(localStorage.getItem("expenses")) || [];
+    let budgetsAll = JSON.parse(localStorage.getItem("budgets")) || [];
+    let budgets = filterBudgetsByActivePeriod(budgetsAll);
+    let expenses = filterByActivePeriod(getExpenses());
     let savings = JSON.parse(localStorage.getItem("savingsTransactions")) || [];
 
     let container = document.getElementById("budgetEntries");
@@ -3023,12 +4562,13 @@ function renderBudgetEntries() {
 
     budgets.forEach(b => {
 
-        let key = b.sourceId + "_" + (b.periodKey || "no_period");
+        let key = b.sourceId + "_" + (b.periodKey || b.monthKey || "no_period");
 
         if (!map[key]) {
             map[key] = {
                 sourceId: b.sourceId,
                 periodKey: b.periodKey,
+                monthKey: b.monthKey || null,
                 totalAllocated: 0,
                 entity: b.entity
             };
@@ -3041,24 +4581,24 @@ function renderBudgetEntries() {
 
     list.forEach(g => {
 
-        // 🔥 Use periodKey-based matching
+        // 🔥 Use periodKey/monthKey-aware matching
         let relatedBudgetIds = budgets
             .filter(b =>
-                b.sourceId === g.sourceId &&
-                b.periodKey === g.periodKey
+                b.sourceId === g.sourceId && (
+                    (g.periodKey && b.periodKey === g.periodKey) ||
+                    (!g.periodKey && b.monthKey === g.monthKey)
+                )
             )
             .map(b => b.budgetId);
 
-        let used = expenses
-            .filter(e =>
-                relatedBudgetIds.includes(e.budgetId) &&
-                e.amount < 0
-            )
-            .reduce((sum, e) => sum + Math.abs(e.amount), 0);
+        let used = relatedBudgetIds.reduce((sum, budgetId) => {
+            return sum + getNetSpentForBudget(budgetId, expenses);
+        }, 0);
+        used = Math.max(0, used);
 
         let remaining = g.totalAllocated - used;
 
-        let source = savings.find(s => s.id === g.sourceId);
+        let source = savings.find(s => String(s.id) === String(g.sourceId));
         let name = source ? (source.note || source.entity) : "Budget";
 
         // 🔥 Proper label
@@ -3067,39 +4607,79 @@ function renderBudgetEntries() {
         if (g.periodKey) {
             let [start, end] = g.periodKey.split("_to_");
             label = `${formatDateShort(start)} → ${formatDateShort(end)}`;
+        } else if (g.monthKey) {
+            label = formatMonth(g.monthKey);
         }
 
-        let div = document.createElement("div");
-        div.className = "income-card";
+        // Responsive: render table on narrow screens
+        const isMobile = window.innerWidth && window.innerWidth <= 640;
+        if (isMobile) {
+            // create table if not exists
+            let table = container.querySelector('table.budgets-table');
+            if (!table) {
+                table = document.createElement('table');
+                table.className = 'budgets-table';
+                table.style.width = '100%';
+                table.style.borderCollapse = 'collapse';
+                table.innerHTML = `
+                    <thead>
+                        <tr style="background:#f0f0f0; text-align:left;">
+                            <th style="padding:8px;">Name</th>
+                            <th style="padding:8px;">Period</th>
+                            <th style="padding:8px; text-align:right;">Allocated</th>
+                            <th style="padding:8px; text-align:right;">Used</th>
+                            <th style="padding:8px; text-align:right;">Remaining</th>
+                        </tr>
+                    </thead>
+                    <tbody></tbody>
+                `;
+                container.appendChild(table);
+            }
 
-        div.innerHTML = `
-        <div class="budget-card">
+            const tbody = table.querySelector('tbody');
+            const row = document.createElement('tr');
+            row.innerHTML = `
+                <td style="padding:8px; border-bottom:1px solid #eee;">${name}</td>
+                <td style="padding:8px; border-bottom:1px solid #eee;">${label}</td>
+                <td style="padding:8px; border-bottom:1px solid #eee; text-align:right;">${formatCurrency(g.totalAllocated)}</td>
+                <td style="padding:8px; border-bottom:1px solid #eee; text-align:right;">${formatCurrency(used)}</td>
+                <td style="padding:8px; border-bottom:1px solid #eee; text-align:right;">${formatCurrency(remaining)}</td>
+            `;
+            row.onclick = () => openBudgetDetails(g);
+            tbody.appendChild(row);
+        } else {
+            let div = document.createElement("div");
+            div.className = "income-card";
 
-            <div class="budget-left">
-                <div class="budget-title">${name}</div>
-                <div class="budget-sub">${label}</div>
-            </div>
+            div.innerHTML = `
+            <div class="budget-card">
 
-            <div class="budget-right">
-                <div class="budget-amount">${formatCurrency(g.totalAllocated)}</div>
-                <div class="budget-status ${remaining <= 0 ? "exhausted" : "active"}">
-                    ${remaining <= 0 ? "Exhausted" : `${formatCurrency(remaining)} left`}
+                <div class="budget-left">
+                    <div class="budget-title">${name}</div>
+                    <div class="budget-sub">${label}</div>
                 </div>
+
+                <div class="budget-right">
+                    <div class="budget-amount">${formatCurrency(g.totalAllocated)}</div>
+                    <div class="budget-status ${remaining <= 0 ? "exhausted" : "active"}">
+                        ${remaining <= 0 ? "Exhausted" : `${formatCurrency(remaining)} left`}
+                    </div>
+                </div>
+
             </div>
+            `;
 
-        </div>
-        `;
+            div.style.cursor = "pointer";
+            div.onclick = () => openBudgetDetails(g);
 
-        div.style.cursor = "pointer";
-        div.onclick = () => openBudgetDetails(g);
-
-        container.appendChild(div);
+            container.appendChild(div);
+        }
     });
 }
 
 function openBudgetDetails(group) {
     let budgets = getBudgets();
-    let expenses = JSON.parse(localStorage.getItem("expenses")) || [];
+    let expenses = filterByActivePeriod(getExpenses());
     let savings = JSON.parse(localStorage.getItem("savingsTransactions")) || [];
 
     let container = document.getElementById("budgetDetailsContainer");
@@ -3110,50 +4690,43 @@ function openBudgetDetails(group) {
 
     let related = [];
 
-    // 🔥 Filter by period
-    if (group.periodKey) {
-
-        let [start, end] = group.periodKey.split("_to_");
-
-        let s = new Date(start).getTime();
-        let en = new Date(end).getTime();
-
-        let relatedBudgetIds = budgets
-            .filter(b =>
-                b.sourceId === group.sourceId &&
-                b.periodKey === group.periodKey
+    let relatedBudgetIds = budgets
+        .filter(b =>
+            b.sourceId === group.sourceId && (
+                (group.periodKey && b.periodKey === group.periodKey) ||
+                (!group.periodKey && b.monthKey === group.monthKey)
             )
-            .map(b => b.budgetId);
+        )
+        .map(b => b.budgetId);
 
-        // related: any expense that references these budgets via allocationTrail or legacy budgetId
-        related = expenses.filter(e => {
-            // skip child split rows
-            if (e && e.splitId && e.isSplit === true) return false;
-
-            if (Array.isArray(e.allocationTrail) && e.allocationTrail.length) {
-                return e.allocationTrail.some(a => relatedBudgetIds.includes(a.budgetId));
-            }
-
-            return relatedBudgetIds.includes(e.budgetId);
-        });
-    }
-
-    // compute used/credited considering allocationTrail
-    let used = 0;
-    let credited = 0;
-
-    related.forEach(e => {
+    related = expenses.filter(e => {
         if (Array.isArray(e.allocationTrail) && e.allocationTrail.length) {
-            e.allocationTrail.forEach(a => {
-                if (relatedBudgetIds.includes(a.budgetId)) {
-                    if (e.type === 'expense' || e.type === 'loss') used += Number(a.amount) || 0;
-                    else if (e.type === 'recovery') used -= Number(a.amount) || 0;
-                    else if (e.type === 'income') credited += Number(a.amount) || 0;
-                }
-            });
-        } else {
-            if (e.amount < 0) used += Math.abs(e.amount);
-            if (e.amount > 0) credited += e.amount;
+            return e.allocationTrail.some(a => relatedBudgetIds.includes(a.budgetId));
+        }
+        return relatedBudgetIds.includes(e.budgetId);
+    });
+
+    let used = relatedBudgetIds.reduce((sum, budgetId) => {
+        return sum + getNetSpentForBudget(budgetId, related);
+    }, 0);
+    used = Math.max(0, used);
+
+    let credited = 0;
+    related.forEach(e => {
+        let contrib = 0;
+
+        if (Array.isArray(e.allocationTrail) && e.allocationTrail.length) {
+            contrib = e.allocationTrail
+                .filter(a => relatedBudgetIds.includes(a.budgetId))
+                .reduce((s, a) => s + Math.abs(Number(a.amount) || 0), 0);
+        } else if (relatedBudgetIds.includes(e.budgetId)) {
+            contrib = Math.abs(Number(e.amount) || 0);
+        }
+
+        if (!contrib) return;
+
+        if (e.type === "recovery" || e.type === "refund") {
+            credited += contrib;
         }
     });
 
@@ -3165,6 +4738,8 @@ function openBudgetDetails(group) {
     if (group.periodKey) {
         let [start, end] = group.periodKey.split("_to_");
         label = `${formatDateShort(start)} → ${formatDateShort(end)}`;
+    } else if (group.monthKey) {
+        label = formatMonth(group.monthKey);
     }
 
     let entriesHtml = "";
@@ -3279,9 +4854,11 @@ function getDailyLimit() {
     // =========================
     let filteredExpenses = filterByActivePeriod(expenses);
 
-    let spent = filteredExpenses
-        .filter(e => e.amount < 0)
-        .reduce((sum, e) => sum + Math.abs(e.amount), 0);
+    let spent = filteredBudgets.reduce((sum, b) => {
+        return sum + getNetSpentForBudget(b.budgetId, filteredExpenses);
+    }, 0);
+
+    spent = Math.max(0, spent);
 
     // =========================
     // 💰 REMAINING
@@ -3528,15 +5105,19 @@ function getDailyLimit() {
 
 let chart;
 function loadGraph(type = "day", data = null, customRange = null) {
+    const expenses = data || getExpenses();
+    const dataset = groupData(expenses, type, null, customRange);
+    const filtered = filterDataByType(type, expenses, customRange);
+
+    updateGraphSummary(type, dataset, filtered, customRange);
 
     const ctx = document.getElementById("myChart");
-    if (!ctx || !window.Chart) return;
+    if (!ctx || !window.Chart) {
+        renderCategoryBreakdown(groupByCategory(filtered));
+        return;
+    }
 
     if (chart) chart.destroy();
-
-    const expenses = data || getExpenses();
-
-    const dataset = groupData(expenses, type, null, customRange);
 
     const chartData = prepareChartData(dataset);
     const datasets = createDatasets(chartData, dataset);
@@ -3550,8 +5131,102 @@ function loadGraph(type = "day", data = null, customRange = null) {
         options: getChartOptions(type, expenses, dataset, customRange)
     });
 
-    const filtered = filterDataByType(type, expenses, customRange);
     renderCategoryBreakdown(groupByCategory(filtered));
+}
+
+function calculateGraphAverageExpense(type, dataset, customRange = null) {
+    return calculateAverageSpendingByType(type, dataset, customRange);
+}
+
+function calculateAverageSpendingByType(type, data, customRange = null) {
+    const rows = Array.isArray(data) ? data : [];
+    if (!rows.length) return 0;
+
+    const getDateKey = value => {
+        const d = new Date(value);
+        return [
+            d.getFullYear(),
+            String(d.getMonth() + 1).padStart(2, "0"),
+            String(d.getDate()).padStart(2, "0")
+        ].join("-");
+    };
+
+    const totalExpense = rows.reduce((sum, row) => {
+        if (row && typeof row === "object" && "exp" in row) {
+            return sum + Math.abs(Number(row.exp || 0));
+        }
+        return sum + (Number(row.amount || 0) < 0 ? Math.abs(Number(row.amount || 0)) : 0);
+    }, 0);
+
+    if (type === "custom" && customRange && customRange.start && customRange.end) {
+        const start = new Date(customRange.start);
+        const end = new Date(customRange.end);
+        start.setHours(0, 0, 0, 0);
+        end.setHours(0, 0, 0, 0);
+        const customDays = Math.max(1, Math.floor((end - start) / (1000 * 60 * 60 * 24)) + 1);
+        return totalExpense / customDays;
+    }
+
+    if (type === "day") {
+        const dayUnits = new Set(rows.map(r => getDateKey(r.date || Date.now()))).size || 1;
+        return totalExpense / dayUnits;
+    }
+
+    if (type === "week") {
+        const weekUnits = new Set(rows.map(r => {
+            const d = new Date(r.date || Date.now());
+            const start = new Date(d);
+            start.setDate(d.getDate() - d.getDay());
+            start.setHours(0, 0, 0, 0);
+            return getDateKey(start);
+        })).size || 1;
+        return totalExpense / weekUnits;
+    }
+
+    if (type === "month") {
+        const monthUnits = new Set(rows.map(r => {
+            const d = new Date(r.date || Date.now());
+            return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+        })).size || 1;
+        return totalExpense / monthUnits;
+    }
+
+    return totalExpense / Math.max(1, rows.length);
+}
+
+function updateGraphSummary(type, dataset, filtered, customRange = null) {
+    const summaryEl = document.getElementById("graphDate");
+    if (!summaryEl) return;
+
+    const rows = Array.isArray(dataset) ? dataset : [];
+    const entries = Array.isArray(filtered) ? filtered : [];
+
+    const totalExpense = rows.reduce((sum, row) => {
+        return sum + Math.abs(Number(row && row.exp ? row.exp : 0));
+    }, 0);
+    const totalIncome = rows.reduce((sum, row) => {
+        return sum + Number(row && row.inc ? row.inc : 0);
+    }, 0);
+    const averageExpense = calculateAverageSpendingByType(type, entries, customRange);
+
+    let scopeLabel = "Selected";
+    if (type === "day") scopeLabel = "Today";
+    else if (type === "week") scopeLabel = "This Week";
+    else if (type === "month") scopeLabel = "This Period";
+    else if (type === "custom") scopeLabel = "Custom Range";
+
+    let unitLabel = "/unit";
+    if (type === "day" || type === "custom") unitLabel = "/day";
+    else if (type === "week") unitLabel = "/week";
+    else if (type === "month") unitLabel = "/month";
+
+    summaryEl.innerText = [
+        scopeLabel,
+        `Entries: ${entries.length}`,
+        `Spent: ${formatCurrency(totalExpense)}`,
+        `Income: ${formatCurrency(totalIncome)}`,
+        `Avg Spend${unitLabel}: ${formatCurrency(averageExpense)}`
+    ].join(" | ");
 }
 
 function prepareChartData(dataset) {
@@ -3620,7 +5295,6 @@ function createDatasets(data, dataset) {
         }
     ];
 }
-
 function getChartOptions(type, expenses, dataset, customRange) {
 
     return {
@@ -3745,6 +5419,14 @@ function filterDataByType(
     type =
         (type || "month").toLowerCase();
 
+    if (type === "all") {
+        return Array.isArray(expenses) ? expenses.slice() : [];
+    }
+
+    if (type === "today") {
+        type = "day";
+    }
+
     let start;
     let end;
 
@@ -3846,6 +5528,10 @@ function filterDataByType(
     // =========================
     // 🧠 FILTER
     // =========================
+    if (!(start instanceof Date) || !(end instanceof Date)) {
+        return Array.isArray(expenses) ? expenses.slice() : [];
+    }
+
     return expenses.filter(e => {
 
         let d = new Date(e.date);
@@ -3911,36 +5597,16 @@ function filterDataByType(
 // =========================
 // Converts list → category totals
 function groupByCategory(data) {
-    // Exclude parent split container rows from aggregation
-    data = Array.isArray(data) ? data.filter(e => !isParentSplitContainer(e)) : [];
-
     let map = {};
 
     data.forEach(e => {
-        // Determine category for grouping. For recoveries, prefer original's category.
-        let cat = e.category || "Other";
+        if (e.amount < 0) {
+            let cat = e.category || "Other";
 
-        if (e.type === "recovery" && e.linkedTransactionId) {
-            let orig = getExpenses().find(o => String(o.id) === String(e.linkedTransactionId));
-            if (orig && orig.category) cat = orig.category;
+            if (!map[cat]) map[cat] = 0;
+
+            map[cat] += Math.abs(e.amount);
         }
-
-        if (!map[cat]) map[cat] = 0;
-
-        // Expense / Loss => increases spending
-        if (e.type === "expense" || e.type === "loss") {
-            map[cat] += Math.abs(Number(e.amount) || 0);
-        }
-
-        // Recovery => reduces spending (restores)
-        else if (e.type === "recovery") {
-            map[cat] -= Math.abs(Number(e.amount) || 0);
-        }
-    });
-
-    // prevent negatives
-    Object.keys(map).forEach(k => {
-        map[k] = Math.max(0, map[k]);
     });
 
     return map;
@@ -3963,7 +5629,7 @@ function renderCategoryBreakdown(map) {
         return;
     }
 
-    let entries = Object.entries(map || {});
+    let entries = Object.entries(map);
 
     if (!entries.length) {
         container.innerHTML = "<p>No data</p>";
@@ -3977,12 +5643,9 @@ function renderCategoryBreakdown(map) {
         div.style.justifyContent = "space-between";
         div.style.padding = "6px 0";
 
-        // ensure non-negative display
-        let amount = Math.max(0, Number(amt) || 0);
-
         div.innerHTML = `
             <span>${cat}</span>
-            <strong>${formatCurrency(amount)}</strong>
+            <strong>${formatCurrency(amt)}</strong>
         `;
 
         container.appendChild(div);
@@ -3990,10 +5653,6 @@ function renderCategoryBreakdown(map) {
 }
 
 function groupData(expenses, type, now, customRange = null) {
-
-    // Exclude parent split container rows from aggregation
-    let expensesAll = Array.isArray(expenses) ? expenses : [];
-    expenses = expensesAll.filter(e => !isParentSplitContainer(e));
 
     now = new Date();
 
@@ -4038,13 +5697,12 @@ function groupData(expenses, type, now, customRange = null) {
             let hour = d.getHours();
 
             if (e.amount < 0) {
+
                 map[hour].exp += Math.abs(e.amount);
+
             } else {
-                if (e.type === "recovery") {
-                    map[hour].exp -= Math.abs(e.amount);
-                } else {
-                    map[hour].inc += e.amount;
-                }
+
+                map[hour].inc += e.amount;
             }
         });
 
@@ -4232,41 +5890,26 @@ function groupData(expenses, type, now, customRange = null) {
 
         }
 
+        // INCOME
         else {
 
-            if (e.type === "recovery") {
-
-                map[key].exp -= Math.abs(e.amount);
-
-            } else {
-
-                map[key].inc += e.amount;
-            }
+            map[key].inc += e.amount;
         }
     });
 
-    // // =========================
-    // // 📉 CUMULATIVE BUDGET LINE
-    // // =========================
-    // let remainingBudget =
-    //     getTotalBudget();
-
-    // Object.values(map).forEach(day => {
-
-    //     day.budget =
-    //         remainingBudget;
-
-    //     remainingBudget -=
-    //         day.exp;
-    // });
     // =========================
-    // 📏 FIXED BUDGET LINE
+    // 📉 CUMULATIVE BUDGET LINE
     // =========================
-    let fixedBudget = getDailyLimit();
+    let remainingBudget =
+        getTotalBudget();
 
     Object.values(map).forEach(day => {
 
-        day.budget = fixedBudget;
+        day.budget =
+            remainingBudget;
+
+        remainingBudget -=
+            day.exp;
     });
 
     return Object.values(map);
@@ -4289,71 +5932,6 @@ function groupData(expenses, type, now, customRange = null) {
 //     return map;
 // }
 
-function loadRecoverableTransactions() {
-
-    let select =
-        document.getElementById("linkedTransaction");
-
-    if (!select) return;
-
-    let expenses = getExpenses();
-
-    select.innerHTML =
-        `<option value="">
-        Select linked transaction
-    </option>`;
-
-    expenses
-        .filter(e => e.type === "expense")
-        .filter(e => getRemainingAmount(e.id) > 0)
-        .forEach(e => {
-
-            let option =
-                document.createElement("option");
-
-            option.value = e.id;
-
-            let remaining =
-                getRemainingAmount(e.id);
-
-            option.textContent =
-                `${e.purpose || e.category}
-(${formatCurrency(remaining)} left)`;
-
-            select.appendChild(option);
-        });
-}
-
-function getNetLoss(id) {
-
-    let expenses =
-        getExpenses();
-
-    let original =
-        expenses.find(
-            e => e.id === id
-        );
-
-    if (!original)
-        return 0;
-
-    let recovered =
-        expenses
-            .filter(e =>
-                e.linkedTransactionId === id &&
-                e.type === "recovery"
-            )
-            .reduce(
-                (sum, e) =>
-                    sum + e.amount,
-                0
-            );
-
-    return Math.max(
-        0,
-        Math.abs(original.amount) - recovered
-    );
-}
 
 function getLoanSummary() {
     let expenses = getExpenses();
@@ -4374,7 +5952,7 @@ function getLoanSummary() {
             loans[e.entity].given += Math.abs(e.amount);
         }
 
-        if (e.type === "recovery") {
+        if (e.amount > 0 && e.category === "Recovery") {
             loans[e.entity].received += e.amount;
         }
     });
@@ -4561,8 +6139,7 @@ function applyHex() {
 function updateProgressBar() {
 
     let budgets = getBudgets();
-    let expensesAll = getExpenses();
-    let expenses = expensesAll.filter(e => !isParentSplitContainer(e));
+    let expenses = getExpenses();
 
     let filteredBudgets = filterBudgetsByActivePeriod(budgets);
 
@@ -4571,21 +6148,11 @@ function updateProgressBar() {
 
     let filtered = filterByActivePeriod(expenses);
 
-    let totalSpent = filtered
-        .reduce((sum, e) => {
-            if (e.amount < 0) {
-                return sum + Math.abs(e.amount);
-            }
+    let totalSpent = filteredBudgets.reduce((sum, b) => {
+        return sum + getNetSpentForBudget(b.budgetId, filtered);
+    }, 0);
 
-            if (e.type === "recovery") {
-                return sum - Math.abs(e.amount);
-            }
-
-            return sum;
-        }, 0);
-
-    totalSpent =
-        Math.max(0, totalSpent);
+    totalSpent = Math.max(0, totalSpent);
 
     let percent = totalBudget
         ? (totalSpent / totalBudget) * 100
@@ -4626,224 +6193,6 @@ function injectGlobalFooter() {
     `;
 
     document.querySelector(".app")?.appendChild(footer);
-}
-
-// =========================
-// 🔬 In-App Financial Test Runner
-// =========================
-// Helpers: backup/restore, assertions, test data creators
-const __FT_snapshot = { data: null };
-
-function backupStorage() {
-    const snap = {};
-    for (let i = 0; i < localStorage.length; i++) {
-        const k = localStorage.key(i);
-        snap[k] = localStorage.getItem(k);
-    }
-    __FT_snapshot.data = snap;
-}
-
-function restoreStorage() {
-    if (!__FT_snapshot.data) return;
-    localStorage.clear();
-    Object.keys(__FT_snapshot.data).forEach(k => {
-        localStorage.setItem(k, __FT_snapshot.data[k]);
-    });
-}
-
-function assertEqual(actual, expected) {
-    return { passed: actual === expected, expected, actual };
-}
-
-function assertTrue(cond, expectedDesc) {
-    return { passed: !!cond, expected: expectedDesc || true, actual: !!cond };
-}
-
-function createTestPeriod(startDate, endDate) {
-    const period = {
-        id: `tp_${Date.now()}`,
-        start: startDate,
-        end: endDate,
-        status: "active",
-        createdAt: new Date().toISOString()
-    };
-    localStorage.setItem("bp", JSON.stringify([period]));
-    return period;
-}
-
-function createTestBudget({ sourceId = "src_test", entity = "Test", amount = 1000, date = new Date().toISOString() } = {}) {
-    // use createOrUpdateBudget to let module generate unique id
-    const periodKey = getActivePeriodKey ? getActivePeriodKey() : null;
-
-    const fallbackMonth = date.slice(0, 7);
-
-    const legacyId = `budget_${periodKey || fallbackMonth}_${sourceId}`;
-
-    createOrUpdateBudget(legacyId, {
-        amount,
-        sourceId,
-        entity,
-        note: "test",
-        date,
-        monthKey: fallbackMonth
-    });
-
-    // find created budget by sourceId + periodKey
-    const budgets = getBudgets();
-    const found = budgets.find(b => b.sourceId === sourceId && (b.periodKey === periodKey || b.monthKey === fallbackMonth));
-    return found || null;
-}
-
-function createTestExpense({ amount = 100, type = 'expense', category = 'Test', date = new Date().toISOString(), allocationTrail = null, budgetId = null } = {}) {
-    const entry = addExpense({ amount: Math.abs(amount), type, category, date, allocationTrail, budgetId });
-    return entry;
-}
-
-function createTestRecovery({ amount = 10, linkedTransactionId = null, allocationTrail = null, date = new Date().toISOString() } = {}) {
-    const entry = addExpense({ amount: Math.abs(amount), type: 'recovery', date, linkedTransactionId, allocationTrail });
-    return entry;
-}
-
-// Run full suite
-function runFinancialTests() {
-    backupStorage();
-
-    const results = [];
-
-    try {
-        // Setup test period
-        const now = new Date();
-        const start = new Date(now);
-        start.setDate(now.getDate() - 5);
-        const end = new Date(now);
-        end.setDate(now.getDate() + 5);
-
-        createTestPeriod(start.toISOString(), end.toISOString());
-
-        // Clear core tables for isolated tests
-        localStorage.setItem('expenses', JSON.stringify([]));
-        localStorage.setItem('budgets', JSON.stringify([]));
-        localStorage.setItem('savingsTransactions', JSON.stringify([]));
-        localStorage.setItem('categories', JSON.stringify(['Test']));
-
-        // 1. Savings income test
-        const inc = createTestExpense({ amount: 1000, type: 'income' });
-        const totalIncome = getExpenses().filter(e => e.type === 'income').reduce((s, e) => s + Math.abs(e.amount), 0);
-        results.push({ name: 'Savings income test', ...assertEqual(totalIncome, Math.abs(inc.amount)) });
-
-        // 2. Budget allocation test
-        const b1 = createTestBudget({ sourceId: 'srcA', amount: 100 });
-        const exp1 = createTestExpense({ amount: 50, type: 'expense', budgetId: b1 ? b1.budgetId : null });
-        const bal1 = getBudgetBalance(b1.budgetId);
-        results.push({ name: 'Budget allocation test', ...assertEqual(bal1, (b1.totalAllocated || b1.amount) - Math.abs(exp1.amount)) });
-
-        // 3. Multi-budget split test
-        const bA = createTestBudget({ sourceId: 'A', amount: 16 });
-        const bB = createTestBudget({ sourceId: 'B', amount: 1000 });
-        const splitExpense = createTestExpense({ amount: 18, type: 'expense', allocationTrail: [{ budgetId: bA.budgetId, amount: 16 }, { budgetId: bB.budgetId, amount: 2 }] });
-        const balA = getBudgetBalance(bA.budgetId);
-        const balB = getBudgetBalance(bB.budgetId);
-        results.push({ name: 'Multi-budget split test - A', ...assertEqual(balA, (bA.totalAllocated || bA.amount) - 16) });
-        results.push({ name: 'Multi-budget split test - B', ...assertEqual(balB, (bB.totalAllocated || bB.amount) - 2) });
-
-        // 4. Recovery restoration test
-        const orig = createTestExpense({ amount: 500, type: 'expense', allocationTrail: [{ budgetId: bB.budgetId, amount: 500 }] });
-        const rec = createTestRecovery({ amount: 230, linkedTransactionId: orig.id, allocationTrail: [{ budgetId: bB.budgetId, amount: 230 }] });
-        const remaining = getRemainingAmount(orig.id);
-        results.push({ name: 'Recovery restoration test', ...assertEqual(remaining, 270) });
-
-        // 5. Over recovery prevention test
-        const over = createTestRecovery({ amount: 5000, linkedTransactionId: orig.id });
-        const remAfter = getRemainingAmount(orig.id);
-        results.push({ name: 'Over recovery prevention test', ...assertEqual(remAfter, 0) });
-
-        // 6. Period isolation test
-        // create expense outside period
-        const outsideDate = new Date(); outsideDate.setMonth(outsideDate.getMonth() - 2);
-        const outside = createTestExpense({ amount: 20, type: 'expense', date: outsideDate.toISOString() });
-        const filtered = filterByActivePeriod(getExpenses());
-        const includesOutside = filtered.some(e => String(e.id) === String(outside.id));
-        results.push({ name: 'Period isolation test', ...assertEqual(includesOutside, false) });
-
-        // 7. Budget balance test
-        const bb = createTestBudget({ sourceId: 'BB', amount: 100 });
-        const e1 = createTestExpense({ amount: 40, type: 'expense', allocationTrail: [{ budgetId: bb.budgetId, amount: 40 }] });
-        const rec2 = createTestRecovery({ amount: 10, linkedTransactionId: e1.id, allocationTrail: [{ budgetId: bb.budgetId, amount: 10 }] });
-        const balbb = getBudgetBalance(bb.budgetId);
-        results.push({ name: 'Budget balance test', ...assertEqual(balbb, (bb.totalAllocated || bb.amount) - (40 - 10)) });
-
-        // 8. Graph calculation test (groupData)
-        const gdata = groupData(getExpenses(), 'day');
-        results.push({ name: 'Graph calculation test', ...assertTrue(Array.isArray(gdata), 'groupData returns array') });
-
-        // 9. Category breakdown test
-        const catMap = groupByCategory(getExpenses());
-        results.push({ name: 'Category breakdown test', ...assertTrue(typeof catMap === 'object', 'groupByCategory returns object') });
-
-        // 10. Delete protection test
-        const expToDelete = createTestExpense({ amount: 60, type: 'expense' });
-        const recoveryLinked = createTestRecovery({ amount: 10, linkedTransactionId: expToDelete.id });
-        // attempt delete
-        deleteExpenseUI(expToDelete.id);
-        const stillExists = getExpenses().some(e => String(e.id) === String(expToDelete.id));
-        results.push({ name: 'Delete protection test', ...assertEqual(stillExists, true) });
-
-        // 11. Migration compatibility test
-        // create legacy-like entry (no type)
-        const legacy = { id: 'leg_' + Date.now(), amount: -123, date: new Date().toISOString() };
-        const raw = getExpenses(); raw.push(legacy); localStorage.setItem('expenses', JSON.stringify(raw));
-        const migrated = getExpenses().find(e => e.id === legacy.id);
-        results.push({ name: 'Migration compatibility test', ...assertTrue(migrated && migrated.type === 'expense', 'legacy entry normalized to expense') });
-
-        // 12. allocationTrail integrity test
-        const atExp = createTestExpense({ amount: 77, allocationTrail: [{ budgetId: bb.budgetId, amount: 77 }] });
-        const fetched = getExpenses().find(e => String(e.id) === String(atExp.id));
-        results.push({ name: 'allocationTrail integrity test', ...assertTrue(Array.isArray(fetched.allocationTrail) && fetched.allocationTrail.length === 1, 'allocationTrail preserved') });
-
-        // 13. Dashboard totals test
-        const totalBudget = getTotalBudget();
-        results.push({ name: 'Dashboard totals test', ...assertTrue(typeof totalBudget === 'number', 'getTotalBudget returns number') });
-
-        // 14. Progress bar calculation test
-        const budgetsNow = getBudgets();
-        const expensesNow = getExpenses();
-        const filteredBudgets = filterBudgetsByActivePeriod(budgetsNow);
-        const tb = filteredBudgets.reduce((s, b) => s + (b.totalAllocated || 0), 0);
-        const spentNow = filterByActivePeriod(expensesNow).reduce((s, e) => s + (e.amount < 0 ? Math.abs(e.amount) : (e.type === 'recovery' ? -Math.abs(e.amount) : 0)), 0);
-        const expectedPercent = tb ? Math.min(100, (Math.max(0, spentNow) / tb) * 100) : 0;
-        results.push({ name: 'Progress bar calculation test', ...assertTrue(typeof expectedPercent === 'number', 'percent computed') });
-
-        // 15. Recovery reduction test
-        const oExp = createTestExpense({ amount: 200, type: 'expense' });
-        createTestRecovery({ amount: 50, linkedTransactionId: oExp.id });
-        const rem3 = getRemainingAmount(oExp.id);
-        results.push({ name: 'Recovery reduction test', ...assertEqual(rem3, 150) });
-
-    } catch (err) {
-        console.error('Tests error', err);
-        results.push({ name: 'Test runner internal error', passed: false, expected: 'no error', actual: String(err) });
-    } finally {
-        // Output results
-        console.group('Financial Engine Tests');
-        results.forEach(r => {
-            if (r.passed) console.log('%c✅ PASS', 'color:green;font-weight:bold;', r.name, r);
-            else console.warn('%c❌ FAIL', 'color:red;font-weight:bold;', r.name, r);
-        });
-        console.groupEnd();
-
-        // restore storage and refresh UI
-        restoreStorage();
-        try {
-            loadHistory();
-            loadBudgetOptions();
-            loadDashboard();
-            loadGraph();
-            renderBudgetEntries();
-        } catch (e) {
-        }
-
-        return results;
-    }
 }
 
 // // =========================
@@ -5052,106 +6401,29 @@ function runFinancialTests() {
 // }
 function handleFilter(type) {
 
-    // =========================
-    // 🧠 FILTER STATE
-    // =========================
-    currentHistoryFilter = {
-
-        type: type,
-
-        label: "All Entries"
-    };
-
-    // =========================
-    // 📅 CUSTOM PERIOD
-    // =========================
     if (type === "period") {
-
-        currentHistoryFilter = {
-
-            type: "period",
-
-            label: "Custom Period"
-        };
 
         openPeriod();
 
         return;
     }
 
-    // =========================
-    // 🏷 FILTER LABELS
-    // =========================
-    switch (type) {
-
-        case "today":
-
-            currentHistoryFilter.label =
-                "Today";
-
-            break;
-
-        case "week":
-
-            currentHistoryFilter.label =
-                "This Week";
-
-            break;
-
-        case "month":
-
-            currentHistoryFilter.label =
-                "This Month";
-
-            break;
-
-        case "all":
-
-        default:
-
-            currentHistoryFilter.label =
-                "All Entries";
-
-            break;
-    }
-
-    // =========================
-    // 📦 GET EXPENSES
-    // =========================
     let expenses =
         getExpenses();
 
-    // =========================
-    // 🔍 FILTER DATA
-    // =========================
     let filtered =
         filterDataByType(
             type,
             expenses
         );
 
-    // =========================
-    // 📜 LOAD HISTORY
-    // =========================
     loadHistory(filtered);
 
-    // =========================
-    // 📊 LOAD GRAPH
-    // =========================
-    if (
-        typeof loadGraph ===
-        "function"
-    ) {
+    if (typeof loadGraph === "function") {
 
-        loadGraph(
-            type,
-            filtered
-        );
+        loadGraph(type, filtered);
     }
 
-    // =========================
-    // 🧩 CATEGORY BREAKDOWN
-    // =========================
     if (
         typeof renderCategoryBreakdown ===
         "function"
@@ -5296,6 +6568,12 @@ function updateCustomPeriodLabel(from, to) {
 
 function exportDataAsExcel() {
 
+    if (!window.XLSX || !XLSX.utils || !XLSX.writeFile) {
+        showToast("Excel export unavailable offline: XLSX library not loaded", "warning");
+        exportDataAsJSON();
+        return;
+    }
+
     let data = {
         expenses: getExpenses() || [],
         budgets: getBudgets() || [],
@@ -5431,18 +6709,10 @@ function toggleCategory() {
 }
 
 function formatCurrencyPDF(amount) {
-    try {
-        if (typeof formatCurrency === 'function') {
-            // sanitize central formatter output for PDF-compatible symbols
-            return String(formatCurrency(amount)).replace(/₹/g, 'Rs').replace(/€/g, 'EUR').replace(/£/g, 'GBP');
-        }
-    } catch (e) { }
-
-    // Safe fallback: use currency code and conversion
     let code = getCurrencyCode();
     let converted = convertFromBase(amount);
-    let symbol = (typeof currencySymbols === 'object' && currencySymbols[code]) ? currencySymbols[code] : code;
-    return String(`${symbol} ${converted.toFixed(2)}`).replace(/₹/g, 'Rs').replace(/€/g, 'EUR').replace(/£/g, 'GBP');
+
+    return `${code}. ${converted.toFixed(2)}`;
 }
 
 
@@ -5453,7 +6723,112 @@ function formatCurrencyPDF(amount) {
 // 🔹 Get active budget period
 function getActiveBudgetPeriod() {
     let periods = JSON.parse(localStorage.getItem("bp")) || [];
-    return periods.find(p => p.status === "active") || null;
+
+    let normalized = normalizeBudgetPeriods(periods);
+
+    if (normalized.changed) {
+        localStorage.setItem("bp", JSON.stringify(normalized.periods));
+    }
+
+    return selectActiveBudgetPeriod(normalized.periods, new Date());
+}
+
+function selectActiveBudgetPeriod(periods, referenceDate = new Date()) {
+    let safe = Array.isArray(periods) ? periods : [];
+
+    let ref = new Date(referenceDate);
+    ref.setHours(0, 0, 0, 0);
+
+    let active = safe
+        .filter(p => p && p.status === "active" && p.start)
+        .map(p => {
+            let start = new Date(p.start);
+            let end = getBudgetPeriodEffectiveEndDate(p, ref);
+            start.setHours(0, 0, 0, 0);
+            end.setHours(0, 0, 0, 0);
+            return { p, start, end };
+        })
+        .filter(x => Number.isFinite(x.start.getTime()) && Number.isFinite(x.end.getTime()));
+
+    if (!active.length) return null;
+
+    let live = active.filter(x => ref >= x.start && ref <= x.end);
+    let pool = live.length ? live : active;
+
+    pool.sort((a, b) => {
+        let s = b.start.getTime() - a.start.getTime();
+        if (s !== 0) return s;
+
+        let ua = new Date((a.p && a.p.updatedAt) || (a.p && a.p.createdAt) || 0).getTime();
+        let ub = new Date((b.p && b.p.updatedAt) || (b.p && b.p.createdAt) || 0).getTime();
+        if (ub !== ua) return ub - ua;
+
+        return String((b.p && b.p.id) || "").localeCompare(String((a.p && a.p.id) || ""));
+    });
+
+    return pool[0].p || null;
+}
+
+function formatPeriodDateKey(date) {
+
+    let d = new Date(date);
+
+    return [
+        d.getFullYear(),
+        String(d.getMonth() + 1).padStart(2, "0"),
+        String(d.getDate()).padStart(2, "0")
+    ].join("-");
+}
+
+function getBudgetPeriodEffectiveEndDate(period, referenceDate = new Date()) {
+
+    let baseEnd = period && period.end
+        ? new Date(period.end)
+        : new Date(referenceDate);
+
+    baseEnd.setHours(0, 0, 0, 0);
+
+    let extraDays = Number(period && period.extraDays ? period.extraDays : 0);
+    if (!Number.isFinite(extraDays)) extraDays = 0;
+    extraDays = Math.max(0, Math.floor(extraDays));
+
+    baseEnd.setDate(baseEnd.getDate() + extraDays);
+    return baseEnd;
+}
+
+function normalizeBudgetPeriods(periods, referenceDate = new Date()) {
+
+    let today = new Date(referenceDate);
+    today.setHours(0, 0, 0, 0);
+
+    let changed = false;
+    let safe = Array.isArray(periods) ? periods : [];
+
+    let normalized = safe.map(item => {
+
+        let p = item && typeof item === "object"
+            ? { ...item }
+            : item;
+
+        if (!p || typeof p !== "object") return p;
+
+        if (p.status === "active") {
+            let effectiveEnd = getBudgetPeriodEffectiveEndDate(p, today);
+
+            if (effectiveEnd < today) {
+                p.status = "closed";
+                p.end = formatPeriodDateKey(effectiveEnd);
+                changed = true;
+            }
+        }
+
+        return p;
+    });
+
+    return {
+        periods: normalized,
+        changed
+    };
 }
 
 // 🔹 Get active period key (GLOBAL SAFE)
@@ -5464,26 +6839,11 @@ function getActivePeriodKey() {
 
     if (!p) return null;
 
-    function safeDate(date) {
-
-        let d = new Date(date);
-
-        return [
-            d.getFullYear(),
-            String(d.getMonth() + 1)
-                .padStart(2, "0"),
-            String(d.getDate())
-                .padStart(2, "0")
-        ].join("-");
-    }
-
     let start =
-        safeDate(p.start);
+        formatPeriodDateKey(p.start);
 
     let end =
-        p.end
-            ? safeDate(p.end)
-            : safeDate(new Date());
+        formatPeriodDateKey(getBudgetPeriodEffectiveEndDate(p, new Date()));
 
     return `${start}_to_${end}`;
 }
@@ -5498,9 +6858,7 @@ function isWithinBudgetPeriod(dateStr) {
 
     let start = new Date(period.start);
 
-    let end = period.end
-        ? new Date(period.end)
-        : new Date();
+    let end = getBudgetPeriodEffectiveEndDate(period, new Date());
 
     d.setHours(0, 0, 0, 0);
     start.setHours(0, 0, 0, 0);
@@ -5649,15 +7007,10 @@ function prepareSplit(amount, budgets) {
         if (remaining <= 0) break;
 
         let expenses = getExpenses();
+        // Calculate net spent for this budget (handles allocationTrail & recoveries)
+        let spent = getNetSpentForBudget(b.budgetId, expenses);
 
-        let spent = expenses
-            .filter(e =>
-                e.budgetId === b.budgetId &&
-                e.amount < 0
-            )
-            .reduce((s, e) => s + Math.abs(e.amount), 0);
-
-        let available = (b.totalAllocated || 0) - spent;// or remaining field
+        let available = (b.totalAllocated || 0) - spent; // or remaining field
         if (available <= 0) continue;
         let use = Math.min(available, remaining);
 
@@ -5673,7 +7026,7 @@ function prepareSplit(amount, budgets) {
     return remaining > 0 ? null : result;
 }
 
-function handleExpenseSave(amount) {
+function handleExpenseSave(amount, attachmentId = null) {
 
     // =========================
     // ✅ VALIDATE
@@ -5765,85 +7118,30 @@ function handleExpenseSave(amount) {
     // ✅ SORT BY AVAILABLE
     // =========================
     budgets.sort((a, b) => {
+        // Use net-spent helper to respect allocationTrail & recoveries
+        let spentA = getNetSpentForBudget(a.budgetId, expenses);
+        let spentB = getNetSpentForBudget(b.budgetId, expenses);
 
-        let spentA = expenses
-            .filter(e =>
-                e.budgetId === a.budgetId &&
-                e.amount < 0
-            )
-            .reduce((s, e) =>
-                s + Math.abs(e.amount), 0);
+        let availableA = (a.totalAllocated || 0) - spentA;
+        let availableB = (b.totalAllocated || 0) - spentB;
 
-        let spentB = expenses
-            .filter(e =>
-                e.budgetId === b.budgetId &&
-                e.amount < 0
-            )
-            .reduce((s, e) =>
-                s + Math.abs(e.amount), 0);
-
-        let availableA =
-            (a.totalAllocated || 0) - spentA;
-
-        let availableB =
-            (b.totalAllocated || 0) - spentB;
-
-        return availableA - availableB;
+        return availableB - availableA;
     });
 
-    // // =========================
-    // // ✅ CHECK SINGLE BUDGET
-    // // =========================
-    // let single = budgets.find(b => {
-
-    //     let spent = expenses
-    //         .filter(e =>
-    //             e.budgetId === b.budgetId &&
-    //             e.amount < 0
-    //         )
-    //         .reduce((s, e) =>
-    //             s + Math.abs(e.amount), 0);
-
-    //     let available =
-    //         (b.totalAllocated || 0) - spent;
-
-    //     return available >= amount;
-    // });
-
-    // // =========================
-    // // ✅ DIRECT SAVE
-    // // =========================
-    // if (single) {
-
-    //     addExpense({
-
-    //         amount: -Math.abs(amount),
-
-    //         budgetId: single.budgetId,
-
-    //         category,
-    //         purpose,
-    //         paymentType,
-    //         date,
-
-    //         type: "expense"
-    //     });
-
-    //     loadDashboard();
-    //     loadHistory();
-    //     loadGraph();
-    //     updateBudgetEfficiency();
-    //     renderBudgetEntries();
-    //     loadBudgetOptions();
-
-    //     showToast("Expense added");
-
-    //     resetForm();
-
-    //     return;
-    // }
     // =========================
-    // ✅ ALWAYS SPLIT PROGRESSIVELY
+    // ✅ CHECK SINGLE BUDGET
+    // =========================
+    let single = budgets.find(b => {
+
+        let spent = getNetSpentForBudget(b.budgetId, expenses);
+
+        let available = (b.totalAllocated || 0) - spent;
+
+        return available >= amount;
+    });
+
+    // =========================
+    // ✅ DIRECT SAVE
     // =========================
     let split =
         prepareSplit(amount, budgets);
@@ -5865,13 +7163,14 @@ function handleExpenseSave(amount) {
         let s = split[0];
 
         addExpense({
-            amount: s.amount, // positive input; addExpense will normalize by type
+            amount: -Math.abs(s.amount), // ensure expenses are stored as negative amounts
             budgetId: s.budget.budgetId,
             allocationTrail: [{ budgetId: s.budget.budgetId, amount: s.amount }],
             category,
             purpose,
             paymentType,
             date,
+            attachmentId: attachmentId || null,
             type: "expense"
         });
 
@@ -5890,14 +7189,9 @@ function handleExpenseSave(amount) {
     }
 
     // =========================
-    // 🔥 OPEN SPLIT MODAL
-    // =========================
-    openSplitModal(split);
-    // =========================
     // ✅ PREPARE SPLIT
     // =========================
-    // let split =
-    //     prepareSplit(amount, budgets);
+    //let split =prepareSplit(amount, budgets);
 
     // =========================
     // ❌ NOT ENOUGH BUDGET
@@ -5920,18 +7214,20 @@ function openSplitModal(split) {
 
     pendingSplit = split;
 
-    let container = document.getElementById("splitDetails");
+    const container = document.getElementById("splitDetails");
+    if (container) {
+        container.innerHTML = `
+            <p>This expense will be allocated as:</p>
+            <ul>
+                ${split.map(s => `
+                    <li>₹${s.amount} from ${s.budget.entity || "Budget"}</li>
+                `).join("")}
+            </ul>
+        `;
+    }
 
-    container.innerHTML = `
-        <p>This expense will be allocated as:</p>
-        <ul>
-            ${split.map(s => `
-                <li>₹${s.amount} from ${s.budget.entity || "Budget"}</li>
-            `).join("")}
-        </ul>
-    `;
-
-    document.getElementById("splitModal").style.display = "flex";
+    const modal = document.getElementById("splitModal");
+    if (modal) modal.style.display = "flex";
 }
 
 function confirmSplit() {
@@ -5961,17 +7257,20 @@ function confirmSplit() {
     pendingSplit.forEach((s, index) => {
 
         addExpense({
-            amount: s.amount,
+            amount: -Math.abs(s.amount),
+
             budgetId: s.budget.budgetId,
-            allocationTrail: [{ budgetId: s.budget.budgetId, amount: s.amount }],
+
             splitId: splitId,
             splitIndex: index + 1,
             isSplit: true,
+
             category,
             purpose,
             paymentType,
             date,
-            type: "expense"
+            type: "expense",
+            attachmentId: attachmentId || null
         });
     });
 
@@ -5995,184 +7294,7 @@ function closeSplitModal() {
 }
 
 function updateBudgetEfficiency() {
-
-    let dailyLimit = getDailyLimit();
-
-    let expenses =
-        filterByActivePeriod(
-            getExpenses()
-        );
-
-    let now = new Date();
-
-    // =========================
-    // 📅 TODAY RANGE
-    // =========================
-    let todayStart = new Date(now);
-
-    todayStart.setHours(0, 0, 0, 0);
-
-    let todayEnd = new Date(now);
-
-    todayEnd.setHours(23, 59, 59, 999);
-
-    // =========================
-    // 💰 TODAY SPENT
-    // =========================
-    // compute today's spent using types and allocationTrail
-    let todaySpent = 0;
-
-    expenses.forEach(e => {
-        let d = new Date(e.date);
-        if (d < todayStart || d > todayEnd) return;
-
-        if (e.type === "expense" || e.type === "loss") {
-            if (Array.isArray(e.allocationTrail) && e.allocationTrail.length) {
-                todaySpent += e.allocationTrail.reduce((s, a) => s + (Number(a.amount) || 0), 0);
-            } else {
-                todaySpent += Math.abs(Number(e.amount) || 0);
-            }
-        } else if (e.type === "recovery") {
-            if (Array.isArray(e.allocationTrail) && e.allocationTrail.length) {
-                todaySpent -= e.allocationTrail.reduce((s, a) => s + (Number(a.amount) || 0), 0);
-            } else {
-                todaySpent -= Math.abs(Number(e.amount) || 0);
-            }
-        }
-    });
-
-    // =========================
-    // 💎 TODAY EFFICIENCY
-    // =========================
-    let savedToday =
-        Math.max(
-            0,
-            dailyLimit - todaySpent
-        );
-
-    // =========================
-    // 📅 WEEK START
-    // =========================
-    let weekStart = new Date(now);
-
-    weekStart.setDate(
-        now.getDate() - now.getDay()
-    );
-
-    weekStart.setHours(0, 0, 0, 0);
-
-    // =========================
-    // 💎 WEEK EFFICIENCY
-    // =========================
-    let weekSaved = 0;
-
-    let currentDay =
-        new Date(weekStart);
-
-    while (currentDay <= now) {
-
-        let dayStart =
-            new Date(currentDay);
-
-        dayStart.setHours(0, 0, 0, 0);
-
-        let dayEnd =
-            new Date(currentDay);
-
-        dayEnd.setHours(
-            23, 59, 59, 999
-        );
-
-        let spent = expenses
-            .filter(e => {
-
-                if (e.type !== "expense" && e.type !== "loss") return 0;
-
-                let d = new Date(e.date);
-                if (d < dayStart || d > dayEnd) return 0;
-
-                if (Array.isArray(e.allocationTrail) && e.allocationTrail.length) {
-                    return e.allocationTrail.reduce((s, a) => s + (Number(a.amount) || 0), 0);
-                }
-
-                return Math.abs(Number(e.amount) || 0);
-            },
-                0
-            );
-
-        weekSaved +=
-            Math.max(
-                0,
-                dailyLimit - spent
-            );
-
-        currentDay.setDate(
-            currentDay.getDate() + 1
-        );
-    }
-
-    // =========================
-    // 💎 PERIOD EFFICIENCY
-    // =========================
-    let period =
-        getActiveBudgetPeriod();
-
-    let periodSaved = 0;
-
-    if (period) {
-
-        let current =
-            new Date(period.start);
-
-        let end =
-            new Date(period.end);
-
-        while (current <= end) {
-
-            let dayStart =
-                new Date(current);
-
-            dayStart.setHours(
-                0, 0, 0, 0
-            );
-
-            let dayEnd =
-                new Date(current);
-
-            dayEnd.setHours(
-                23, 59, 59, 999
-            );
-
-            let spent = expenses
-                .filter(e => {
-
-                    if (e.amount >= 0)
-                        return false;
-
-                    let d =
-                        new Date(e.date);
-
-                    return d >= dayStart &&
-                        d <= dayEnd;
-
-                })
-                .reduce(
-                    (s, e) =>
-                        s + Math.abs(e.amount),
-                    0
-                );
-
-            periodSaved +=
-                Math.max(
-                    0,
-                    dailyLimit - spent
-                );
-
-            current.setDate(
-                current.getDate() + 1
-            );
-        }
-    }
+    let metrics = computeBudgetEfficiencyMetrics();
 
     // =========================
     // 🎯 UI
@@ -6189,20 +7311,107 @@ function updateBudgetEfficiency() {
 
     setText(
         "savedToday",
-        formatCurrency(savedToday)
+        formatCurrency(metrics.dailyRemaining)
     );
 
     setText(
         "savedWeek",
-        formatCurrency(weekSaved)
+        formatCurrency(metrics.weeklyRemaining)
     );
 
     setText(
         "savedPeriod",
-        formatCurrency(periodSaved)
+        formatCurrency(metrics.monthlyRemaining)
     );
 }
 
+function computeBudgetEfficiencyMetrics(referenceDate = new Date()) {
+    let expenses = filterByActivePeriod(getExpenses());
+    let budgets = filterBudgetsByActivePeriod(getBudgets());
+
+    function getNetSpentForRange(fromDate, toDate) {
+        let subset = expenses.filter(e => {
+            let d = new Date(e.date);
+            return d >= fromDate && d <= toDate;
+        });
+
+        return budgets.reduce((sum, b) => {
+            return sum + getNetSpentForBudget(b.budgetId, subset);
+        }, 0);
+    }
+
+    function getNormalizedPeriodRange() {
+        let active = getActiveBudgetPeriod();
+
+        if (active && active.start) {
+            let start = new Date(active.start);
+            let end = getBudgetPeriodEffectiveEndDate(active, referenceDate);
+            start.setHours(0, 0, 0, 0);
+            end.setHours(23, 59, 59, 999);
+            return { start, end };
+        }
+
+        let now = new Date(referenceDate);
+        let start = new Date(now.getFullYear(), now.getMonth(), 1);
+        let end = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+        start.setHours(0, 0, 0, 0);
+        end.setHours(23, 59, 59, 999);
+        return { start, end };
+    }
+
+    let now = new Date(referenceDate);
+
+    let dayStart = new Date(now);
+    dayStart.setHours(0, 0, 0, 0);
+
+    let dayEnd = new Date(now);
+    dayEnd.setHours(23, 59, 59, 999);
+
+    let weekStart = new Date(now);
+    weekStart.setDate(now.getDate() - now.getDay());
+    weekStart.setHours(0, 0, 0, 0);
+
+    let weekEnd = new Date(weekStart);
+    weekEnd.setDate(weekStart.getDate() + 6);
+    weekEnd.setHours(23, 59, 59, 999);
+
+    let monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+    let monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+    monthStart.setHours(0, 0, 0, 0);
+    monthEnd.setHours(23, 59, 59, 999);
+
+    let periodRange = getNormalizedPeriodRange();
+    let totalBudget = budgets.reduce((s, b) => s + (b.totalAllocated || 0), 0);
+
+    let periodDays = Math.max(1, Math.floor((periodRange.end - periodRange.start) / (1000 * 60 * 60 * 24)) + 1);
+    let periodWeeks = Math.max(1, Math.ceil(periodDays / 7));
+
+    let periodMonths = Math.max(1,
+        (periodRange.end.getFullYear() - periodRange.start.getFullYear()) * 12 +
+        (periodRange.end.getMonth() - periodRange.start.getMonth()) + 1
+    );
+
+    let dailyLimit = totalBudget / periodDays;
+    let weeklyLimit = totalBudget / periodWeeks;
+    let monthlyLimit = totalBudget / periodMonths;
+
+    let todaySpent = getNetSpentForRange(dayStart, dayEnd);
+    let weekSpent = getNetSpentForRange(weekStart, weekEnd);
+    let monthSpent = getNetSpentForRange(monthStart, monthEnd);
+
+    return {
+        totalBudget,
+        dailyLimit,
+        weeklyLimit,
+        monthlyLimit,
+        todaySpent,
+        weekSpent,
+        monthSpent,
+        dailyRemaining: dailyLimit - todaySpent,
+        weeklyRemaining: weeklyLimit - weekSpent,
+        monthlyRemaining: monthlyLimit - monthSpent
+    };
+}
 function normalizeDate(date) {
 
     let d = new Date(date);
@@ -6268,7 +7477,7 @@ function getRemainingAmount(id) {
     let expenses = expensesAll.filter(e => !isParentSplitContainer(e));
 
     let recovered = expenses
-        .filter(e => String(e.linkedTransactionId) === String(id) && e.type === "recovery")
+        .filter(e => String(e.linkedTransactionId) === String(id) && (e.type === "recovery" || e.type === "refund" || e.type === "transfer_back"))
         .reduce((sum, e) => {
             if (Array.isArray(e.allocationTrail) && e.allocationTrail.length) {
                 return sum + e.allocationTrail.reduce((ss, a) => ss + (Number(a.amount) || 0), 0);
@@ -6280,3 +7489,420 @@ function getRemainingAmount(id) {
     return Math.max(0, remaining);
 }
 // Budget Expense Module END script.js
+
+// Detect parent split container entries.
+// Conservative implementation: only treats explicit markers as parent containers.
+function isParentSplitContainer(entry) {
+    if (!entry) return false;
+    // explicit flags preserved from legacy code
+    if (entry.isParent === true) return true;
+    if (entry.isSplitContainer === true) return true;
+    if (entry.type === 'split_parent') return true;
+    return false;
+}
+
+
+
+
+// function exportDataAsJSON() {
+
+//     let data = {
+//         expenses: getExpenses() || [],
+//         budgets: getBudgets() || [],
+//         savings: getSavings() || [],
+//         orders: JSON.parse(localStorage.getItem("orders")) || [],
+
+//         // 🔥 NEW (IMPORTANT)
+//         categories: JSON.parse(localStorage.getItem("categories")) || [],
+//         persons: JSON.parse(localStorage.getItem("persons")) || [],
+//         budgetPeriods: JSON.parse(localStorage.getItem("bp")) || [],
+
+//         settings: {
+//             theme: localStorage.getItem("theme") || "",
+//             currencyCode: localStorage.getItem("currencyCode") || "INR"
+//         },
+
+//         meta: {
+//             exportedAt: new Date().toISOString(),
+//             version: "v2"
+//         }
+//     };
+
+//     try {
+//         let json = JSON.stringify(data, null, 2);
+
+//         let blob = new Blob([json], { type: "application/json" });
+//         let url = URL.createObjectURL(blob);
+
+//         let a = document.createElement("a");
+//         a.href = url;
+//         a.download = `money-tracker-backup-${new Date().toISOString().slice(0, 10)}.json`;
+
+//         document.body.appendChild(a);
+//         a.click();
+
+//         // fallback first
+//         setTimeout(() => {
+//             window.open(url, "_blank");
+//         }, 500);
+
+//         // cleanup later
+//         setTimeout(() => {
+
+//             document.body.removeChild(a);
+
+//             URL.revokeObjectURL(url);
+
+//         }, 3000);
+
+//     } catch (err) {
+//         let json = JSON.stringify(data, null, 2);
+//         prompt("Copy your backup manually:", json);
+//     }
+// }
+
+// // =========================
+// // 🔄 AUTO BACKUP ENGINE
+// // =========================
+
+// function startAutoBackup() {
+
+//     scheduleDailyBackup();
+//     scheduleWeeklyBackup();
+//     scheduleMonthlyBackup();
+// }
+
+// // =========================
+// // DAILY
+// // =========================
+
+// function scheduleDailyBackup() {
+
+//     const DAY_MS =
+//         24 * 60 * 60 * 1000;
+
+//     setInterval(() => {
+
+//         createAutoBackup("daily");
+
+//     }, DAY_MS);
+// }
+
+// // =========================
+// // WEEKLY
+// // =========================
+
+// function scheduleWeeklyBackup() {
+
+//     const WEEK_MS =
+//         7 * 24 * 60 * 60 * 1000;
+
+//     setInterval(() => {
+
+//         createAutoBackup("weekly");
+
+//     }, WEEK_MS);
+// }
+
+// // =========================
+// // MONTHLY
+// // =========================
+
+// function scheduleMonthlyBackup() {
+
+//     const MONTH_MS =
+//         30 * 24 * 60 * 60 * 1000;
+
+//     setInterval(() => {
+
+//         createAutoBackup("monthly");
+
+//     }, MONTH_MS);
+// }
+
+// // =========================
+// // CREATE BACKUP
+// // =========================
+
+// function createAutoBackup(type) {
+
+//     try {
+
+//         const backupData = {
+
+//             createdAt:
+//                 new Date().toISOString(),
+
+//             type,
+
+//             data: getFullAppData()
+//         };
+
+//         localStorage.setItem(
+
+//             `autoBackup_${type}`,
+
+//             JSON.stringify(backupData)
+//         );
+
+//         console.log(
+//             `✅ ${type} backup completed`
+//         );
+
+//     } catch (err) {
+
+//         console.error(
+//             `❌ ${type} backup failed`,
+//             err
+//         );
+//     }
+// }
+
+// =========================
+// 📦 GET FULL APP DATA
+// =========================
+
+function getFullAppData() {
+
+    return {
+
+        expenses:
+            getExpenses() || [],
+
+        budgets:
+            getBudgets() || [],
+
+        savings:
+            getSavings() || [],
+
+        orders:
+            JSON.parse(
+                localStorage.getItem("orders")
+            ) || [],
+
+        categories:
+            JSON.parse(
+                localStorage.getItem("categories")
+            ) || [],
+
+        persons:
+            JSON.parse(
+                localStorage.getItem("persons")
+            ) || [],
+
+        budgetPeriods:
+            JSON.parse(
+                localStorage.getItem("bp")
+            ) || [],
+
+        settings: {
+
+            theme:
+                localStorage.getItem("theme")
+                || "",
+
+            currencyCode:
+                localStorage.getItem("currencyCode")
+                || "INR"
+        },
+
+        meta: {
+
+            exportedAt:
+                new Date().toISOString(),
+
+            version:
+                "v2"
+        }
+    };
+}
+
+// =========================
+// 📅 SAFE FILE DATE
+// =========================
+
+function getSafeDate() {
+
+    return new Date()
+        .toISOString()
+        .replace(/[:.]/g, "-");
+}
+
+// =========================
+// 📤 MANUAL EXPORT
+// =========================
+
+function exportDataAsJSON() {
+
+    try {
+
+        const data =
+            getFullAppData();
+
+        const json =
+            JSON.stringify(
+                data,
+                null,
+                2
+            );
+
+        const blob =
+            new Blob(
+                [json],
+                {
+                    type:
+                        "application/json"
+                }
+            );
+
+        const url =
+            URL.createObjectURL(blob);
+
+        const a =
+            document.createElement("a");
+
+        a.href = url;
+
+        a.download =
+            `money-tracker-backup-${getSafeDate()
+            }.json`;
+
+        document.body.appendChild(a);
+
+        a.click();
+
+        document.body.removeChild(a);
+
+        setTimeout(() => {
+
+            URL.revokeObjectURL(url);
+
+        }, 1000);
+
+        console.log(
+            "✅ Manual export completed"
+        );
+
+    } catch (err) {
+
+        console.error(
+            "❌ Export failed",
+            err
+        );
+    }
+}
+
+// =========================
+// 🔄 AUTO BACKUP ENGINE
+// =========================
+
+function startAutoBackup() {
+
+    checkAndCreateBackup(
+        "daily",
+        1
+    );
+
+    checkAndCreateBackup(
+        "weekly",
+        7
+    );
+
+    checkAndCreateBackup(
+        "monthly",
+        30
+    );
+}
+
+// =========================
+// 🧠 SMART BACKUP CHECK
+// =========================
+
+function checkAndCreateBackup(
+    type,
+    requiredDays
+) {
+
+    try {
+
+        const lastBackup =
+            localStorage.getItem(
+                `lastBackup_${type}`
+            );
+
+        const now =
+            Date.now();
+
+        if (!lastBackup) {
+
+            createAutoBackup(type);
+
+            return;
+        }
+
+        const diffDays =
+            (now - Number(lastBackup))
+            / (1000 * 60 * 60 * 24);
+
+        if (diffDays >= requiredDays) {
+
+            createAutoBackup(type);
+        }
+
+    } catch (err) {
+
+        console.error(
+            `❌ ${type} backup check failed`,
+            err
+        );
+    }
+}
+
+// =========================
+// 💾 CREATE AUTO BACKUP
+// =========================
+
+function createAutoBackup(type) {
+
+    try {
+
+        const backupData = {
+
+            createdAt:
+                new Date()
+                    .toISOString(),
+
+            type,
+
+            data:
+                getFullAppData()
+        };
+
+        localStorage.setItem(
+
+            `autoBackup_${type}`,
+
+            JSON.stringify(
+                backupData
+            )
+        );
+
+        localStorage.setItem(
+
+            `lastBackup_${type}`,
+
+            Date.now().toString()
+        );
+
+        console.log(
+            `✅ ${type} backup completed`
+        );
+
+    } catch (err) {
+
+        console.error(
+            `❌ ${type} backup failed`,
+            err
+        );
+    }
+}
