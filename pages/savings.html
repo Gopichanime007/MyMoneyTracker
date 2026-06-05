@@ -58,19 +58,16 @@
 
         <!-- TYPE -->
         <select id="sType" onchange="handleSavingsTypeChange()">
-          <option value="income">Add Savings</option>
+          <option value="deposit">Deposit</option>
           <option value="withdraw_budget">Move to Budget</option>
           <option value="transfer">Transfer</option>
+          <option value="refund">Refund</option>
         </select>
 
         <!-- BASIC INFO -->
         <input type="number" id="sAmount" placeholder="Amount">
 
         <select id="sEntity"></select>
-        <div id="personWrapper">
-          <label>Person</label>
-          <select id="sPerson"></select>
-        </div>
 
         <input type="text" id="sNote" placeholder="Purpose / Note">
 
@@ -84,14 +81,20 @@
           <select id="sourceSelect"></select>
         </div>
 
-        <!-- ================= BUDGET CONFIG ================= -->
-        <div id="budgetConfig" style="display:none; margin-top:10px;">
-          <label>Budget Period</label>
-          <select id="budgetPeriod" onchange="handleBudgetPeriodChange()">
-            <option value="day">Daily</option>
-            <option value="week">Weekly</option>
-            <option value="month" selected>Monthly</option>
+        <!-- REFUND -->
+        <div id="refundWrapper" style="display:none; margin-top:10px;">
+          <label>Refund Candidate</label>
+          <select id="refundSelect" onchange="handleSavingsRefundResolutionChange()">
+            <option value="">Select Transaction</option>
           </select>
+          <label style="margin-top:8px;display:block;">Resolution Type</label>
+          <select id="sRefundResolutionType" onchange="handleSavingsRefundResolutionChange()">
+            <option value="partial_refund">Partial Refund</option>
+            <option value="complete_refund">Complete Refund</option>
+            <option value="consumed">No Refund / Consumed</option>
+            <option value="cancelled_with_charges">Cancelled With Charges</option>
+          </select>
+          <small id="sRefundInfo" style="display:block;color:#666;margin-top:6px;"></small>
         </div>
 
         <!-- PAYMENT -->

@@ -103,25 +103,58 @@
       <div class="card">
         <h3>Add Expense</h3>
 
-        <select id="entryType">
+        <label for="entryType">Entry Type</label>
+        <select id="entryType" onchange="handleEntryTypeUIChange()">
           <option value="expense">Expense</option>
           <option value="income">Income</option>
+          <option value="transfer">Transfer</option>
+          <option value="refund">Refund</option>
+          <option value="transfer_back">Transfer Back</option>
         </select>
 
         <input type="number" id="amount" placeholder="Amount">
-        <select id="category"></select>
+
+        <div id="categoryWrapper" class="form-group">
+          <label for="category">Category</label>
+          <select id="category"></select>
+        </div>
+
         <input type="text" id="purpose" placeholder="Purpose (optional)">
         <input type="date" id="expenseDate">
-        <select id="budgetSelect"></select>
-        <select id="paymentType">
-          <option value="PhonePe">PhonePe</option>
-          <option value="UPI">UPI</option>
-          <option value="Cash">Cash</option>
-          <option value="Google Pay">Google Pay</option>
-          <option value="Bank Transfer">Bank Transfer</option>
-        </select>
 
+        <div id="budgetWrapper" class="form-group">
+          <label for="budgetSelect">Budget</label>
+          <select id="budgetSelect"></select>
         </div>
+
+        <div id="linkedTransactionWrapper" class="form-group" style="display:none;">
+          <label for="linkedTransactionSelect">Linked Transaction</label>
+          <select id="linkedTransactionSelect" onchange="updateLinkedRemainingUI();handleRefundResolutionChange()">
+            <option value="">Select transaction</option>
+          </select>
+
+          <label for="refundResolutionType">Resolution Type</label>
+          <select id="refundResolutionType" onchange="handleRefundResolutionChange()">
+            <option value="partial_refund">Partial Refund</option>
+            <option value="complete_refund">Complete Refund</option>
+            <option value="consumed">No Refund / Consumed</option>
+            <option value="cancelled_with_charges">Cancelled With Charges</option>
+          </select>
+
+          <small id="linkedRemainingText" class="muted-note" style="display:none;"></small>
+        </div>
+
+        <div id="paymentWrapper" class="form-group">
+          <label for="paymentType">Payment Method</label>
+          <select id="paymentType">
+            <option value="PhonePe">PhonePe</option>
+            <option value="UPI">UPI</option>
+            <option value="Cash">Cash</option>
+            <option value="Google Pay">Google Pay</option>
+            <option value="Bank Transfer">Bank Transfer</option>
+          </select>
+        </div>
+
         <!-- Attachment -->
         <label style="margin-top:8px;display:block">Attach Receipt (optional)</label>
         <div style="display:flex;gap:8px;align-items:center;"> 
@@ -200,17 +233,17 @@
       <div class="budget-insights">
 
         <div class="insight-card success">
-          <small>Saved Today</small>
+          <small>Daily Remaining</small>
           <h4 id="savedToday">₹0</h4>
         </div>
 
         <div class="insight-card info">
-          <small>Week Efficiency</small>
+          <small>Weekly Remaining</small>
           <h4 id="savedWeek">₹0</h4>
         </div>
 
         <div class="insight-card premium">
-          <small>Period Efficiency</small>
+          <small>Monthly Remaining</small>
           <h4 id="savedPeriod">₹0</h4>
         </div>
 
