@@ -1255,6 +1255,68 @@ function getNetSpentForBudget(budgetId, expensesList) {
     return net;
 }
 
+function getNetSpentForBudgetSet(budgetIds, expensesList) {
+    let ids = Array.isArray(budgetIds) ? budgetIds.map(id => String(id)) : [];
+    if (!ids.length) return 0;
+
+    return ids.reduce((sum, budgetId) => {
+        return sum + Math.max(0, getNetSpentForBudget(budgetId, expensesList));
+    }, 0);
+}
+
+function getBudgetContributionForEntry(entry, budgetIdSet) {
+    if (!entry || !budgetIdSet || !budgetIdSet.size) return 0;
+
+    if (Array.isArray(entry.allocationTrail) && entry.allocationTrail.length) {
+        return entry.allocationTrail
+            .filter(item => budgetIdSet.has(String(item.budgetId)))
+            .reduce((sum, item) => sum + Math.abs(Number(item.amount) || 0), 0);
+    }
+
+    if (budgetIdSet.has(String(entry.budgetId))) {
+        return Math.abs(Number(entry.amount) || 0);
+    }
+
+    return 0;
+}
+
+function summarizeBudgetLedgerFlows(budgetIds, expensesList) {
+    let ids = Array.isArray(budgetIds) ? budgetIds.map(id => String(id)) : [];
+    let set = new Set(ids);
+    let expenses = Array.isArray(expensesList) ? expensesList : [];
+
+    let summary = {
+        income: 0,
+        refundImpact: 0,
+        transferBackImpact: 0,
+        resolutionImpact: 0
+    };
+
+    expenses.forEach((entry) => {
+        let contribution = getBudgetContributionForEntry(entry, set);
+        if (!contribution) return;
+
+        if (entry.type === "income" || entry.type === "budget_income" || entry.type === "recovery") {
+            summary.income += contribution;
+        }
+
+        if (entry.type === "refund") {
+            summary.refundImpact += contribution;
+            summary.income += contribution;
+        }
+
+        if (entry.type === "transfer_back") {
+            summary.transferBackImpact += contribution;
+        }
+
+        if (entry.type === "expense_resolution") {
+            summary.resolutionImpact += Math.abs(Number(entry.lossAmount || 0));
+        }
+    });
+
+    return summary;
+}
+
 
 /* =========================
    🔔 SIMPLE TOAST (NO SPAM)
@@ -2550,6 +2612,29 @@ function generatePdfReport(opts = {}) {
             ? window.currentFilteredExpenses
             : (typeof getExpenses === 'function' ? getExpenses() : []);
 
+    const budgetIdsFromData = new Set();
+    dataSource.forEach((entry) => {
+        if (entry && entry.budgetId) {
+            budgetIdsFromData.add(String(entry.budgetId));
+        }
+        if (Array.isArray(entry && entry.allocationTrail)) {
+            entry.allocationTrail.forEach((item) => {
+                if (item && item.budgetId) budgetIdsFromData.add(String(item.budgetId));
+            });
+        }
+    });
+
+    let budgets = getBudgets().filter(b => budgetIdsFromData.has(String(b && b.budgetId)));
+    if (!budgets.length) {
+        budgets = filterBudgetsByActivePeriod(getBudgets());
+    }
+    const budgetIds = budgets
+        .map(b => b && b.budgetId)
+        .filter(Boolean);
+
+    const ledgerFlowSummary = summarizeBudgetLedgerFlows(budgetIds, dataSource);
+    const ledgerNetSpent = getNetSpentForBudgetSet(budgetIds, dataSource);
+
     let y = 12;
 
     if (!doc) {
@@ -2592,11 +2677,15 @@ function generatePdfReport(opts = {}) {
         doc.text(`${formatCurrencyPDF(value)}`, x + 5, y + 13);
     };
 
-    const totalIncome = dataSource.filter(e => e.amount > 0)
-        .reduce((s, e) => s + e.amount, 0);
+    const totalIncome = budgetIds.length
+        ? ledgerFlowSummary.income
+        : dataSource.filter(e => e.amount > 0)
+            .reduce((s, e) => s + e.amount, 0);
 
-    const totalExpense = dataSource.filter(e => e.amount < 0)
-        .reduce((s, e) => s + Math.abs(e.amount), 0);
+    const totalExpense = budgetIds.length
+        ? ledgerNetSpent
+        : dataSource.filter(e => e.amount < 0)
+            .reduce((s, e) => s + Math.abs(e.amount), 0);
 
     const net = totalIncome - totalExpense;
 
@@ -2737,12 +2826,11 @@ function generatePdfReport(opts = {}) {
         remaining: 170
     };
 
-    // budgets for this PDF (respect active filter)
-    let budgets = getBudgets().filter(b => dataSource.some(e => e.periodKey === b.periodKey));
-
     let totalBudget = budgets.reduce((sum, b) => sum + Math.abs(b.totalAllocated || 0), 0);
 
-    let totalSpent = dataSource.filter(e => e.amount < 0).reduce((sum, e) => sum + Math.abs(e.amount), 0);
+    let totalSpent = budgetIds.length
+        ? ledgerNetSpent
+        : dataSource.filter(e => e.amount < 0).reduce((sum, e) => sum + Math.abs(e.amount), 0);
 
     // Use net-spent helper to compute remaining correctly (handles allocationTrail & recoveries)
     let totalRemaining = budgets.reduce((sum, b) => {
@@ -2806,61 +2894,7 @@ function generatePdfReport(opts = {}) {
         // 💸 SPENT
         // =========================
 
-        let spent =
-            dataSource
-
-                .filter(e =>
-
-                    (
-                        e.type === "expense" ||
-                        e.type === "loss"
-                    )
-
-                    &&
-
-                    e.budgetId ===
-                    b.budgetId
-                )
-
-                .reduce(
-                    (sum, e) =>
-
-                        sum +
-                        Math.abs(
-                            e.amount || 0
-                        ),
-
-                    0
-                );
-
-        // =========================
-        // 💰 RECOVERY
-        // =========================
-
-        let recovered =
-            dataSource
-
-                .filter(e =>
-
-                    e.type ===
-                    "recovery"
-
-                    &&
-
-                    e.budgetId ===
-                    b.budgetId
-                )
-
-                .reduce(
-                    (sum, e) =>
-
-                        sum +
-                        Math.abs(
-                            e.amount || 0
-                        ),
-
-                    0
-                );
+        let spent = Math.max(0, getNetSpentForBudget(b.budgetId, dataSource));
 
         // =========================
         // 📊 REMAINING
@@ -2868,8 +2902,7 @@ function generatePdfReport(opts = {}) {
 
         let remaining =
             allocated -
-            spent +
-            recovered;
+            spent;
 
 
         // =========================
@@ -5358,15 +5391,18 @@ function loadDashboard() {
         .reduce((sum, b) =>
             sum + (b.totalAllocated || 0), 0);
 
-    let totalIncome = filteredExpenses
-        .filter(e => e.amount > 0)
-        .reduce((sum, e) =>
-            sum + e.amount, 0);
+    let budgetIds = filteredBudgets
+        .map(b => b && b.budgetId)
+        .filter(Boolean);
 
-    let totalSpent = filteredExpenses
-        .filter(e => e.amount < 0)
-        .reduce((sum, e) =>
-            sum + Math.abs(e.amount), 0);
+    let flowSummary = summarizeBudgetLedgerFlows(budgetIds, filteredExpenses);
+
+    let totalIncome = flowSummary.income;
+
+    let totalSpent = getNetSpentForBudgetSet(
+        budgetIds,
+        filteredExpenses
+    );
 
     let remaining =
         totalBudget - totalSpent;
@@ -5393,19 +5429,20 @@ function loadDashboard() {
 
     endOfDay.setHours(23, 59, 59, 999);
 
-    let todaySpent = filteredExpenses
+    let todayEntries = filteredExpenses
         .filter(e => {
-
-            if (e.amount >= 0) return false;
 
             let d = new Date(e.date);
 
             return d >= today &&
                 d <= endOfDay;
 
-        })
-        .reduce((sum, e) =>
-            sum + Math.abs(e.amount), 0);
+        });
+
+    let todaySpent = getNetSpentForBudgetSet(
+        budgetIds,
+        todayEntries
+    );
 
     // =========================
     // 🖥️ SAFE UI
@@ -5669,7 +5706,7 @@ function openBudgetDetails(group) {
         }
     });
 
-    let remaining = group.totalAllocated - used + credited;
+    let remaining = group.totalAllocated - used;
 
     // 🔥 Proper label
     let label = "No Date";
@@ -6177,6 +6214,15 @@ function updateGraphSummary(type, dataset, filtered, customRange = null) {
     const totalIncome = rows.reduce((sum, row) => {
         return sum + Number(row && row.inc ? row.inc : 0);
     }, 0);
+    const activeBudgetIds = filterBudgetsByActivePeriod(getBudgets())
+        .map(b => b && b.budgetId)
+        .filter(Boolean);
+    const budgetAwareSpent = activeBudgetIds.length
+        ? getNetSpentForBudgetSet(activeBudgetIds, entries)
+        : totalExpense;
+    const budgetAwareIncome = activeBudgetIds.length
+        ? summarizeBudgetLedgerFlows(activeBudgetIds, entries).income
+        : totalIncome;
     const averageExpense = calculateAverageSpendingByType(type, entries, customRange);
 
     let scopeLabel = "Selected";
@@ -6193,8 +6239,8 @@ function updateGraphSummary(type, dataset, filtered, customRange = null) {
     summaryEl.innerText = [
         scopeLabel,
         `Entries: ${entries.length}`,
-        `Spent: ${formatCurrency(totalExpense)}`,
-        `Income: ${formatCurrency(totalIncome)}`,
+        `Spent: ${formatCurrency(budgetAwareSpent)}`,
+        `Income: ${formatCurrency(budgetAwareIncome)}`,
         `Avg Spend${unitLabel}: ${formatCurrency(averageExpense)}`
     ].join(" | ");
 }
@@ -8705,7 +8751,10 @@ async function downloadBlobWithBestEffort(blob, filename) {
             await writable.write(blob);
             await writable.close();
             updateAutoBackupRuntimeState("Backup export used file picker with pre-filled filename.");
-            return "file-picker";
+            return {
+                method: "file-picker",
+                locationHint: "Location selected in save dialog"
+            };
         } catch (_err) {
             // continue to next fallback
         }
@@ -8720,7 +8769,10 @@ async function downloadBlobWithBestEffort(blob, filename) {
                 files: [exportFile]
             });
             updateAutoBackupRuntimeState("Backup export used Android share sheet with generated filename.");
-            return "web-share-file";
+            return {
+                method: "web-share-file",
+                locationHint: "Selected in Android share destination"
+            };
         } catch (_err) {
             // continue to download attribute fallback
         }
@@ -8746,7 +8798,23 @@ async function downloadBlobWithBestEffort(blob, filename) {
         updateAutoBackupRuntimeState("Backup export used browser download with generated filename.");
     }
 
-    return "download-attribute";
+    let locationHint = runtime.isAndroid
+        ? "Download Triggered. Please check: Downloads, Documents, Browser Downloads, WebIntoApp Downloads"
+        : "Download Triggered. Please check browser default Downloads folder";
+
+    return {
+        method: "download-attribute",
+        locationHint
+    };
+}
+
+function formatBackupSize(bytes) {
+    let raw = Number(bytes || 0);
+    if (!Number.isFinite(raw) || raw <= 0) return "0 KB";
+
+    if (raw < 1024) return `${raw} B`;
+    if (raw < (1024 * 1024)) return `${(raw / 1024).toFixed(1)} KB`;
+    return `${(raw / (1024 * 1024)).toFixed(2)} MB`;
 }
 
 // =========================
@@ -8786,14 +8854,24 @@ async function exportDataAsJSON() {
 
         let safe = getSafeDate();
         let filename = safe ? `MoneyTracker_${safe}.json` : "MoneyTracker_Backup.json";
-        let method = await downloadBlobWithBestEffort(blob, filename);
+        let exportResult = await downloadBlobWithBestEffort(blob, filename);
+        let locationHint = exportResult && exportResult.locationHint
+            ? exportResult.locationHint
+            : "Download Triggered. Please check Downloads folder.";
+        let sizeBytes = Number(blob.size || 0);
+        let sizeLabel = formatBackupSize(sizeBytes);
+
         window.__lastBackupExportStatus = {
             filename,
-            method,
+            method: exportResult && exportResult.method ? exportResult.method : "download-attribute",
+            locationHint,
+            sizeBytes,
+            sizeLabel,
             runtime: getRuntimeDiagnostics(),
             generatedAt: new Date().toISOString()
         };
-        showToast(`Backup exported: ${filename}`, "success");
+        showToast(`Backup Created Successfully | Filename: ${filename} | Location: ${locationHint} | Size: ${sizeLabel}`, "success");
+        updateAutoBackupRuntimeState(`Backup Created Successfully | Filename: ${filename} | Location: ${locationHint} | Size: ${sizeLabel}`);
 
         console.log(
             "✅ Manual export completed"

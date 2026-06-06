@@ -282,6 +282,75 @@ test('graph analytics average and summary update across day/week/month/custom fi
     expect(text).toContain('Avg Spend/day');
 });
 
+test('graph summary uses net spent and ledger income for budget-aware refund and transfer-back flows', () => {
+    const now = new Date();
+    const start = new Date(now.getFullYear(), now.getMonth(), 1);
+    const end = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+    const startKey = localDateKey(start);
+    const endKey = localDateKey(end);
+    const periodKey = `${startKey}_to_${endKey}`;
+
+    localStorage.setItem('bp', JSON.stringify([{ id: 'pg', start: startKey, end: endKey, status: 'active', extraDays: 0 }]));
+    window.saveBudgets([{ budgetId: 'bg', totalAllocated: 10000, periodKey }]);
+
+    const rows = [
+        { id: 'g1', type: 'expense', amount: -2000, budgetId: 'bg', periodKey, category: 'Food', date: now.toISOString() },
+        { id: 'g2', type: 'refund', amount: 500, budgetId: 'bg', periodKey, category: 'Refund', date: now.toISOString() },
+        { id: 'g3', type: 'transfer_back', amount: -200, budgetId: 'bg', periodKey, category: 'Transfer Back', date: now.toISOString() },
+        { id: 'g4', type: 'income', amount: 100, budgetId: 'bg', periodKey, category: 'Income', date: now.toISOString() }
+    ];
+
+    window.loadGraph('day', rows);
+
+    const text = document.getElementById('graphDate').innerText;
+    expect(text).toContain(`Spent: ${window.formatCurrency(1600)}`);
+    expect(text).toContain(`Income: ${window.formatCurrency(600)}`);
+});
+
+test('pdf report budget summary uses net spent for refund and transfer-back scenarios', () => {
+    const now = new Date();
+    const start = new Date(now.getFullYear(), now.getMonth(), 1);
+    const end = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+    const startKey = localDateKey(start);
+    const endKey = localDateKey(end);
+    const periodKey = `${startKey}_to_${endKey}`;
+
+    localStorage.setItem('bp', JSON.stringify([{ id: 'ppdf', start: startKey, end: endKey, status: 'active', extraDays: 0 }]));
+    window.saveBudgets([{ budgetId: 'bpdf', totalAllocated: 10000, periodKey, name: 'Core Budget' }]);
+
+    const rows = [
+        { id: 'p1', type: 'expense', amount: -2000, budgetId: 'bpdf', periodKey, category: 'Food', purpose: 'Main', date: now.toISOString() },
+        { id: 'p2', type: 'refund', amount: 500, budgetId: 'bpdf', periodKey, category: 'Refund', purpose: 'Return', date: now.toISOString() },
+        { id: 'p3', type: 'transfer_back', amount: -200, budgetId: 'bpdf', periodKey, category: 'Transfer Back', purpose: 'Back', date: now.toISOString() },
+        { id: 'p4', type: 'income', amount: 100, budgetId: 'bpdf', periodKey, category: 'Income', purpose: 'Recover', date: now.toISOString() }
+    ];
+
+    const textCalls = [];
+    const doc = {
+        setFillColor: jest.fn(),
+        roundedRect: jest.fn(),
+        setFontSize: jest.fn(),
+        setFont: jest.fn(),
+        text: jest.fn((msg) => { if (typeof msg === 'string') textCalls.push(msg); }),
+        setTextColor: jest.fn(),
+        setDrawColor: jest.fn(),
+        line: jest.fn(),
+        rect: jest.fn(),
+        splitTextToSize: jest.fn((msg) => [String(msg)]),
+        addPage: jest.fn(),
+        save: jest.fn()
+    };
+
+    window.jspdf = { jsPDF: jest.fn(() => doc) };
+
+    window.generatePdfReport({ data: rows });
+
+    const rendered = textCalls.join(' | ');
+    expect(rendered).toContain('Total Spent');
+    expect(rendered).toContain('1600.00');
+    expect(rendered).toContain('8400.00');
+});
+
 test('history integrity keeps original and refunds, running balance visible, count reconciles', () => {
     window.saveBudgets([{ budgetId: 'bhi', totalAllocated: 5000, periodKey: '2026-06-01_to_2026-06-30' }]);
     window.saveExpenses([
@@ -777,7 +846,64 @@ test('export generates filename metadata and updates backup runtime state', asyn
 
     expect(window.__lastBackupExportStatus).toBeTruthy();
     expect(window.__lastBackupExportStatus.filename).toMatch(/^MoneyTracker_\d{4}-\d{2}-\d{2}_\d{2}-\d{2}\.json$/);
+    expect(window.__lastBackupExportStatus.sizeBytes).toBeGreaterThan(0);
+    expect(String(window.__lastBackupExportStatus.locationHint || '').length).toBeGreaterThan(0);
     expect(document.getElementById('autoBackupRuntimeState').textContent.length).toBeGreaterThan(0);
+});
+
+test('dashboard totals reconcile with net-spent engine for refund-adjusted budget usage', () => {
+    document.body.insertAdjacentHTML('beforeend', `
+      <span id="budgetValue"></span>
+      <span id="spent"></span>
+      <span id="remaining"></span>
+      <span id="todaySpent"></span>
+      <span id="incomeValue"></span>
+      <span id="netValue"></span>
+      <div id="refundTypeBreakdown"></div>
+      <div id="progressText"></div>
+      <div id="progressFill"></div>
+      <div id="headlineText"></div>
+    `);
+
+    const now = new Date();
+    const start = new Date(now.getFullYear(), now.getMonth(), 1);
+    const end = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+    const periodKey = `${localDateKey(start)}_to_${localDateKey(end)}`;
+
+    localStorage.setItem('bp', JSON.stringify([{ id: 'pd1', start: localDateKey(start), end: localDateKey(end), status: 'active', extraDays: 0 }]));
+    window.saveBudgets([{ budgetId: 'b-net', totalAllocated: 1000, periodKey }]);
+    window.saveExpenses([
+        { id: 'e-out', type: 'expense', amount: -1000, budgetId: 'b-net', periodKey, date: now.toISOString() },
+        { id: 'e-ref', type: 'refund', amount: 300, budgetId: 'b-net', periodKey, date: now.toISOString() }
+    ]);
+
+    window.loadDashboard();
+
+    const asNumber = (id) => Number(String(document.getElementById(id).innerText || '').replace(/[^0-9.-]/g, ''));
+    expect(asNumber('spent')).toBe(700);
+    expect(asNumber('remaining')).toBe(300);
+});
+
+test('budget remaining is computed as allocated minus net-spent without extra credit pass', () => {
+    const now = new Date();
+    const start = new Date(now.getFullYear(), now.getMonth(), 1);
+    const end = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+    const periodKey = `${localDateKey(start)}_to_${localDateKey(end)}`;
+
+    localStorage.setItem('bp', JSON.stringify([{ id: 'pd2', start: localDateKey(start), end: localDateKey(end), status: 'active', extraDays: 0 }]));
+    localStorage.setItem('savingsTransactions', JSON.stringify([{ id: 'src-budget', note: 'Primary Wallet', entity: 'Self' }]));
+
+    window.saveBudgets([{ budgetId: 'b-det', sourceId: 'src-budget', totalAllocated: 1000, periodKey }]);
+    window.saveExpenses([
+        { id: 'd-out', type: 'expense', amount: -1000, budgetId: 'b-det', periodKey, date: now.toISOString() },
+        { id: 'd-ref', type: 'refund', amount: 300, budgetId: 'b-det', periodKey, date: now.toISOString() }
+    ]);
+
+    const netSpent = window.getNetSpentForBudget('b-det', window.getExpenses());
+    const remaining = 1000 - Math.max(0, netSpent);
+
+    expect(netSpent).toBe(700);
+    expect(remaining).toBe(300);
 });
 
 test('export payload is valid JSON and immediate import succeeds', async () => {
