@@ -544,6 +544,14 @@ window.addEventListener("load", function () {
     loadBudgetYears();
     loadCategoryOptions();
     loadPersonOptions();
+    refreshSavingsRefundGuidance();
+
+    let refundTypeEl = document.getElementById("sRefundType");
+    if (refundTypeEl) refundTypeEl.addEventListener("change", refreshSavingsRefundGuidance);
+
+    let resolutionEl = document.getElementById("sRefundResolutionType");
+    if (resolutionEl) resolutionEl.addEventListener("change", refreshSavingsRefundGuidance);
+
     renderCategoryList();
     renderPersonList();
     setTimeout(() => {
@@ -724,6 +732,36 @@ function formatSavingsResolutionStatus(status) {
     return map[status] || String(status || "-");
 }
 
+function refreshSavingsRefundGuidance() {
+    let refundTypeEl = document.getElementById("sRefundType");
+    let resolutionEl = document.getElementById("sRefundResolutionType");
+    let refundTypeHelpEl = document.getElementById("sRefundTypeHelp");
+    let resolutionHelpEl = document.getElementById("sRefundResolutionHelp");
+
+    if (refundTypeHelpEl && refundTypeEl) {
+        let label = (typeof formatRefundType === "function")
+            ? formatRefundType(refundTypeEl.value)
+            : String(refundTypeEl.value || "Custom");
+        let desc = (typeof getRefundTypeGuidance === "function")
+            ? getRefundTypeGuidance(refundTypeEl.value)
+            : "Any refund not covered above.";
+        refundTypeHelpEl.textContent = `${label}: ${desc}`;
+    }
+
+    if (resolutionHelpEl && resolutionEl) {
+        let normalized = (typeof normalizeResolutionType === "function")
+            ? normalizeResolutionType(resolutionEl.value)
+            : String(resolutionEl.value || "open");
+        let label = (typeof RESOLUTION_TYPE_LABELS === "object" && RESOLUTION_TYPE_LABELS[normalized])
+            ? RESOLUTION_TYPE_LABELS[normalized]
+            : "Open";
+        let desc = (typeof getResolutionTypeGuidance === "function")
+            ? getResolutionTypeGuidance(resolutionEl.value)
+            : "Refund is still in progress.";
+        resolutionHelpEl.textContent = `${label}: ${desc}`;
+    }
+}
+
 function handleSavingsRefundResolutionChange() {
     let wrapper = document.getElementById("refundWrapper");
     if (!wrapper || wrapper.style.display === "none") return;
@@ -770,6 +808,7 @@ function handleSavingsRefundResolutionChange() {
     }
 
     infoEl.textContent = `Original: ₹${snapshot.originalAmount.toFixed(2)} | Refunded: ₹${snapshot.refunded.toFixed(2)} | Remaining Refundable: ₹${snapshot.remainingRefundable.toFixed(2)} | Loss: ₹${snapshot.loss.toFixed(2)} | Status: ${formatSavingsResolutionStatus(snapshot.status)}`;
+    refreshSavingsRefundGuidance();
 }
 
 // =========================
@@ -863,17 +902,13 @@ async function addSavings() {
             return;
         }
 
-        if (personSelect && !person) {
-            showToast("Select person ❗", "warning");
-            return;
-        }
-
         const entry = createSavingsEntry({
             type: "transfer",
             amount: -Math.abs(amount),
             sourceId,
             entity,
             payment,
+            person,
             note,
             date
         });
@@ -885,6 +920,7 @@ async function addSavings() {
         data.push(entry);
     }
     else if (type === "refund") {
+        const person = personSelect?.value || null;
         const refundValue = String(document.getElementById("refundSelect")?.value || "");
         if (!refundValue) {
             showToast("Select refund transaction ❗", "warning");
@@ -938,6 +974,7 @@ async function addSavings() {
                     sourceId: original.sourceId || null,
                     entity,
                     payment,
+                    person,
                     note,
                     date,
                     linkedTransactionId: refId,
@@ -964,6 +1001,7 @@ async function addSavings() {
                 sourceId: original.sourceId || null,
                 entity,
                 payment,
+                person,
                 note: note || (resolutionType === "consumed" ? "Transfer marked consumed" : "Transfer cancelled with charges"),
                 date,
                 linkedTransactionId: refId,
@@ -1630,7 +1668,9 @@ function resetSavingsForm() {
     if (document.getElementById("refundSelect")) document.getElementById("refundSelect").value = "";
     if (document.getElementById("sRefundResolutionType")) document.getElementById("sRefundResolutionType").value = "open";
     if (document.getElementById("sRefundType")) document.getElementById("sRefundType").value = "custom";
+    if (document.getElementById("sPerson")) document.getElementById("sPerson").value = "";
     if (document.getElementById("sRefundInfo")) document.getElementById("sRefundInfo").textContent = "";
+    if (document.getElementById("sPersonHelp")) document.getElementById("sPersonHelp").textContent = "";
     if (document.getElementById("sAmount")) {
         document.getElementById("sAmount").disabled = false;
         document.getElementById("sAmount").placeholder = "Amount";
@@ -1651,6 +1691,7 @@ function resetSavingsForm() {
 
     setTodayDate();
     handleSavingsTypeChange();
+    refreshSavingsRefundGuidance();
 }
 
 // =========================
@@ -2156,14 +2197,18 @@ function handleSavingsTypeChange() {
 
     let source = document.getElementById("sourceWrapper");
     let refund = document.getElementById("refundWrapper");
+    let person = document.getElementById("sPersonWrapper");
+    let personHelp = document.getElementById("sPersonHelp");
 
     // reset
-    [source, refund]
+    [source, refund, person]
         .filter(Boolean)
         .forEach(el => { el.style.display = "none"; });
 
     if (type === "transfer") {
         if (source) source.style.display = "block";
+        if (person) person.style.display = "block";
+        if (personHelp) personHelp.textContent = "Person is optional. Select it when this transfer is for or from a specific person.";
         loadSourceOptions({ includeUsed: false });
         return;
     }
@@ -2176,8 +2221,11 @@ function handleSavingsTypeChange() {
 
     if (type === "refund") {
         if (refund) refund.style.display = "block";
+        if (person) person.style.display = "block";
+        if (personHelp) personHelp.textContent = "Person is optional. Select it if someone paid you back or requested this refund.";
         loadRefundCandidates();
         handleSavingsRefundResolutionChange();
+        refreshSavingsRefundGuidance();
         return;
     }
 

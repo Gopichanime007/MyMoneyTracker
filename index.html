@@ -148,20 +148,31 @@
             <option value="written_off">Written Off</option>
             <option value="settled">Settled</option>
           </select>
+          <small id="refundResolutionHelp" class="muted-note refund-info"></small>
 
           <label for="refundType">Refund Type</label>
           <select id="refundType">
-            <option value="cancellation">Cancellation</option>
-            <option value="return">Return</option>
-            <option value="recovery">Recovery</option>
-            <option value="reversal">Reversal</option>
-            <option value="adjustment">Adjustment</option>
+            <option value="cancellation">Ticket Cancellation</option>
+            <option value="return">Product Return</option>
             <option value="cashback">Cashback</option>
-            <option value="correction">Correction</option>
+            <option value="reversal">Bank Reversal</option>
+            <option value="recovery">Expense Recovery</option>
+            <option value="correction">Transfer Correction</option>
+            <option value="adjustment">Salary Adjustment</option>
+            <option value="loan_recovery">Loan Recovery</option>
             <option value="custom" selected>Custom</option>
           </select>
+          <small id="refundTypeHelp" class="muted-note refund-info"></small>
 
           <small id="linkedRemainingText" class="muted-note hidden"></small>
+        </div>
+
+        <div id="personWrapper" class="form-group hidden">
+          <label for="personSelect">Person</label>
+          <select id="personSelect">
+            <option value="">No specific person</option>
+          </select>
+          <small id="personSelectionHelp" class="muted-note"></small>
         </div>
 
         <div id="paymentWrapper" class="form-group">

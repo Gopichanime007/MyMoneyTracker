@@ -1128,6 +1128,10 @@ function addExpense(obj) {
                 obj.paymentType ||
                 "Cash",
 
+            person:
+                obj.person ||
+                null,
+
             date: finalDate,
 
             monthKey,
@@ -1513,13 +1517,14 @@ function getLinkedPendingAmount(originalId, linkedTypes) {
 }
 
 const REFUND_TYPE_LABELS = {
-    cancellation: "Cancellation",
-    return: "Return",
-    recovery: "Recovery",
-    reversal: "Reversal",
-    adjustment: "Adjustment",
+    cancellation: "Ticket Cancellation",
+    return: "Product Return",
+    recovery: "Expense Recovery",
+    reversal: "Bank Reversal",
+    adjustment: "Salary Adjustment",
     cashback: "Cashback",
-    correction: "Correction",
+    correction: "Transfer Correction",
+    loan_recovery: "Loan Recovery",
     custom: "Custom"
 };
 
@@ -1540,14 +1545,21 @@ function normalizeRefundType(value) {
     const mapped = {
         cancellation: "cancellation",
         cancelled: "cancellation",
+        ticket_cancellation: "cancellation",
         return: "return",
         returned: "return",
+        product_return: "return",
         recovery: "recovery",
+        expense_recovery: "recovery",
         reimbursement: "recovery",
         reversal: "reversal",
+        bank_reversal: "reversal",
         adjustment: "adjustment",
+        salary_adjustment: "adjustment",
         cashback: "cashback",
         correction: "correction",
+        transfer_correction: "correction",
+        loan_recovery: "loan_recovery",
         custom: "custom"
     };
 
@@ -1652,6 +1664,52 @@ function formatResolutionStatus(status) {
         OPEN: "Open"
     };
     return map[status] || status || "-";
+}
+
+function getRefundTypeGuidance(refundType) {
+    const key = normalizeRefundType(refundType);
+    const guidance = {
+        cancellation: "Money returned because a booking was cancelled (train, bus, flight).",
+        return: "Returned an item and received money back.",
+        cashback: "Reward or cashback received after spending.",
+        reversal: "Bank reversed an incorrect charge.",
+        recovery: "Someone repaid an expense you originally paid.",
+        correction: "Correction of an incorrect transfer.",
+        adjustment: "Additional salary or payroll correction.",
+        loan_recovery: "Money recovered from a loan previously given.",
+        custom: "Any refund not covered above."
+    };
+    return guidance[key] || guidance.custom;
+}
+
+function getResolutionTypeGuidance(resolutionType) {
+    const key = normalizeResolutionType(resolutionType);
+    const guidance = {
+        fully_refunded: "Got all money back.",
+        partially_refunded: "Only part of the money was returned.",
+        cancelled_with_charges: "Cancellation fees were deducted.",
+        consumed: "Expense was used and no refund is expected.",
+        open: "Refund is still in progress.",
+        written_off: "Marked as non-recoverable.",
+        settled: "Finalized and no more changes expected."
+    };
+    return guidance[key] || guidance.open;
+}
+
+function refreshExpenseRefundGuidance() {
+    let refundTypeEl = document.getElementById("refundType");
+    let resolutionEl = document.getElementById("refundResolutionType");
+    let refundTypeHelpEl = document.getElementById("refundTypeHelp");
+    let resolutionHelpEl = document.getElementById("refundResolutionHelp");
+
+    if (refundTypeHelpEl && refundTypeEl) {
+        refundTypeHelpEl.textContent = `${formatRefundType(refundTypeEl.value)}: ${getRefundTypeGuidance(refundTypeEl.value)}`;
+    }
+
+    if (resolutionHelpEl && resolutionEl) {
+        let label = RESOLUTION_TYPE_LABELS[normalizeResolutionType(resolutionEl.value)] || "Open";
+        resolutionHelpEl.textContent = `${label}: ${getResolutionTypeGuidance(resolutionEl.value)}`;
+    }
 }
 
 function handleRefundResolutionChange() {
@@ -1800,8 +1858,10 @@ function handleEntryTypeUIChange() {
     let budgetWrapper = document.getElementById("budgetWrapper");
     let linkedWrapper = document.getElementById("linkedTransactionWrapper");
     let paymentWrapper = document.getElementById("paymentWrapper");
+    let personWrapper = document.getElementById("personWrapper");
+    let personHelp = document.getElementById("personSelectionHelp");
 
-    [categoryWrapper, budgetWrapper, linkedWrapper, paymentWrapper]
+    [categoryWrapper, budgetWrapper, linkedWrapper, paymentWrapper, personWrapper]
         .filter(Boolean)
         .forEach(el => { el.style.display = "none"; });
 
@@ -1816,14 +1876,21 @@ function handleEntryTypeUIChange() {
         if (categoryWrapper) categoryWrapper.style.display = "block";
         if (budgetWrapper) budgetWrapper.style.display = "block";
         if (paymentWrapper) paymentWrapper.style.display = "block";
+        if (personWrapper) personWrapper.style.display = "block";
+        if (personHelp) personHelp.textContent = "Person is optional. Select it when this transfer is for or from a specific person.";
+        loadExpensePersonOptions();
         return;
     }
 
     if (type === "refund") {
         if (linkedWrapper) linkedWrapper.style.display = "block";
         if (paymentWrapper) paymentWrapper.style.display = "block";
+        if (personWrapper) personWrapper.style.display = "block";
+        if (personHelp) personHelp.textContent = "Person is optional. Select it if someone paid you back or requested the refund.";
+        loadExpensePersonOptions();
         loadLinkedTransactionOptions(type);
         handleRefundResolutionChange();
+        refreshExpenseRefundGuidance();
         return;
     }
 
@@ -1846,6 +1913,7 @@ async function handleAddExpense() {
     let date = document.getElementById("expenseDate")?.value;
     let type = document.getElementById("entryType")?.value;
     let paymentType = document.getElementById("paymentType")?.value;
+    let person = document.getElementById("personSelect")?.value || null;
     let budgetId = document.getElementById("budgetSelect")?.value;
     let linkedTransactionId = document.getElementById("linkedTransactionSelect")?.value || null;
     let refundResolutionType = normalizeResolutionType(document.getElementById("refundResolutionType")?.value || "open");
@@ -1961,6 +2029,7 @@ async function handleAddExpense() {
             date: selectedDate.toISOString(),
             type,
             paymentType,
+            person,
             allocationTrail: transferBackTrail.map(a => ({ budgetId: a.budgetId, amount: a.amount })),
             transferBackTrail,
             linkedSourceSavingsId: uniqueSources.length === 1 ? uniqueSources[0] : null,
@@ -2031,6 +2100,7 @@ async function handleAddExpense() {
                 date: selectedDate.toISOString(),
                 type: "refund",
                 paymentType,
+                person,
                 budgetId: snapshot.original ? snapshot.original.budgetId : budgetId,
                 linkedTransactionId,
                 refundType,
@@ -2050,6 +2120,7 @@ async function handleAddExpense() {
                 date: selectedDate.toISOString(),
                 type: "expense_resolution",
                 paymentType: paymentType || "N/A",
+                person,
                 budgetId: snapshot.original ? snapshot.original.budgetId : budgetId,
                 linkedTransactionId,
                 entity: "System",
@@ -2081,6 +2152,7 @@ async function handleAddExpense() {
         date: selectedDate.toISOString(),
         type,
         paymentType,
+        person,
         budgetId,
         linkedTransactionId,
         entity: paymentType,
@@ -2112,6 +2184,7 @@ function resetForm() {
     if (document.getElementById("linkedTransactionSelect")) document.getElementById("linkedTransactionSelect").value = "";
     if (document.getElementById("refundResolutionType")) document.getElementById("refundResolutionType").value = "open";
     if (document.getElementById("refundType")) document.getElementById("refundType").value = "custom";
+    if (document.getElementById("personSelect")) document.getElementById("personSelect").value = "";
     if (document.getElementById("amount")) document.getElementById("amount").disabled = false;
     if (document.getElementById("linkedRemainingText")) {
         document.getElementById("linkedRemainingText").style.display = "none";
@@ -2135,6 +2208,7 @@ function resetForm() {
     if (expRemove) expRemove.style.display = "none";
 
     handleEntryTypeUIChange();
+    refreshExpenseRefundGuidance();
 }
 
 function saveExpenseDirect(amount, budget) {
@@ -2201,6 +2275,7 @@ window.addEventListener("load", function () {
 
         loadHistory();
         initCategories();
+        loadExpensePersonOptions();
         loadTheme();
         updateUI();
         loadBudgetOptions();
@@ -2214,6 +2289,13 @@ window.addEventListener("load", function () {
         if (dateInput) dateInput.value = today;
 
         handleEntryTypeUIChange();
+        refreshExpenseRefundGuidance();
+
+        let refundTypeSelect = document.getElementById("refundType");
+        if (refundTypeSelect) refundTypeSelect.addEventListener("change", refreshExpenseRefundGuidance);
+
+        let resolutionTypeSelect = document.getElementById("refundResolutionType");
+        if (resolutionTypeSelect) resolutionTypeSelect.addEventListener("change", refreshExpenseRefundGuidance);
 
         renderCategoryList();
         setDefaultDate();
@@ -2291,6 +2373,30 @@ function loadCategories() {
         option.value = cat;
         option.textContent = cat;
         select.appendChild(option);
+    });
+}
+
+function getExpensePersons() {
+    try {
+        let data = JSON.parse(localStorage.getItem("persons")) || [];
+        return Array.isArray(data) ? data : [];
+    } catch (_err) {
+        return [];
+    }
+}
+
+function loadExpensePersonOptions() {
+    let select = document.getElementById("personSelect");
+    if (!select) return;
+
+    let persons = getExpensePersons();
+    select.innerHTML = "<option value=''>No specific person</option>";
+
+    persons.forEach((p) => {
+        let opt = document.createElement("option");
+        opt.value = p;
+        opt.textContent = p;
+        select.appendChild(opt);
     });
 }
 
@@ -8799,8 +8905,8 @@ async function downloadBlobWithBestEffort(blob, filename) {
     }
 
     let locationHint = runtime.isAndroid
-        ? "Download Triggered. Please check: Downloads, Documents, Browser Downloads, WebIntoApp Downloads"
-        : "Download Triggered. Please check browser default Downloads folder";
+        ? "Runtime-managed Android download. Check: Downloads, Downloads/MoneyTracker, My Files > Downloads"
+        : "Downloads folder";
 
     return {
         method: "download-attribute",
@@ -8815,6 +8921,44 @@ function formatBackupSize(bytes) {
     if (raw < 1024) return `${raw} B`;
     if (raw < (1024 * 1024)) return `${(raw / 1024).toFixed(1)} KB`;
     return `${(raw / (1024 * 1024)).toFixed(2)} MB`;
+}
+
+function getBackupLocationGuidance(runtime, filename, method) {
+    let safeName = String(filename || "MoneyTracker_Backup.json");
+
+    if (method === "file-picker") {
+        return [
+            "Backup Created Successfully",
+            `File: ${safeName}`,
+            "Location: Selected in save dialog"
+        ].join("\n");
+    }
+
+    if (method === "web-share-file") {
+        return [
+            "Backup Created Successfully",
+            `File: ${safeName}`,
+            "Location: Chosen in Android share destination"
+        ].join("\n");
+    }
+
+    if (runtime && runtime.isAndroid) {
+        return [
+            "Backup Created Successfully",
+            `File: ${safeName}`,
+            "Location: Runtime-managed Android download",
+            "Check:",
+            "- Downloads",
+            "- Downloads/MoneyTracker",
+            "- My Files > Downloads"
+        ].join("\n");
+    }
+
+    return [
+        "Backup Created Successfully",
+        `File: ${safeName}`,
+        "Location: Downloads folder"
+    ].join("\n");
 }
 
 // =========================
@@ -8860,6 +9004,8 @@ async function exportDataAsJSON() {
             : "Download Triggered. Please check Downloads folder.";
         let sizeBytes = Number(blob.size || 0);
         let sizeLabel = formatBackupSize(sizeBytes);
+        let runtime = getRuntimeDiagnostics();
+        let guidance = getBackupLocationGuidance(runtime, filename, exportResult && exportResult.method);
 
         window.__lastBackupExportStatus = {
             filename,
@@ -8867,11 +9013,12 @@ async function exportDataAsJSON() {
             locationHint,
             sizeBytes,
             sizeLabel,
-            runtime: getRuntimeDiagnostics(),
+            runtime,
+            guidance,
             generatedAt: new Date().toISOString()
         };
-        showToast(`Backup Created Successfully | Filename: ${filename} | Location: ${locationHint} | Size: ${sizeLabel}`, "success");
-        updateAutoBackupRuntimeState(`Backup Created Successfully | Filename: ${filename} | Location: ${locationHint} | Size: ${sizeLabel}`);
+        showToast(`Backup Created Successfully | File: ${filename} | Location: ${locationHint}`);
+        updateAutoBackupRuntimeState(`${guidance}\nSize: ${sizeLabel}`);
 
         console.log(
             "✅ Manual export completed"

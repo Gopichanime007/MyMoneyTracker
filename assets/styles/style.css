@@ -517,6 +517,10 @@ button:active {
   color: var(--muted);
 }
 
+#autoBackupRuntimeState {
+  white-space: pre-line;
+}
+
 .refund-type-card {
   margin-top: var(--space-md);
   padding: 12px;
@@ -1032,27 +1036,29 @@ button:active {
 
 @media (max-width: 412px) {
   .app {
-    padding: 8px;
-  }
-
-  .card {
     padding: 10px;
   }
 
+  .card {
+    padding: 12px;
+  }
+
   .dashboard-grid {
-    gap: 6px;
+    grid-template-columns: 1fr;
+    gap: 10px;
   }
 
   .dash-card {
-    padding: 8px;
+    padding: 12px;
+    min-height: 72px;
   }
 
   .dash-card span {
-    font-size: 10px;
+    font-size: 11px;
   }
 
   .dash-card h2 {
-    font-size: .88rem;
+    font-size: 1rem;
   }
 
   .refund-type-card {
@@ -1063,21 +1069,21 @@ button:active {
 
 @media (max-width: 390px) {
   .dashboard-grid {
-    gap: 5px;
+    gap: 9px;
   }
 
   .dash-card {
-    padding: 7px;
+    padding: 11px;
   }
 
   .dash-card h2 {
-    font-size: .84rem;
+    font-size: .95rem;
   }
 }
 
 @media (max-width: 360px) {
   .app {
-    padding: 6px;
+    padding: 8px;
   }
 
   .nav button {
@@ -1087,20 +1093,20 @@ button:active {
   }
 
   .dashboard-grid {
-    gap: 4px;
+    gap: 8px;
   }
 
   .dash-card {
-    padding: 6px;
+    padding: 10px;
     border-radius: 12px;
   }
 
   .dash-card span {
-    font-size: 9px;
+    font-size: 10px;
   }
 
   .dash-card h2 {
-    font-size: .8rem;
+    font-size: .9rem;
   }
 
   .modal-actions button {
