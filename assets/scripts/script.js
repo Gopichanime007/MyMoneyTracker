@@ -2298,6 +2298,72 @@ registerOfflineServiceWorker();
 
 let __responsiveLayoutBound = false;
 let __responsiveLayoutFrame = null;
+const ENABLE_SCREEN_LAYOUT_DEBUG = true;
+
+function formatScreenLabel(screenId) {
+    let raw = String(screenId || "").replace(/[_-]+/g, " ").trim();
+    if (!raw) return "Unknown";
+    return raw.charAt(0).toUpperCase() + raw.slice(1);
+}
+
+function emitScreenSizeDebug(screenId) {
+    if (!ENABLE_SCREEN_LAYOUT_DEBUG) return;
+
+    let activeScreen = document.getElementById(screenId);
+    let screenRect = activeScreen ? activeScreen.getBoundingClientRect() : { width: 0, height: 0 };
+    let screenWidth = Math.round(Number(screenRect.width || 0));
+    let screenHeight = Math.round(Number(screenRect.height || 0));
+    let windowWidth = Number(window.innerWidth || 0);
+    let windowHeight = Number(window.innerHeight || 0);
+    let viewportWidth = Number(document.documentElement?.clientWidth || 0);
+    let viewportHeight = Number(document.documentElement?.clientHeight || 0);
+    let layoutMode = document.documentElement.getAttribute("data-layout") || "unknown";
+    let screenLabel = formatScreenLabel(screenId);
+
+    let toastMessage = [
+        screenLabel,
+        "",
+        `Screen: ${screenWidth} x ${screenHeight}`,
+        `Window: ${windowWidth} x ${windowHeight}`,
+        `Viewport: ${viewportWidth} x ${viewportHeight}`,
+        "",
+        `Layout: ${layoutMode}`
+    ].join("\n");
+
+    if (typeof showToast === "function") {
+        showToast(toastMessage);
+    } else {
+        let fallback = document.createElement("div");
+        fallback.textContent = toastMessage;
+        fallback.style.position = "fixed";
+        fallback.style.left = "50%";
+        fallback.style.bottom = "20px";
+        fallback.style.transform = "translateX(-50%)";
+        fallback.style.padding = "10px 12px";
+        fallback.style.maxWidth = "92vw";
+        fallback.style.whiteSpace = "pre-line";
+        fallback.style.background = "rgba(0,0,0,0.82)";
+        fallback.style.color = "#fff";
+        fallback.style.borderRadius = "10px";
+        fallback.style.zIndex = "99999";
+        document.body.appendChild(fallback);
+        setTimeout(() => {
+            try { fallback.remove(); } catch (_err) { }
+        }, 2200);
+    }
+
+    console.log(
+        `[DEBUG SCREEN SIZE]\n\n` +
+        `Screen: ${String(screenId || "unknown")}\n\n` +
+        `window.innerWidth: ${windowWidth}\n` +
+        `window.innerHeight: ${windowHeight}\n\n` +
+        `viewportWidth: ${viewportWidth}\n` +
+        `viewportHeight: ${viewportHeight}\n\n` +
+        `screenWidth: ${screenWidth}\n` +
+        `screenHeight: ${screenHeight}\n\n` +
+        `layout: ${layoutMode}`
+    );
+}
 
 function getResponsiveViewportWidth() {
     try {
@@ -2321,13 +2387,21 @@ function applyResponsiveLayout() {
     if (!Number.isFinite(width) || width <= 0) return;
 
     let isMobileLayout = width <= 820;
+    let height = Number(document.documentElement && document.documentElement.clientHeight) || Number(window.innerHeight) || 0;
     let app = document.querySelector(".app");
+    let detectedLayout = isMobileLayout ? "mobile" : "desktop";
 
-    document.documentElement.setAttribute("data-layout", isMobileLayout ? "mobile" : "desktop");
+    document.documentElement.setAttribute("data-layout", detectedLayout);
 
     if (app) {
         app.classList.toggle("layout-mobile", isMobileLayout);
         app.classList.toggle("layout-desktop", !isMobileLayout);
+    }
+
+    if (ENABLE_SCREEN_LAYOUT_DEBUG) {
+        console.log(
+            `[DEBUG SCREEN SIZE] applyResponsiveLayout | Current Width: ${width} | Current Height: ${height} | Detected Layout: ${detectedLayout}`
+        );
     }
 }
 
@@ -2424,6 +2498,9 @@ window.showScreen = function showScreen(id) {
 
     screens.forEach(s => s.classList.remove("active"));
     document.getElementById(id)?.classList.add("active");
+
+    applyResponsiveLayout();
+    emitScreenSizeDebug(id);
 
     buttons.forEach(btn => btn.classList.remove("active"));
     document.querySelector(`[data-screen="${id}"]`)?.classList.add("active");
