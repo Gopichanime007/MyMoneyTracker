@@ -8905,7 +8905,7 @@ async function downloadBlobWithBestEffort(blob, filename) {
     }
 
     let locationHint = runtime.isAndroid
-        ? "Runtime-managed Android download. Check: Downloads, Downloads/MoneyTracker, My Files > Downloads"
+        ? "Download requested. Location depends on browser/runtime. Check browser Downloads section."
         : "Downloads folder";
 
     return {
@@ -8944,13 +8944,10 @@ function getBackupLocationGuidance(runtime, filename, method) {
 
     if (runtime && runtime.isAndroid) {
         return [
-            "Backup Created Successfully",
+            "Download Requested",
             `File: ${safeName}`,
-            "Location: Runtime-managed Android download",
-            "Check:",
-            "- Downloads",
-            "- Downloads/MoneyTracker",
-            "- My Files > Downloads"
+            "Location depends on browser/runtime.",
+            "Check browser Downloads section."
         ].join("\n");
     }
 

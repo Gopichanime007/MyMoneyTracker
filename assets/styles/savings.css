@@ -195,12 +195,3 @@
     height: 180px;
   }
 }
-
-@media (max-width: 390px) {
-  .savings-summary-grid,
-  .activity-summary-grid,
-  .period-grid,
-  .health-grid {
-    grid-template-columns: 1fr;
-  }
-}
