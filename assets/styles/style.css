@@ -124,6 +124,7 @@ body {
 
 .app {
   width: min(100%, 960px);
+  max-width: 100vw;
   margin: 0 auto;
   min-height: 100vh;
   padding: var(--space-sm);
@@ -815,6 +816,10 @@ button:active {
   padding: 12px;
   background: color-mix(in srgb, var(--surface), var(--theme) 4%);
   box-shadow: var(--shadow-sm);
+  height: 100%;
+  display: grid;
+  grid-template-rows: auto 1fr;
+  gap: 10px;
 }
 
 .budget-period-head {
@@ -824,14 +829,23 @@ button:active {
   gap: 8px;
 }
 
+.budget-period-head > div {
+  min-width: 0;
+}
+
 .budget-period-head h4 {
   margin: 0;
   font-size: 14px;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
 }
 
 .budget-period-head small {
   color: var(--muted);
   font-size: 11px;
+  display: block;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
 }
 
 .budget-status-pill {
@@ -863,6 +877,10 @@ button:active {
   padding: 8px;
   border: 1px solid color-mix(in srgb, var(--border), transparent 18%);
   background: color-mix(in srgb, var(--surface), white 18%);
+  min-height: 66px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
 }
 
 .budget-period-metrics small {
@@ -1035,6 +1053,7 @@ button:active {
   #budgetEntries {
     grid-template-columns: repeat(2, minmax(0, 1fr));
     align-items: stretch;
+    grid-auto-rows: 1fr;
   }
 
 }
@@ -1128,4 +1147,19 @@ button:active {
   .dashboard-grid {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
+}
+
+html[data-layout="mobile"] .app.layout-mobile {
+  width: 100%;
+  max-width: 100%;
+  padding: 10px;
+}
+
+html[data-layout="mobile"] .app.layout-mobile .dashboard-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+html[data-layout="mobile"] .app.layout-mobile .dash-card {
+  min-height: 72px;
 }

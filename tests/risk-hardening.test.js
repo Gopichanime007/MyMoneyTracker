@@ -1001,6 +1001,64 @@ test('export generates filename metadata and updates backup runtime state', asyn
     expect(document.getElementById('autoBackupRuntimeState').textContent.length).toBeGreaterThan(0);
 });
 
+test('android download guidance avoids fixed folder claims and points to download history surfaces', async () => {
+    const originalUserAgent = window.navigator.userAgent;
+    Object.defineProperty(window.navigator, 'userAgent', {
+        configurable: true,
+        value: 'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Mobile Safari/537.36'
+    });
+
+    await window.exportDataAsJSON();
+
+    const guidance = String(window.__lastBackupExportStatus?.guidance || '');
+    const hint = String(window.__lastBackupExportStatus?.locationHint || '');
+
+    expect(guidance).toContain('Backup Created');
+    expect(guidance).toContain('Browser Download Requested.');
+    expect(guidance).toContain('Browser Downloads');
+    expect(guidance).toContain('Download History');
+    expect(guidance).toContain('Recent Downloads');
+    expect(guidance).not.toContain('Downloads/MoneyTracker');
+    expect(hint).toContain('Browser Download Requested.');
+
+    Object.defineProperty(window.navigator, 'userAgent', {
+        configurable: true,
+        value: originalUserAgent
+    });
+});
+
+test('dashboard responsive layout remains mobile after dashboard load and refresh calls', () => {
+    document.body.insertAdjacentHTML('afterbegin', `<div class="app"></div>`);
+
+    document.body.insertAdjacentHTML('beforeend', `
+      <span id="budgetValue"></span>
+      <span id="spent"></span>
+      <span id="remaining"></span>
+      <span id="todaySpent"></span>
+      <span id="incomeValue"></span>
+      <span id="netValue"></span>
+      <div id="refundTypeBreakdown"></div>
+      <div id="progressFill"></div>
+      <p id="progressText"></p>
+    `);
+
+    Object.defineProperty(window, 'innerWidth', {
+        configurable: true,
+        value: 390
+    });
+    Object.defineProperty(document.documentElement, 'clientWidth', {
+        configurable: true,
+        value: 390
+    });
+
+    window.loadDashboard();
+    window.loadDashboard();
+    window.applyResponsiveLayout();
+
+    expect(document.documentElement.getAttribute('data-layout')).toBe('mobile');
+    expect(document.querySelector('.app').classList.contains('layout-mobile')).toBe(true);
+});
+
 test('dashboard totals reconcile with net-spent engine for refund-adjusted budget usage', () => {
     document.body.insertAdjacentHTML('beforeend', `
       <span id="budgetValue"></span>

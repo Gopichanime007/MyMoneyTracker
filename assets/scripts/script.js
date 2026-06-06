@@ -2296,6 +2296,77 @@ function registerOfflineServiceWorker() {
 
 registerOfflineServiceWorker();
 
+let __responsiveLayoutBound = false;
+let __responsiveLayoutFrame = null;
+
+function getResponsiveViewportWidth() {
+    try {
+        if (window.visualViewport && Number(window.visualViewport.width) > 0) {
+            return Number(window.visualViewport.width);
+        }
+    } catch (_err) {
+        // ignore and continue to fallback widths
+    }
+
+    let docWidth = Number(document.documentElement && document.documentElement.clientWidth);
+    let winWidth = Number(window.innerWidth);
+
+    if (Number.isFinite(docWidth) && docWidth > 0) return docWidth;
+    if (Number.isFinite(winWidth) && winWidth > 0) return winWidth;
+    return 0;
+}
+
+function applyResponsiveLayout() {
+    let width = getResponsiveViewportWidth();
+    if (!Number.isFinite(width) || width <= 0) return;
+
+    let isMobileLayout = width <= 820;
+    let app = document.querySelector(".app");
+
+    document.documentElement.setAttribute("data-layout", isMobileLayout ? "mobile" : "desktop");
+
+    if (app) {
+        app.classList.toggle("layout-mobile", isMobileLayout);
+        app.classList.toggle("layout-desktop", !isMobileLayout);
+    }
+}
+
+function refreshDashboardLayout() {
+    if (typeof window === "undefined") return;
+
+    if (__responsiveLayoutFrame && typeof cancelAnimationFrame === "function") {
+        cancelAnimationFrame(__responsiveLayoutFrame);
+    }
+
+    if (typeof requestAnimationFrame === "function") {
+        __responsiveLayoutFrame = requestAnimationFrame(() => {
+            applyResponsiveLayout();
+            __responsiveLayoutFrame = null;
+        });
+        return;
+    }
+
+    applyResponsiveLayout();
+}
+
+function bindResponsiveLayoutWatchers() {
+    if (__responsiveLayoutBound) return;
+    __responsiveLayoutBound = true;
+
+    window.addEventListener("resize", refreshDashboardLayout, { passive: true });
+    window.addEventListener("orientationchange", refreshDashboardLayout, { passive: true });
+    window.addEventListener("pageshow", refreshDashboardLayout, { passive: true });
+
+    try {
+        if (window.visualViewport && typeof window.visualViewport.addEventListener === "function") {
+            window.visualViewport.addEventListener("resize", refreshDashboardLayout, { passive: true });
+            window.visualViewport.addEventListener("scroll", refreshDashboardLayout, { passive: true });
+        }
+    } catch (_err) {
+        // visualViewport listeners are optional
+    }
+}
+
 // ✅ ALWAYS RUN FOOTER (independent)
 window.addEventListener("load", function () {
     if (isSavingsPage) {
@@ -2303,6 +2374,8 @@ window.addEventListener("load", function () {
         return;
     }
     try {
+        bindResponsiveLayoutWatchers();
+        applyResponsiveLayout();
         injectGlobalFooter();
 
         // Keep persisted data chains tied across upgrades/legacy backups.
@@ -2340,6 +2413,7 @@ window.addEventListener("load", function () {
         startHeadline();
         if (typeof refreshSettingsPanels === "function") refreshSettingsPanels();
         startAutoBackup();
+        refreshDashboardLayout();
 
     } catch (e) {
     }
@@ -2364,6 +2438,7 @@ window.showScreen = function showScreen(id) {
     if (id === "settings" && typeof window.refreshSettingsPanels === "function") {
         window.refreshSettingsPanels();
     }
+    refreshDashboardLayout();
 }
 
 function getCategories() {
@@ -4114,7 +4189,14 @@ function getRuntimeDiagnostics() {
     let ua = (typeof navigator !== "undefined" && navigator.userAgent) ? navigator.userAgent : "";
     let isAndroid = /Android/i.test(ua);
     let isWebView = /;\s?wv\)|\bwv\b|WebView|Version\/\d+\.\d+\s+Chrome\/\d+/i.test(ua);
+    let isBrave = false;
     let webShareFiles = false;
+
+    try {
+        isBrave = !!(typeof navigator !== "undefined" && navigator.brave);
+    } catch (_err) {
+        isBrave = false;
+    }
 
     try {
         if (typeof navigator !== "undefined" && typeof navigator.share === "function" && typeof navigator.canShare === "function" && typeof File !== "undefined") {
@@ -4128,6 +4210,8 @@ function getRuntimeDiagnostics() {
         userAgent: ua,
         isAndroid,
         isWebView,
+        isBrave,
+        isChrome: /Chrome\//i.test(ua) && !isBrave,
         downloadAttribute: "download" in document.createElement("a"),
         showSaveFilePicker: typeof window !== "undefined" && typeof window.showSaveFilePicker === "function",
         webShareFiles
@@ -4140,6 +4224,8 @@ function refreshSettingsPanels() {
 
 try {
     window.refreshSettingsPanels = refreshSettingsPanels;
+    window.applyResponsiveLayout = applyResponsiveLayout;
+    window.refreshDashboardLayout = refreshDashboardLayout;
     window.changeTheme = changeTheme;
     window.setAppearanceMode = setAppearanceMode;
     window.loadTheme = loadTheme;
@@ -5650,6 +5736,7 @@ function loadDashboard() {
     }
 
     updateProgressBar();
+    refreshDashboardLayout();
 }
 // =========================
 // 📦 LOAD BUDGET SCREEN
@@ -8946,7 +9033,7 @@ async function downloadBlobWithBestEffort(blob, filename) {
     }
 
     let locationHint = runtime.isAndroid
-        ? "Download requested. Location depends on browser/runtime. Check browser Downloads section."
+        ? "Browser Download Requested. Use Browser Downloads, Download History, or Recent Downloads."
         : "Downloads folder";
 
     return {
@@ -8984,11 +9071,18 @@ function getBackupLocationGuidance(runtime, filename, method) {
     }
 
     if (runtime && runtime.isAndroid) {
+        let browserLabel = runtime.isWebView
+            ? "Android WebView/WebIntoApp"
+            : (runtime.isBrave ? "Android Brave" : (runtime.isChrome ? "Android Chrome" : "Android Browser"));
         return [
-            "Download Requested",
-            `File: ${safeName}`,
-            "Location depends on browser/runtime.",
-            "Check browser Downloads section."
+            "Backup Created",
+            `Filename: ${safeName}`,
+            "Browser Download Requested.",
+            `Runtime: ${browserLabel}`,
+            "Use:",
+            "Browser Downloads",
+            "Download History",
+            "Recent Downloads"
         ].join("\n");
     }
 
@@ -9166,7 +9260,7 @@ function updateAutoBackupRuntimeState(forcedText) {
     }
 
     if (runtime.isAndroid && runtime.isWebView) {
-        el.textContent = "Export runtime: Android WebIntoApp uses browser download fallback; filename prompt behavior depends on runtime.";
+        el.textContent = "Export runtime: Android WebIntoApp uses browser download fallback; open Browser Downloads, Download History, or Recent Downloads to locate backups.";
         return;
     }
 
