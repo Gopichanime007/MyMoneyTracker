@@ -1557,9 +1557,7 @@ function buildSavingsSourceLedger(entries) {
 }
 
 function getSourceRemainingById(sourceId, entries) {
-    let scoped = (typeof getScopedSavings === "function")
-        ? getScopedSavings()
-        : (getSavings() || []);
+    let scoped = getSavings() || [];
     let ledger = buildSavingsSourceLedger(entries || scoped);
     let row = ledger.find(x => String(x.source.id) === String(sourceId));
     return row ? Number(row.remaining || 0) : 0;
@@ -1568,18 +1566,7 @@ function getSourceRemainingById(sourceId, entries) {
 // Returns all source-seed entries (used as available sources)
 function getAvailableSources() {
     let data = getSavings() || [];
-
-    let periodKey = typeof getActivePeriodKey === "function"
-        ? getActivePeriodKey()
-        : null;
-
-    let now = new Date();
-    let currentMonth = now.toISOString().slice(0, 7);
-
-    return data.filter(t => {
-        if (periodKey) return isSavingsSourceSeed(t) && t.periodKey === periodKey;
-        return isSavingsSourceSeed(t) && t.monthKey === currentMonth;
-    });
+    return data.filter(isSavingsSourceSeed);
 }
 
 function loadSourceOptions({
@@ -1590,16 +1577,7 @@ function loadSourceOptions({
     let select = document.getElementById("sourceSelect");
     if (!select) return;
 
-    let data = (typeof getScopedSavings === "function")
-        ? getScopedSavings()
-        : (getSavings() || []);
-
-    let periodKey = typeof getActivePeriodKey === "function"
-        ? getActivePeriodKey()
-        : null;
-
-    let now = new Date();
-    let currentMonth = now.toISOString().slice(0, 7);
+    let data = getSavings() || [];
 
     let scoped = [...data];
     let ledger = buildSavingsSourceLedger(scoped);
@@ -2111,16 +2089,7 @@ function renderSourceDetails(sourceId) {
 // Renders all income entries and allows navigation to detailed view
 function renderIncomeList() {
 
-    let data = (typeof getScopedSavings === "function")
-        ? getScopedSavings()
-        : (getSavings() || []);
-
-    let periodKey = typeof getActivePeriodKey === "function"
-        ? getActivePeriodKey()
-        : null;
-
-    let now = new Date();
-    let currentMonth = now.toISOString().slice(0, 7);
+    let data = getSavings() || [];
 
     // 🔥 GLOBAL SOURCES
     let scoped = [...data];
@@ -2970,29 +2939,9 @@ function goToBudgetPeriods() {
 // }
 
 function getScopedSavings() {
-
-    let data = getSavings() || [];
-
-    let periodKey =
-        typeof getActivePeriodKey === "function"
-            ? getActivePeriodKey()
-            : null;
-
-    // 🔥 NO ACTIVE PERIOD
-    if (!periodKey) {
-
-        let currentMonth =
-            new Date().toISOString().slice(0, 7);
-
-        return data.filter(t =>
-            t.monthKey === currentMonth
-        );
-    }
-
-    // 🔥 ACTIVE PERIOD EXISTS
-    return data.filter(t =>
-        t.periodKey === periodKey
-    );
+    // Display/retrieval scope intentionally includes all persisted entries.
+    // Period-specific analytics should use explicit period helpers.
+    return getSavings() || [];
 }
 
 function getActiveBudgetPeriodFull() {

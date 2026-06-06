@@ -2744,7 +2744,12 @@ function showDate() {
     if (el) el.innerText = new Date().toLocaleString();
 }
 
-const APPEARANCE_MODES = ["metallic", "matte", "glossy", "chromium", "glass", "paper", "neon"];
+const APPEARANCE_MODES = ["metallic", "matte", "glossy", "chromium", "premium", "glass", "paper", "neon"];
+const APPEARANCE_ALIASES = {
+    mettalic: "metallic",
+    mettlaic: "metallic",
+    premium: "premium"
+};
 const ACCENT_PRESETS = {
     purple: "#7c3aed",
     blue: "#2196f3",
@@ -2761,8 +2766,11 @@ function resolveAccentColor(value) {
 }
 
 function setAppearanceMode(mode) {
-    let safeMode = APPEARANCE_MODES.includes(String(mode || "").toLowerCase())
-        ? String(mode).toLowerCase()
+    let requested = String(mode || "").toLowerCase();
+    let normalized = APPEARANCE_ALIASES[requested] || requested;
+
+    let safeMode = APPEARANCE_MODES.includes(normalized)
+        ? normalized
         : "metallic";
 
     localStorage.setItem("appearanceMode", safeMode);
@@ -2999,7 +3007,7 @@ function generatePdfReport(opts = {}) {
 
     let budgets = getBudgets().filter(b => budgetIdsFromData.has(String(b && b.budgetId)));
     if (!budgets.length) {
-        budgets = filterBudgetsByActivePeriod(getBudgets());
+        budgets = getBudgets();
     }
     const budgetIds = budgets
         .map(b => b && b.budgetId)
@@ -6267,8 +6275,8 @@ function loadBudgetScreen() {
 function renderBudgetEntries() {
 
     let budgetsAll = JSON.parse(localStorage.getItem("budgets")) || [];
-    let budgets = filterBudgetsByActivePeriod(budgetsAll);
-    let expenses = filterByActivePeriod(getExpenses());
+    let budgets = budgetsAll;
+    let expenses = getExpenses();
     let savings = JSON.parse(localStorage.getItem("savingsTransactions")) || [];
 
     let container = document.getElementById("budgetEntries");
@@ -6390,7 +6398,7 @@ function toggleBudgetEntryDetails(id) {
 
 function openBudgetDetails(group) {
     let budgets = getBudgets();
-    let expenses = filterByActivePeriod(getExpenses());
+    let expenses = getExpenses();
     let savings = JSON.parse(localStorage.getItem("savingsTransactions")) || [];
 
     let container = document.getElementById("budgetDetailsContainer");
