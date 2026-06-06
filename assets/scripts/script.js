@@ -2318,39 +2318,6 @@ function emitScreenSizeDebug(screenId) {
     let viewportWidth = Number(document.documentElement?.clientWidth || 0);
     let viewportHeight = Number(document.documentElement?.clientHeight || 0);
     let layoutMode = document.documentElement.getAttribute("data-layout") || "unknown";
-    let screenLabel = formatScreenLabel(screenId);
-
-    let toastMessage = [
-        screenLabel,
-        "",
-        `Screen: ${screenWidth} x ${screenHeight}`,
-        `Window: ${windowWidth} x ${windowHeight}`,
-        `Viewport: ${viewportWidth} x ${viewportHeight}`,
-        "",
-        `Layout: ${layoutMode}`
-    ].join("\n");
-
-    if (typeof showToast === "function") {
-        showToast(toastMessage);
-    } else {
-        let fallback = document.createElement("div");
-        fallback.textContent = toastMessage;
-        fallback.style.position = "fixed";
-        fallback.style.left = "50%";
-        fallback.style.bottom = "20px";
-        fallback.style.transform = "translateX(-50%)";
-        fallback.style.padding = "10px 12px";
-        fallback.style.maxWidth = "92vw";
-        fallback.style.whiteSpace = "pre-line";
-        fallback.style.background = "rgba(0,0,0,0.82)";
-        fallback.style.color = "#fff";
-        fallback.style.borderRadius = "10px";
-        fallback.style.zIndex = "99999";
-        document.body.appendChild(fallback);
-        setTimeout(() => {
-            try { fallback.remove(); } catch (_err) { }
-        }, 2200);
-    }
 
     console.log(
         `[DEBUG SCREEN SIZE]\n\n` +
@@ -2606,28 +2573,6 @@ window.showScreen = function showScreen(id) {
 
     applyResponsiveLayout();
     emitScreenSizeDebug(id);
-
-    const layout = document.documentElement.getAttribute("data-layout") || "unknown";
-    const existingDebugToast = document.getElementById("debugLayoutToast");
-    if (existingDebugToast) {
-        try { existingDebugToast.remove(); } catch (_err) { }
-    }
-
-    const debugToast = document.createElement("div");
-    debugToast.id = "debugLayoutToast";
-    debugToast.innerText = `Layout: ${layout}`;
-    debugToast.style.position = "fixed";
-    debugToast.style.top = "20px";
-    debugToast.style.left = "20px";
-    debugToast.style.zIndex = "999999";
-    debugToast.style.background = "red";
-    debugToast.style.color = "white";
-    debugToast.style.padding = "10px";
-    document.body.appendChild(debugToast);
-
-    setTimeout(() => {
-        try { debugToast.remove(); } catch (_err) { }
-    }, 5000);
 
     if (id === "home") {
         setTimeout(() => {
