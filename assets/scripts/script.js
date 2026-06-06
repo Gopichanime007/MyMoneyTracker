@@ -2373,10 +2373,61 @@ function logDashboardOverflowDiagnostics(trigger = "unknown") {
     let dashboardClientWidth = Number(dashboardElement.clientWidth || 0);
     let bodyScrollWidth = Number(document.body && document.body.scrollWidth || 0);
     let winInnerWidth = Number(window.innerWidth || 0);
+    let htmlScrollWidth = Number(document.documentElement && document.documentElement.scrollWidth || 0);
+    let htmlClientWidth = Number(document.documentElement && document.documentElement.clientWidth || 0);
+    let bodyClientWidth = Number(document.body && document.body.clientWidth || 0);
 
     console.log("[DEBUG DASHBOARD OVERFLOW]", trigger);
     console.log(dashboardElement.scrollWidth, dashboardElement.clientWidth);
     console.log(document.body.scrollWidth, window.innerWidth);
+    console.log("BODY", document.body.scrollWidth, document.body.clientWidth);
+    console.log("HTML", document.documentElement.scrollWidth, document.documentElement.clientWidth);
+
+    let selectorProbe = [
+        "#home",
+        "#home > .card",
+        ".dashboard-grid",
+        ".refund-type-card",
+        ".headline-wrapper",
+        ".headline-text",
+        ".chart-container",
+        "#budgetEntries",
+        ".budget-period-card"
+    ];
+
+    selectorProbe.forEach((sel) => {
+        let el = document.querySelector(sel);
+        if (!el) return;
+        let parentWidth = el.parentElement ? Number(el.parentElement.clientWidth || 0) : 0;
+        console.log(
+            "[DASHBOARD NODE]",
+            sel,
+            "scrollWidth",
+            Number(el.scrollWidth || 0),
+            "clientWidth",
+            Number(el.clientWidth || 0),
+            "parentWidth",
+            parentWidth
+        );
+    });
+
+    document
+        .querySelectorAll("*")
+        .forEach(el => {
+            if (!dashboardElement.contains(el)) return;
+            if (el.scrollWidth > el.clientWidth + 5) {
+                let parentWidth = el.parentElement ? Number(el.parentElement.clientWidth || 0) : 0;
+                console.log(
+                    "[OVERFLOW]",
+                    el.tagName,
+                    el.className,
+                    el.scrollWidth,
+                    el.clientWidth,
+                    "PARENT",
+                    parentWidth
+                );
+            }
+        });
 
     let candidates = dashboardElement.querySelectorAll(
         ".card, .dashboard-grid, .dash-card, .refund-type-card, .headline-wrapper, .headline-text, #refundTypeBreakdown"
@@ -2410,6 +2461,13 @@ function logDashboardOverflowDiagnostics(trigger = "unknown") {
         console.log(
             "[DEBUG DASHBOARD OVERFLOW CHILD]",
             `${widest.selector} => ${widest.scrollWidth} / ${widest.clientWidth} (delta ${widest.delta})`
+        );
+    }
+
+    if (htmlScrollWidth > htmlClientWidth + 5 || bodyScrollWidth > bodyClientWidth + 5) {
+        console.log(
+            "[DEBUG ROOT OVERFLOW]",
+            `HTML ${htmlScrollWidth}/${htmlClientWidth} | BODY ${bodyScrollWidth}/${bodyClientWidth} | WINDOW ${winInnerWidth}`
         );
     }
 }
