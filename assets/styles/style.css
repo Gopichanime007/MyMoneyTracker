@@ -214,6 +214,11 @@ h4 {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 8px;
+  min-width: 0;
+}
+
+.dashboard-grid > * {
+  min-width: 0;
 }
 
 .card {
@@ -244,16 +249,20 @@ h4 {
   padding: 9px;
   box-shadow: var(--shadow-sm);
   filter: var(--dash-finish-filter);
+  min-width: 0;
+  overflow: hidden;
 }
 
 .dash-card span {
   display: block;
   font-size: 11px;
+  overflow-wrap: anywhere;
 }
 
 .dash-card h2 {
   margin-top: 2px;
   font-size: .95rem;
+  overflow-wrap: anywhere;
 }
 
 .clickable-card {
@@ -528,6 +537,7 @@ button:active {
   border-radius: var(--radius-lg);
   border: 1px solid var(--border);
   background: color-mix(in srgb, var(--surface-alt), var(--theme) 8%);
+  min-width: 0;
 }
 
 .refund-type-card h4 {
@@ -540,6 +550,14 @@ button:active {
   align-items: center;
   padding: 6px 0;
   border-bottom: 1px dashed color-mix(in srgb, var(--border), transparent 30%);
+  min-width: 0;
+}
+
+.refund-type-row span,
+.refund-type-row strong,
+#refundTypeBreakdown {
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .refund-type-row:last-child {
@@ -958,6 +976,7 @@ button:active {
   overflow: hidden;
   white-space: nowrap;
   position: relative;
+  max-width: 100%;
   border-radius: 10px;
   color: #fff;
   background: linear-gradient(145deg, color-mix(in srgb, var(--theme), #111827 62%), #111827);
@@ -967,6 +986,7 @@ button:active {
 .headline-text {
   display: inline-block;
   white-space: nowrap;
+  max-width: 100%;
   animation: scrollText 18s linear infinite;
   font-size: 13px;
 }
