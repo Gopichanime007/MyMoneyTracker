@@ -2414,7 +2414,6 @@ function logDashboardOverflowDiagnostics(trigger = "unknown") {
     document
         .querySelectorAll("*")
         .forEach(el => {
-            if (!dashboardElement.contains(el)) return;
             if (el.scrollWidth > el.clientWidth + 5) {
                 let parentWidth = el.parentElement ? Number(el.parentElement.clientWidth || 0) : 0;
                 console.log(
@@ -2422,10 +2421,9 @@ function logDashboardOverflowDiagnostics(trigger = "unknown") {
                     el.tagName,
                     el.className,
                     el.scrollWidth,
-                    el.clientWidth,
-                    "PARENT",
-                    parentWidth
+                    el.clientWidth
                 );
+                console.log("[OVERFLOW PARENT]", el.tagName, el.className, "parentWidth", parentWidth);
             }
         });
 
