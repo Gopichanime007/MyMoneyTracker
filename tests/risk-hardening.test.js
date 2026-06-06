@@ -206,6 +206,156 @@ test('transfer back entry persists original savings source trace metadata', () =
     expect(tb.transferBackTrail[0].sourceId).toBe('srcA');
 });
 
+test('transfer back save path records expense, savings credit, history, and export when budget source is inferred', async () => {
+    const now = new Date();
+    const start = new Date(now.getFullYear(), now.getMonth(), 1);
+    const end = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+    const startKey = localDateKey(start);
+    const endKey = localDateKey(end);
+    const periodKey = `${startKey}_to_${endKey}`;
+
+    localStorage.setItem('bp', JSON.stringify([{ id: 'ptb-flow', start: startKey, end: endKey, status: 'active', extraDays: 0 }]));
+    window.saveBudgets([{ budgetId: 'b-transfer', totalAllocated: 3000, periodKey }]);
+    window.saveSavings([
+        { id: 'seed-source', type: 'deposit', amount: 5000, date: now.toISOString() },
+        { id: 'alloc-source', type: 'budget_allocation', amount: -3000, sourceId: 'seed-source', targetBudgetId: 'b-transfer', date: now.toISOString() }
+    ]);
+    window.saveExpenses([]);
+
+    document.getElementById('entryType').innerHTML = '<option value="transfer_back">transfer_back</option>';
+    document.getElementById('entryType').value = 'transfer_back';
+    document.getElementById('amount').value = '1000';
+    document.getElementById('purpose').value = 'Reverse to wallet';
+    document.getElementById('paymentType').value = 'Cash';
+    document.getElementById('expenseDate').value = now.toISOString().slice(0, 10);
+
+    window.storeAttachmentWithStatus = jest.fn(async () => ({ attachmentId: null, status: 'none', error: null }));
+
+    window.saveExpense();
+    await Promise.resolve();
+
+    const expenses = window.getExpenses();
+    const transferBackRows = expenses.filter(e => e.type === 'transfer_back');
+    expect(transferBackRows.length).toBe(1);
+    expect(Math.abs(Number(transferBackRows[0].amount))).toBe(1000);
+    expect(Array.isArray(transferBackRows[0].transferBackTrail)).toBe(true);
+    expect(String(transferBackRows[0].transferBackTrail[0].sourceId)).toBe('seed-source');
+
+    const savings = window.getSavings();
+    const generatedRefund = savings.find(s => s.type === 'refund' && String(s.linkedTransactionId) === String(transferBackRows[0].id));
+    expect(generatedRefund).toBeTruthy();
+    expect(Number(generatedRefund.amount)).toBe(1000);
+
+    window.loadHistory();
+    const historyText = (document.getElementById('historyList').textContent || '');
+    expect(historyText.toLowerCase()).toContain('transfer back');
+
+    const dump = window.getFullAppData();
+    const exported = (dump.expenses || []).filter(e => e.type === 'transfer_back');
+    expect(exported.length).toBe(1);
+});
+
+test('multiple partial refunds preserve all records and converge to fully refunded state with accurate totals', () => {
+    const now = new Date();
+    const start = new Date(now.getFullYear(), now.getMonth(), 1);
+    const end = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+    const startKey = localDateKey(start);
+    const endKey = localDateKey(end);
+    const periodKey = `${startKey}_to_${endKey}`;
+
+    localStorage.setItem('bp', JSON.stringify([{ id: 'prf', start: startKey, end: endKey, status: 'active', extraDays: 0 }]));
+    window.saveBudgets([{ budgetId: 'b-rf', totalAllocated: 12000, periodKey }]);
+
+    const rootId = 'exp-10000';
+    const root = { id: rootId, type: 'expense', amount: -10000, budgetId: 'b-rf', periodKey, date: now.toISOString(), purpose: 'Master Expense' };
+    const r1 = { id: 'ref-1', type: 'refund', amount: 5000, budgetId: 'b-rf', periodKey, linkedTransactionId: rootId, refundType: 'return', resolutionType: 'partially_refunded', resolvedAmount: 5000, lossAmount: 0, date: now.toISOString() };
+    const r2 = { id: 'ref-2', type: 'refund', amount: 3000, budgetId: 'b-rf', periodKey, linkedTransactionId: rootId, refundType: 'return', resolutionType: 'partially_refunded', resolvedAmount: 3000, lossAmount: 0, date: now.toISOString() };
+    const r3 = { id: 'ref-3', type: 'refund', amount: 2000, budgetId: 'b-rf', periodKey, linkedTransactionId: rootId, refundType: 'return', resolutionType: 'fully_refunded', resolvedAmount: 2000, lossAmount: 0, date: now.toISOString() };
+
+    window.saveExpenses([root]);
+    let snap = window.getExpenseResolutionSnapshot(rootId);
+    expect(snap.originalAmount).toBe(10000);
+    expect(snap.refunded).toBe(0);
+    expect(snap.remainingRefundable).toBe(10000);
+
+    window.saveExpenses([root, r1]);
+    snap = window.getExpenseResolutionSnapshot(rootId);
+    expect(snap.refunded).toBe(5000);
+    expect(snap.remainingRefundable).toBe(5000);
+    expect(snap.status).toBe('PARTIALLY_REFUNDED');
+
+    window.saveExpenses([root, r1, r2]);
+    snap = window.getExpenseResolutionSnapshot(rootId);
+    expect(snap.refunded).toBe(8000);
+    expect(snap.remainingRefundable).toBe(2000);
+    expect(snap.status).toBe('PARTIALLY_REFUNDED');
+
+    window.saveExpenses([root, r1, r2, r3]);
+    snap = window.getExpenseResolutionSnapshot(rootId);
+    expect(snap.refunded).toBe(10000);
+    expect(snap.remainingRefundable).toBe(0);
+    expect(snap.status).toBe('FULLY_REFUNDED');
+
+    const refunds = window.getExpenses().filter(e => e.type === 'refund' && String(e.linkedTransactionId) === rootId);
+    expect(refunds.length).toBe(3);
+    expect(refunds.map(r => r.id)).toEqual(expect.arrayContaining(['ref-1', 'ref-2', 'ref-3']));
+    refunds.forEach((r) => {
+        expect(String(r.linkedTransactionId)).toBe(rootId);
+        expect(typeof r.resolutionType).toBe('string');
+        expect(Number(r.resolvedAmount)).toBeGreaterThan(0);
+        expect(Number(r.lossAmount)).toBe(0);
+    });
+
+    window.loadHistory(window.getExpenses());
+    const historyText = (document.getElementById('historyList').textContent || '').toLowerCase();
+    expect((historyText.match(/refund/g) || []).length).toBeGreaterThanOrEqual(3);
+
+        document.body.insertAdjacentHTML('beforeend', `
+            <span id="budgetValue"></span>
+            <span id="spent"></span>
+            <span id="remaining"></span>
+            <span id="todaySpent"></span>
+            <span id="incomeValue"></span>
+            <span id="netValue"></span>
+            <div id="refundTypeBreakdown"></div>
+            <div id="progressFill"></div>
+            <p id="progressText"></p>
+        `);
+
+        window.loadDashboard();
+    const incomeText = document.getElementById('incomeValue').innerText || '';
+    expect(incomeText).toContain('10000');
+
+    window.loadGraph('day', window.getExpenses());
+    const graphText = document.getElementById('graphDate').innerText || '';
+    expect(graphText).toContain(window.formatCurrency(10000));
+
+    const pdfTextCalls = [];
+    const doc = {
+        setFillColor: jest.fn(),
+        roundedRect: jest.fn(),
+        setFontSize: jest.fn(),
+        setFont: jest.fn(),
+        text: jest.fn((msg) => { if (typeof msg === 'string') pdfTextCalls.push(msg); }),
+        setTextColor: jest.fn(),
+        setDrawColor: jest.fn(),
+        line: jest.fn(),
+        rect: jest.fn(),
+        splitTextToSize: jest.fn((msg) => [String(msg)]),
+        addPage: jest.fn(),
+        save: jest.fn()
+    };
+    window.jspdf = { jsPDF: jest.fn(() => doc) };
+    window.generatePdfReport({ data: window.getExpenses() });
+    const pdfText = pdfTextCalls.join(' | ');
+    expect(pdfText).toContain('Income');
+    expect(pdfText).toContain('10000.00');
+
+    const exported = window.getFullAppData();
+    const exportedRefunds = (exported.expenses || []).filter(e => e.type === 'refund' && String(e.linkedTransactionId) === rootId);
+    expect(exportedRefunds.length).toBe(3);
+});
+
 test('budget period planned end + explicit extension calculate effective end correctly', () => {
     const period = { start: '2026-06-01', end: '2026-06-30', extraDays: 5 };
     const effective = window.getBudgetPeriodEffectiveEndDate(period, new Date('2026-06-10T00:00:00Z'));

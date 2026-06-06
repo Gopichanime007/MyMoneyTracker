@@ -1120,7 +1120,7 @@ button:active {
   }
 }
 
-@media (min-width: 640px) and (orientation: landscape) {
+@media (min-width: 1024px) and (orientation: landscape) {
   .app {
     max-width: 960px;
   }

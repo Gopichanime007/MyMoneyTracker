@@ -1740,6 +1740,31 @@ function handleRefundResolutionChange() {
     updateLinkedRemainingUI();
 }
 
+function resolveBudgetSourceIdForTransferBack(budget, savingsEntries) {
+    if (!budget || !budget.budgetId) return null;
+
+    if (budget.sourceId) return String(budget.sourceId);
+    if (budget.linkedSourceSavingsId) return String(budget.linkedSourceSavingsId);
+    if (Array.isArray(budget.linkedSourceSavingsIds) && budget.linkedSourceSavingsIds.length) {
+        return String(budget.linkedSourceSavingsIds[0]);
+    }
+
+    let savings = Array.isArray(savingsEntries) ? savingsEntries : [];
+    let relatedAllocations = savings
+        .filter(entry => {
+            if (!entry || !entry.sourceId) return false;
+            let isAllocation = entry.type === "budget_allocation" || entry.type === "withdraw_budget";
+            return isAllocation && String(entry.targetBudgetId || "") === String(budget.budgetId);
+        })
+        .sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0));
+
+    if (relatedAllocations.length) {
+        return String(relatedAllocations[0].sourceId);
+    }
+
+    return null;
+}
+
 function buildTransferBackPlan(requestAmount) {
     let amount = Math.abs(Number(requestAmount) || 0);
     if (!amount) {
@@ -1747,7 +1772,7 @@ function buildTransferBackPlan(requestAmount) {
     }
 
     let budgets = filterBudgetsByActivePeriod(getBudgets())
-        .filter(b => b && b.budgetId && b.sourceId);
+        .filter(b => b && b.budgetId);
     let savingsEntries = (typeof getSavings === "function") ? getSavings() : [];
 
     let expenses = getExpenses();
@@ -1761,7 +1786,7 @@ function buildTransferBackPlan(requestAmount) {
             sourceId: resolvedSourceId,
             available
         };
-    }).filter(c => c.available > 0);
+    }).filter(c => c.available > 0 && !!c.sourceId);
 
     candidates.sort((a, b) => b.available - a.available);
 
@@ -1877,7 +1902,7 @@ function handleEntryTypeUIChange() {
         if (budgetWrapper) budgetWrapper.style.display = "block";
         if (paymentWrapper) paymentWrapper.style.display = "block";
         if (personWrapper) personWrapper.style.display = "block";
-        if (personHelp) personHelp.textContent = "Person is optional. Select it when this transfer is for or from a specific person.";
+        if (personHelp) personHelp.textContent = "Person is required for transfer transactions.";
         loadExpensePersonOptions();
         return;
     }
@@ -1886,7 +1911,7 @@ function handleEntryTypeUIChange() {
         if (linkedWrapper) linkedWrapper.style.display = "block";
         if (paymentWrapper) paymentWrapper.style.display = "block";
         if (personWrapper) personWrapper.style.display = "block";
-        if (personHelp) personHelp.textContent = "Person is optional. Select it if someone paid you back or requested the refund.";
+        if (personHelp) personHelp.textContent = "Person is optional for refunds. Select it only when needed.";
         loadExpensePersonOptions();
         loadLinkedTransactionOptions(type);
         handleRefundResolutionChange();
@@ -1930,6 +1955,11 @@ async function handleAddExpense() {
         return;
     }
 
+    if (type === "transfer" && !person) {
+        showToast("Select person");
+        return;
+    }
+
     if (type === "refund") {
         if (!linkedTransactionId) {
             showToast("Select linked transaction");
@@ -1954,6 +1984,11 @@ async function handleAddExpense() {
 
         if (!(refundResolutionType === "consumed" || refundResolutionType === "written_off") && amount > pending) {
             showToast(`Only ${formatCurrency(pending)} available`);
+            return;
+        }
+
+        if (refundType === "loan_recovery" && !person) {
+            showToast("Select person for Loan Recovery");
             return;
         }
     }
@@ -4149,6 +4184,12 @@ function getTotalBudget(monthKey) {
 
 function saveExpense() {
     handleAddExpense();
+}
+try {
+    window.saveExpense = saveExpense;
+    window.handleAddExpense = handleAddExpense;
+} catch (_err) {
+    // ignore non-browser contexts
 }
 function exportPDF() {
     downloadPDF();

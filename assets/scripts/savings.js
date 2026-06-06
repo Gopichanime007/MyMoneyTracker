@@ -127,7 +127,10 @@ async function addSavings() {
         }
 
         let remaining = getSourceRemainingById(sourceId, data);
-        if (Math.abs(amount) > remaining) {
+        if (!person) {
+            showToast("Select person ❗", "warning");
+            return;
+        }
             showToast(`Insufficient source balance (₹${remaining} available)`, "warning");
             return;
         }
@@ -154,12 +157,12 @@ async function addSavings() {
     }
 
     else if (type === "refund") {
-        const refundValue = String(document.getElementById("refundSelect")?.value || "");
-        if (!refundValue) {
-            showToast("Select refund transaction ❗", "warning");
-            return;
-        }
-
+            let snapshot = getSavingsResolutionSnapshot(refId);
+            let pending = Number(snapshot.remainingRefundable || 0);
+            if (pending <= 0) {
+                showToast("This transfer is already fully resolved", "warning");
+                return;
+            }
         const refId = refundValue.includes(":") ? refundValue.split(":")[1] : refundValue;
         let original = data.find(t => String(t.id) === String(refId));
 
@@ -902,6 +905,11 @@ async function addSavings() {
             return;
         }
 
+        if (!person) {
+            showToast("Select person ❗", "warning");
+            return;
+        }
+
         const entry = createSavingsEntry({
             type: "transfer",
             amount: -Math.abs(amount),
@@ -953,6 +961,11 @@ async function addSavings() {
             ? normalizeRefundType(document.getElementById("sRefundType")?.value || "custom")
             : String(document.getElementById("sRefundType")?.value || "custom");
         let creditAmount = Math.abs(Number(amount || 0));
+
+        if (refundType === "loan_recovery" && !person) {
+            showToast("Select person for Loan Recovery ❗", "warning");
+            return;
+        }
 
         if (resolutionType === "fully_refunded") {
             creditAmount = pending;
@@ -2208,7 +2221,7 @@ function handleSavingsTypeChange() {
     if (type === "transfer") {
         if (source) source.style.display = "block";
         if (person) person.style.display = "block";
-        if (personHelp) personHelp.textContent = "Person is optional. Select it when this transfer is for or from a specific person.";
+        if (personHelp) personHelp.textContent = "Person is required for transfer transactions.";
         loadSourceOptions({ includeUsed: false });
         return;
     }
@@ -2222,7 +2235,7 @@ function handleSavingsTypeChange() {
     if (type === "refund") {
         if (refund) refund.style.display = "block";
         if (person) person.style.display = "block";
-        if (personHelp) personHelp.textContent = "Person is optional. Select it if someone paid you back or requested this refund.";
+        if (personHelp) personHelp.textContent = "Person is optional for refunds. Select it only when needed.";
         loadRefundCandidates();
         handleSavingsRefundResolutionChange();
         refreshSavingsRefundGuidance();
