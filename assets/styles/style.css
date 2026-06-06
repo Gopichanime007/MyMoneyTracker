@@ -957,6 +957,7 @@ button:active {
 .headline-wrapper {
   overflow: hidden;
   white-space: nowrap;
+  position: relative;
   border-radius: 10px;
   color: #fff;
   background: linear-gradient(145deg, color-mix(in srgb, var(--theme), #111827 62%), #111827);
@@ -965,14 +966,14 @@ button:active {
 
 .headline-text {
   display: inline-block;
-  padding-left: 100%;
+  white-space: nowrap;
   animation: scrollText 18s linear infinite;
   font-size: 13px;
 }
 
 @keyframes scrollText {
   0% {
-    transform: translateX(0);
+    transform: translateX(100%);
   }
   100% {
     transform: translateX(-100%);

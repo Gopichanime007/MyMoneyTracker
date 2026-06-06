@@ -2365,6 +2365,55 @@ function emitScreenSizeDebug(screenId) {
     );
 }
 
+function logDashboardOverflowDiagnostics(trigger = "unknown") {
+    let dashboardElement = document.getElementById("home");
+    if (!dashboardElement) return;
+
+    let dashboardScrollWidth = Number(dashboardElement.scrollWidth || 0);
+    let dashboardClientWidth = Number(dashboardElement.clientWidth || 0);
+    let bodyScrollWidth = Number(document.body && document.body.scrollWidth || 0);
+    let winInnerWidth = Number(window.innerWidth || 0);
+
+    console.log("[DEBUG DASHBOARD OVERFLOW]", trigger);
+    console.log(dashboardElement.scrollWidth, dashboardElement.clientWidth);
+    console.log(document.body.scrollWidth, window.innerWidth);
+
+    let candidates = dashboardElement.querySelectorAll(
+        ".card, .dashboard-grid, .dash-card, .refund-type-card, .headline-wrapper, .headline-text, #refundTypeBreakdown"
+    );
+
+    let widest = {
+        selector: "#home",
+        scrollWidth: dashboardScrollWidth,
+        clientWidth: dashboardClientWidth,
+        delta: dashboardScrollWidth - dashboardClientWidth
+    };
+
+    candidates.forEach((el) => {
+        let sw = Number(el.scrollWidth || 0);
+        let cw = Number(el.clientWidth || 0);
+        let delta = sw - cw;
+        if (delta > widest.delta || (sw > widest.scrollWidth && delta >= widest.delta)) {
+            let selector = el.id
+                ? `#${el.id}`
+                : (el.className ? `.${String(el.className).trim().replace(/\s+/g, ".")}` : el.tagName);
+            widest = {
+                selector,
+                scrollWidth: sw,
+                clientWidth: cw,
+                delta
+            };
+        }
+    });
+
+    if (widest.delta > 0 || bodyScrollWidth > winInnerWidth) {
+        console.log(
+            "[DEBUG DASHBOARD OVERFLOW CHILD]",
+            `${widest.selector} => ${widest.scrollWidth} / ${widest.clientWidth} (delta ${widest.delta})`
+        );
+    }
+}
+
 function getResponsiveViewportWidth() {
     try {
         if (window.visualViewport && Number(window.visualViewport.width) > 0) {
@@ -2523,6 +2572,12 @@ window.showScreen = function showScreen(id) {
     setTimeout(() => {
         try { debugToast.remove(); } catch (_err) { }
     }, 5000);
+
+    if (id === "home") {
+        setTimeout(() => {
+            logDashboardOverflowDiagnostics("showScreen(home)");
+        }, 0);
+    }
 
     buttons.forEach(btn => btn.classList.remove("active"));
     document.querySelector(`[data-screen="${id}"]`)?.classList.add("active");
@@ -5836,6 +5891,9 @@ function loadDashboard() {
 
     updateProgressBar();
     refreshDashboardLayout();
+    setTimeout(() => {
+        logDashboardOverflowDiagnostics("loadDashboard");
+    }, 0);
 }
 // =========================
 // 📦 LOAD BUDGET SCREEN
