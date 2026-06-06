@@ -2524,6 +2524,8 @@ window.addEventListener("load", function () {
         applyResponsiveLayout();
         injectGlobalFooter();
 
+        applySchemaMigrationsToLocalStorage();
+
         // Keep persisted data chains tied across upgrades/legacy backups.
         runIntegrityRepairSilently();
 
@@ -5026,6 +5028,265 @@ function buildImportDiagnostics(parsed) {
     };
 }
 
+const SCHEMA_VERSION_MAIN = "1.0.0";
+const SCHEMA_VERSION_DEVELOPMENT = "2.0.0";
+
+const SCHEMA_DEFAULTS = {
+    expenses: [],
+    budgets: [],
+    savings: [],
+    budgetPeriods: [],
+    categories: ["Food", "Travel", "Bills", "Entertainment", "Loan", "Recovery", "Others"],
+    persons: [],
+    settings: {
+        theme: "",
+        currencyCode: "INR",
+        autoBackupEnabled: false,
+        autoBackupFrequency: "weekly",
+        autoBackupTarget: "local_download"
+    },
+    orders: [],
+    quotations: {
+        quotationData: null,
+        quotationItems: [],
+        quotationCharges: []
+    }
+};
+
+const SCHEMA_FIELD_MAPPINGS = {
+    expenses: {
+        personId: "linkedPersonId",
+        linkedPersonId: "personId",
+        budgetId: "linkedBudgetId",
+        linkedBudgetId: "budgetId"
+    },
+    savings: {
+        personId: "linkedPersonId",
+        linkedPersonId: "personId"
+    },
+    budgets: {
+        id: "budgetId",
+        budgetId: "id"
+    }
+};
+
+function normalizeSchemaVersionTag(value) {
+    if (typeof value !== "string" || !value.trim()) return SCHEMA_VERSION_MAIN;
+    const v = value.trim().toLowerCase();
+    if (v === "v1") return SCHEMA_VERSION_MAIN;
+    if (v === "v2" || v === "v3") return SCHEMA_VERSION_DEVELOPMENT;
+    return value.trim();
+}
+
+function validateIncomingImportVersion(rawVersion) {
+    const value = typeof rawVersion === "string" ? rawVersion.trim() : "";
+    const lowered = value.toLowerCase();
+
+    if (!value) {
+        return {
+            supported: false,
+            normalized: "unknown",
+            display: "unknown"
+        };
+    }
+
+    const supportedIncoming = new Set([
+        "v1",
+        "v2",
+        "v3",
+        "1.0.0",
+        "2.0.0"
+    ]);
+
+    if (!supportedIncoming.has(lowered)) {
+        return {
+            supported: false,
+            normalized: lowered,
+            display: value
+        };
+    }
+
+    const normalized = lowered === "v1"
+        ? SCHEMA_VERSION_MAIN
+        : SCHEMA_VERSION_DEVELOPMENT;
+
+    return {
+        supported: true,
+        normalized,
+        display: value
+    };
+}
+
+function normalizeSchemaDirection(direction) {
+    if (direction === "toMain" || direction === "main") return "toMain";
+    return "toDevelopment";
+}
+
+function shallowCloneObject(value, fallback) {
+    if (!value || typeof value !== "object" || Array.isArray(value)) return Object.assign({}, fallback || {});
+    return Object.assign({}, value);
+}
+
+function migrateRecordAliases(row, mapping) {
+    if (!row || typeof row !== "object" || Array.isArray(row) || !mapping) return row;
+    const next = Object.assign({}, row);
+    Object.keys(mapping).forEach((from) => {
+        const to = mapping[from];
+        if (Object.prototype.hasOwnProperty.call(next, from) && !Object.prototype.hasOwnProperty.call(next, to)) {
+            next[to] = next[from];
+        }
+    });
+    return next;
+}
+
+function migrateCollectionRows(rows, mapping) {
+    if (!Array.isArray(rows)) return [];
+    return rows
+        .filter((x) => x && typeof x === "object" && !Array.isArray(x))
+        .map((x) => migrateRecordAliases(x, mapping));
+}
+
+function migrateExpenses(rows) {
+    return migrateCollectionRows(rows, SCHEMA_FIELD_MAPPINGS.expenses);
+}
+
+function migrateSavings(rows) {
+    return migrateCollectionRows(rows, SCHEMA_FIELD_MAPPINGS.savings);
+}
+
+function migrateBudgets(rows) {
+    return migrateCollectionRows(rows, SCHEMA_FIELD_MAPPINGS.budgets).map((row) => {
+        if (row.totalAllocated == null && row.amount != null) {
+            row.totalAllocated = Number(row.amount) || 0;
+        }
+        return row;
+    });
+}
+
+function migrateSettings(settings) {
+    const next = shallowCloneObject(settings, SCHEMA_DEFAULTS.settings);
+
+    if (!Object.prototype.hasOwnProperty.call(next, "accentColor") && typeof next.theme === "string") {
+        next.accentColor = next.theme;
+    }
+
+    if (!Object.prototype.hasOwnProperty.call(next, "autoBackupEnabled") && Object.prototype.hasOwnProperty.call(next, "autoBackup")) {
+        next.autoBackupEnabled = !!next.autoBackup;
+    }
+
+    if (!Object.prototype.hasOwnProperty.call(next, "autoBackupFrequency") && typeof next.backupFrequency === "string") {
+        next.autoBackupFrequency = next.backupFrequency;
+    }
+
+    if (!Object.prototype.hasOwnProperty.call(next, "autoBackupTarget")) {
+        next.autoBackupTarget = SCHEMA_DEFAULTS.settings.autoBackupTarget;
+    }
+
+    Object.keys(SCHEMA_DEFAULTS.settings).forEach((key) => {
+        if (!Object.prototype.hasOwnProperty.call(next, key)) {
+            next[key] = SCHEMA_DEFAULTS.settings[key];
+        }
+    });
+
+    return next;
+}
+
+function migrateQuotations(quotations) {
+    const next = shallowCloneObject(quotations, SCHEMA_DEFAULTS.quotations);
+    if (!Array.isArray(next.quotationItems)) next.quotationItems = [];
+    if (!Array.isArray(next.quotationCharges)) next.quotationCharges = [];
+    if (!Object.prototype.hasOwnProperty.call(next, "quotationData")) next.quotationData = null;
+    return next;
+}
+
+function migrateDataVersion(payload, options = {}) {
+    const direction = normalizeSchemaDirection(options.direction);
+    const source = payload && typeof payload === "object" && !Array.isArray(payload) ? payload : {};
+
+    const normalized = {
+        expenses: migrateExpenses(source.expenses),
+        budgets: migrateBudgets(source.budgets),
+        savings: migrateSavings(source.savings || source.savingsTransactions),
+        budgetPeriods: Array.isArray(source.budgetPeriods) ? source.budgetPeriods.slice() : [],
+        categories: Array.isArray(source.categories) ? source.categories.slice() : SCHEMA_DEFAULTS.categories.slice(),
+        persons: Array.isArray(source.persons) ? source.persons.slice() : [],
+        settings: migrateSettings(source.settings),
+        orders: Array.isArray(source.orders) ? source.orders.slice() : [],
+        quotations: migrateQuotations(source.quotations || {
+            quotationData: source.quotationData,
+            quotationItems: source.quotationItems,
+            quotationCharges: source.quotationCharges
+        }),
+        meta: shallowCloneObject(source.meta, {})
+    };
+
+    if (!normalized.meta.exportedAt) {
+        normalized.meta.exportedAt = new Date().toISOString();
+    }
+
+    normalized.meta.version = direction === "toMain"
+        ? SCHEMA_VERSION_MAIN
+        : SCHEMA_VERSION_DEVELOPMENT;
+
+    return {
+        data: normalized,
+        direction,
+        sourceVersion: normalizeSchemaVersionTag(source.meta && source.meta.version)
+    };
+}
+
+function applySchemaMigrationsToLocalStorage() {
+    try {
+        const migrated = migrateDataVersion({
+            expenses: JSON.parse(localStorage.getItem("expenses") || "[]"),
+            budgets: JSON.parse(localStorage.getItem("budgets") || "[]"),
+            savings: JSON.parse(localStorage.getItem("savingsTransactions") || "[]"),
+            budgetPeriods: JSON.parse(localStorage.getItem("bp") || "[]"),
+            categories: JSON.parse(localStorage.getItem("categories") || "[]"),
+            persons: JSON.parse(localStorage.getItem("persons") || "[]"),
+            settings: {
+                theme: localStorage.getItem("theme") || "",
+                appearanceMode: localStorage.getItem("appearanceMode") || "metallic",
+                accentColor: localStorage.getItem("accentColor") || localStorage.getItem("theme") || "",
+                currencyCode: localStorage.getItem("currencyCode") || "INR",
+                autoBackupEnabled: !!(typeof getAutoBackupSettings === "function" && getAutoBackupSettings().enabled),
+                autoBackupFrequency: (typeof getAutoBackupSettings === "function" && getAutoBackupSettings().frequency) || "weekly",
+                autoBackupTarget: (typeof getAutoBackupSettings === "function" && getAutoBackupSettings().target) || "local_download"
+            },
+            orders: JSON.parse(localStorage.getItem("orders") || "[]"),
+            quotations: {
+                quotationData: JSON.parse(localStorage.getItem("quotationData") || "null"),
+                quotationItems: JSON.parse(localStorage.getItem("quotationItems") || "[]"),
+                quotationCharges: JSON.parse(localStorage.getItem("quotationCharges") || "[]")
+            },
+            meta: { version: localStorage.getItem("dataVersion") || SCHEMA_VERSION_MAIN }
+        }, { direction: "toDevelopment" }).data;
+
+        localStorage.setItem("expenses", JSON.stringify(migrated.expenses));
+        localStorage.setItem("budgets", JSON.stringify(migrated.budgets));
+        localStorage.setItem("savingsTransactions", JSON.stringify(migrated.savings));
+        localStorage.setItem("bp", JSON.stringify(migrated.budgetPeriods));
+        localStorage.setItem("categories", JSON.stringify(migrated.categories));
+        localStorage.setItem("persons", JSON.stringify(migrated.persons));
+        localStorage.setItem("orders", JSON.stringify(migrated.orders));
+        localStorage.setItem("quotationData", JSON.stringify(migrated.quotations.quotationData));
+        localStorage.setItem("quotationItems", JSON.stringify(migrated.quotations.quotationItems));
+        localStorage.setItem("quotationCharges", JSON.stringify(migrated.quotations.quotationCharges));
+        localStorage.setItem("dataVersion", migrated.meta.version);
+    } catch (err) {
+        console.warn("Schema migration startup step failed", err);
+    }
+}
+
+if (typeof window !== "undefined") {
+    window.migrateDataVersion = migrateDataVersion;
+    window.migrateExpenses = migrateExpenses;
+    window.migrateSavings = migrateSavings;
+    window.migrateBudgets = migrateBudgets;
+    window.migrateSettings = migrateSettings;
+    window.applySchemaMigrationsToLocalStorage = applySchemaMigrationsToLocalStorage;
+}
+
 const IMPORT_DEFAULT_CATEGORIES = [
     "Food",
     "Travel",
@@ -5041,7 +5302,7 @@ const IMPORT_DEFAULT_SETTINGS = {
     currencyCode: "INR"
 };
 
-function normalizeImportPayload(parsed) {
+function normalizeImportPayload(parsed, options = {}) {
     const report = {
         fieldsRemoved: [],
         fieldsAdded: [],
@@ -5064,7 +5325,8 @@ function normalizeImportPayload(parsed) {
         "persons",
         "settings",
         "meta",
-        "orders"
+        "orders",
+        "quotations"
     ]);
 
     const expenseAllowed = new Set([
@@ -5111,7 +5373,7 @@ function normalizeImportPayload(parsed) {
         return out;
     }
 
-    const normalized = {};
+    let normalized = {};
 
     Object.keys(parsed).forEach((key) => {
         if (!rootAllowed.has(key)) {
@@ -5168,6 +5430,31 @@ function normalizeImportPayload(parsed) {
         normalized.orders = [];
         report.fieldsAdded.push("orders");
         report.defaultsApplied.push("orders=[]");
+        report.missingFieldsRecovered += 1;
+    }
+
+    if (!normalized.quotations || typeof normalized.quotations !== "object" || Array.isArray(normalized.quotations)) {
+        normalized.quotations = {
+            quotationData: null,
+            quotationItems: [],
+            quotationCharges: []
+        };
+        report.fieldsAdded.push("quotations");
+        report.defaultsApplied.push("quotations=default");
+        report.missingFieldsRecovered += 1;
+    }
+
+    if (!Array.isArray(normalized.quotations.quotationItems)) {
+        normalized.quotations.quotationItems = [];
+        report.fieldsAdded.push("quotations.quotationItems");
+        report.defaultsApplied.push("quotations.quotationItems=[]");
+        report.missingFieldsRecovered += 1;
+    }
+
+    if (!Array.isArray(normalized.quotations.quotationCharges)) {
+        normalized.quotations.quotationCharges = [];
+        report.fieldsAdded.push("quotations.quotationCharges");
+        report.defaultsApplied.push("quotations.quotationCharges=[]");
         report.missingFieldsRecovered += 1;
     }
 
@@ -5249,6 +5536,17 @@ function normalizeImportPayload(parsed) {
         `Missing Fields Recovered: ${report.missingFieldsRecovered}`
     ];
 
+    const skipMigration = !!options.skipMigration;
+
+    if (!skipMigration) {
+        const migrated = migrateDataVersion(normalized, { direction: "toDevelopment" });
+        normalized = migrated.data;
+
+        if (migrated.sourceVersion !== SCHEMA_VERSION_DEVELOPMENT) {
+            report.warnings.push(`Schema migration applied from ${migrated.sourceVersion} to ${SCHEMA_VERSION_DEVELOPMENT}`);
+        }
+    }
+
     return { normalized, report };
 }
 
@@ -5264,8 +5562,8 @@ function validateImportPayload(parsed) {
     const normalized = Object.assign({}, parsed);
     normalized.meta = (normalized.meta && typeof normalized.meta === "object" && !Array.isArray(normalized.meta)) ? normalized.meta : {};
 
-    const rawVersion = typeof normalized.meta.version === "string" ? normalized.meta.version.trim().toLowerCase() : "v1";
-    const supported = ["v1", "v2", "v3"];
+    const rawVersion = normalizeSchemaVersionTag(normalized.meta.version);
+    const supported = [SCHEMA_VERSION_MAIN, SCHEMA_VERSION_DEVELOPMENT];
     if (!supported.includes(rawVersion)) {
         errors.push(`Unsupported Version: ${normalized.meta.version}`);
     }
@@ -5294,6 +5592,13 @@ function validateImportPayload(parsed) {
         warnings.push("Missing Fields: settings");
     } else if (typeof normalized.settings !== "object" || Array.isArray(normalized.settings)) {
         errors.push("Invalid Settings Structure: settings must be an object");
+    }
+
+    if (!Object.prototype.hasOwnProperty.call(normalized, "quotations") || normalized.quotations === null || typeof normalized.quotations === "undefined") {
+        normalized.quotations = { quotationData: null, quotationItems: [], quotationCharges: [] };
+        warnings.push("Missing Fields: quotations");
+    } else if (typeof normalized.quotations !== "object" || Array.isArray(normalized.quotations)) {
+        errors.push("Invalid Quotations Structure: quotations must be an object");
     }
 
     const settings = normalized.settings || {};
@@ -5481,6 +5786,39 @@ function importData() {
         return;
     }
 
+    const incomingVersion = validateIncomingImportVersion(
+        parsed && parsed.meta && Object.prototype.hasOwnProperty.call(parsed.meta, "version")
+            ? parsed.meta.version
+            : null
+    );
+
+    if (!incomingVersion.supported) {
+        setImportStage("version-validation-failed", {
+            version: incomingVersion.display
+        });
+
+        const normalizationResult = normalizeImportPayload(parsed, { skipMigration: true });
+        const diagnostics = buildImportDiagnostics(normalizationResult.normalized);
+        const found = {
+            expenses: diagnostics.expensesCount,
+            savings: diagnostics.savingsCount,
+            budgets: diagnostics.budgetsCount,
+            budgetPeriods: diagnostics.budgetPeriodsCount
+        };
+
+        renderImportValidationReport({
+            version: "unknown",
+            found,
+            imported: { expenses: 0, savings: 0, budgets: 0, budgetPeriods: 0 },
+            warnings: normalizationResult.report.warnings || [],
+            normalization: normalizationResult.report,
+            errors: [`Unsupported Version: ${incomingVersion.display}`]
+        });
+
+        showToast("Import Validation Failed", "error");
+        return;
+    }
+
     setImportStage("normalization");
     const normalizationResult = normalizeImportPayload(parsed);
     const normalizedParsed = normalizationResult.normalized;
@@ -5523,6 +5861,11 @@ function importData() {
         if (Array.isArray(data.categories)) localStorage.setItem("categories", JSON.stringify(data.categories));
         if (Array.isArray(data.persons)) localStorage.setItem("persons", JSON.stringify(data.persons));
         if (Array.isArray(data.budgetPeriods)) localStorage.setItem("bp", JSON.stringify(data.budgetPeriods));
+        if (data.quotations && typeof data.quotations === "object") {
+            localStorage.setItem("quotationData", JSON.stringify(data.quotations.quotationData || null));
+            localStorage.setItem("quotationItems", JSON.stringify(Array.isArray(data.quotations.quotationItems) ? data.quotations.quotationItems : []));
+            localStorage.setItem("quotationCharges", JSON.stringify(Array.isArray(data.quotations.quotationCharges) ? data.quotations.quotationCharges : []));
+        }
 
         if (data.settings) {
             if (data.settings.currencyCode) localStorage.setItem("currencyCode", data.settings.currencyCode);
@@ -8695,7 +9038,7 @@ function updateBudgetEfficiency() {
 
     setText(
         "savedPeriod",
-        formatCurrency(metrics.monthlyRemaining)
+        formatCurrency(metrics.periodRemaining)
     );
 }
 
@@ -8772,6 +9115,7 @@ function computeBudgetEfficiencyMetrics(referenceDate = new Date()) {
     let todaySpent = getNetSpentForRange(dayStart, dayEnd);
     let weekSpent = getNetSpentForRange(weekStart, weekEnd);
     let monthSpent = getNetSpentForRange(monthStart, monthEnd);
+    let periodSpent = getNetSpentForRange(periodRange.start, periodRange.end);
 
     return {
         totalBudget,
@@ -8781,9 +9125,11 @@ function computeBudgetEfficiencyMetrics(referenceDate = new Date()) {
         todaySpent,
         weekSpent,
         monthSpent,
+        periodSpent,
         dailyRemaining: dailyLimit - todaySpent,
         weeklyRemaining: weeklyLimit - weekSpent,
-        monthlyRemaining: monthlyLimit - monthSpent
+        monthlyRemaining: monthlyLimit - monthSpent,
+        periodRemaining: totalBudget - periodSpent
     };
 }
 function normalizeDate(date) {
@@ -9052,7 +9398,7 @@ function getFullAppData() {
         autoBackupTarget: autoBackup.target || "local_download"
     };
 
-    return {
+    const exportPayload = {
 
         expenses:
             getExpenses() || [],
@@ -9083,6 +9429,12 @@ function getFullAppData() {
                 localStorage.getItem("bp")
             ) || [],
 
+        quotations: {
+            quotationData: JSON.parse(localStorage.getItem("quotationData") || "null"),
+            quotationItems: JSON.parse(localStorage.getItem("quotationItems") || "[]"),
+            quotationCharges: JSON.parse(localStorage.getItem("quotationCharges") || "[]")
+        },
+
         settings: {
             ...settingsSnapshot
         },
@@ -9093,9 +9445,11 @@ function getFullAppData() {
                 new Date().toISOString(),
 
             version:
-                "v2"
+                SCHEMA_VERSION_DEVELOPMENT
         }
     };
+
+    return migrateDataVersion(exportPayload, { direction: "toDevelopment" }).data;
 }
 
 if (typeof window !== "undefined") {

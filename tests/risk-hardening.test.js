@@ -770,6 +770,51 @@ test('import rejects unsupported version and recovers invalid root collections v
     expect((report.normalization && report.normalization.missingFieldsRecovered) || 0).toBeGreaterThan(0);
 });
 
+test('import version contract accepts semantic v1.0.0 and v2.0.0', () => {
+    const validPayloads = [
+        { version: '1.0.0' },
+        { version: '2.0.0' }
+    ];
+
+    validPayloads.forEach(({ version }) => {
+        const payload = {
+            meta: { version },
+            expenses: [],
+            savings: [],
+            budgets: []
+        };
+
+        document.getElementById('importText').value = JSON.stringify(payload);
+        window.importData();
+
+        const report = window.__lastImportValidationReport;
+        expect(report.errors.some(e => e.includes('Unsupported Version'))).toBe(false);
+    });
+});
+
+test('import version contract rejects v9, unknown, and null', () => {
+    const invalidPayloads = [
+        { version: 'v9', label: 'v9' },
+        { version: 'unknown', label: 'unknown' },
+        { version: null, label: 'unknown' }
+    ];
+
+    invalidPayloads.forEach(({ version, label }) => {
+        const payload = {
+            meta: { version },
+            expenses: [],
+            savings: [],
+            budgets: []
+        };
+
+        document.getElementById('importText').value = JSON.stringify(payload);
+        window.importData();
+
+        const report = window.__lastImportValidationReport;
+        expect(report.errors.some(e => e.includes(`Unsupported Version: ${label}`))).toBe(true);
+    });
+});
+
 test('import strips unknown fields but preserves financial fields', () => {
     const payload = {
         meta: { version: 'v2', debugMeta: true },

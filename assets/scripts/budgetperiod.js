@@ -938,25 +938,33 @@ function openDetails(id) {
     ? calculateSpentForPeriod(d.start, d.end)
     : 0;
 
+  let today = toDateOnly(new Date());
+  let startDate = toDateOnly(d.start);
+  let endDate = getEffectiveEndDate(d, today);
+
+  let remainingDays = 0;
+  if (d.status === "active") {
+    remainingDays = Math.max(0, Math.ceil((endDate - today) / (1000 * 60 * 60 * 24)) + 1);
+  }
+
+  let durationDays = Math.ceil((endDate - startDate) / (1000 * 60 * 60 * 24)) + 1;
+  if (!Number.isFinite(durationDays) || durationDays < 1) durationDays = 1;
+
   document.getElementById("detailsTitle").innerText =
     format(d.start) + " → " + (d.status === "active" ? "Running" : format(d.end));
 
   document.getElementById("detailsContent").innerHTML = `
+    <div class="details-grid">
+      <p><strong>Start Date:</strong> ${format(d.start)}</p>
+      <p><strong>End Date:</strong> ${format(endDate)}</p>
+      <p><strong>Status:</strong> ${d.status}</p>
+      <p><strong>Remaining Days:</strong> ${d.status === "active" ? remainingDays : 0}</p>
+    </div>
     <p><strong>Budget:</strong> ${formatCurrency(budgetAmount)}</p>
     <p><strong>Spent:</strong> ${formatCurrency(spent)}</p>
-    <p><strong>Status:</strong> ${d.status}</p>
 <p>
   <strong>Total Duration:</strong>
-  ${Math.ceil(
-    (
-      new Date(
-        d.end ||
-        new Date()
-      ) -
-      new Date(d.start)
-    ) / (1000 * 60 * 60 * 24)
-  ) + 1 + (d.extraDays || 0)
-    }
+  ${durationDays}
   Days
 </p>
     <p><strong>Extra Days:</strong> ${d.extraDays || 0}</p>

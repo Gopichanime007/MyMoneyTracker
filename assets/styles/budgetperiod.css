@@ -435,3 +435,19 @@ body {
   color: var(--muted);
   font-size: 12px;
 }
+
+.details-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px 12px;
+  margin-bottom: 10px;
+}
+
+.details-grid p {
+  margin: 0;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--hover);
+  color: var(--text);
+}
