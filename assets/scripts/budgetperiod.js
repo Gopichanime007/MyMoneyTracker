@@ -669,15 +669,96 @@ let currentFilter = "all";
 let selectedId = null;
 
 /* INIT */
-document.addEventListener("DOMContentLoaded", load);
+document.addEventListener("DOMContentLoaded", function() {
+  // guard: only initialize when budget page elements are present
+  if (!document.getElementById || !document.getElementById("budgetList")) return;
+  load();
+});
 
 /* STORAGE */
 function getData() {
-  return JSON.parse(localStorage.getItem("bp")) || [];
+  let data = JSON.parse(localStorage.getItem("bp")) || [];
+  let normalized = normalizePeriods(data);
+
+  if (normalized.changed) {
+    localStorage.setItem("bp", JSON.stringify(normalized.data));
+  }
+
+  return normalized.data;
 }
 
 function saveData(data) {
-  localStorage.setItem("bp", JSON.stringify(data));
+  let normalized = normalizePeriods(data);
+  localStorage.setItem("bp", JSON.stringify(normalized.data));
+}
+
+function toDateOnly(date) {
+  let d = new Date(date);
+  d.setHours(0, 0, 0, 0);
+  return d;
+}
+
+function dateToKey(date) {
+  let d = new Date(date);
+  return d.toISOString().split("T")[0];
+}
+
+function getEffectiveEndDate(period, referenceDate = new Date()) {
+  let end = period && period.end ? new Date(period.end) : new Date(referenceDate);
+  end = toDateOnly(end);
+
+  let extraDays = Math.max(0, parseInt((period && period.extraDays) || 0, 10) || 0);
+  end.setDate(end.getDate() + extraDays);
+  return end;
+}
+
+function normalizePeriods(data, referenceDate = new Date()) {
+  let today = toDateOnly(referenceDate);
+  let changed = false;
+
+  let safe = Array.isArray(data) ? data : [];
+
+  let normalized = safe.map(item => {
+    let p = item && typeof item === "object" ? { ...item } : item;
+    if (!p || typeof p !== "object") return p;
+
+    if (p.status === "active") {
+      let effectiveEnd = getEffectiveEndDate(p, today);
+      if (effectiveEnd < today) {
+        p.status = "closed";
+        p.end = dateToKey(effectiveEnd);
+        changed = true;
+      }
+    }
+
+    return p;
+  });
+
+  // Keep only one active period: latest start date wins.
+  let active = normalized
+    .filter(p => p && typeof p === "object" && p.status === "active")
+    .sort((a, b) => {
+      let as = toDateOnly(a.start || 0).getTime();
+      let bs = toDateOnly(b.start || 0).getTime();
+      if (as !== bs) return bs - as;
+      return String(b.id || "").localeCompare(String(a.id || ""));
+    });
+
+  if (active.length > 1) {
+    let keepId = active[0].id;
+    normalized = normalized.map(p => {
+      if (!p || typeof p !== "object") return p;
+      if (p.status !== "active" || p.id === keepId) return p;
+      changed = true;
+      return {
+        ...p,
+        status: "closed",
+        end: p.end || dateToKey(today)
+      };
+    });
+  }
+
+  return { data: normalized, changed };
 }
 
 /* LOAD */
@@ -767,7 +848,10 @@ function closeBudgetForm() {
 }
 
 /* SAVE */
-function saveBudget() {
+function saveBudgetPeriod() {
+
+  // guard: ensure form elements exist
+  if (!document.getElementById || !document.getElementById("bpStartDate")) return;
 
   let start = document.getElementById("bpStartDate").value;
   let end = document.getElementById("bpEndDate").value;
@@ -788,7 +872,27 @@ function saveBudget() {
     return;
   }
 
+  if (status === "active" && end) {
+    let today = toDateOnly(new Date());
+    let selectedEnd = toDateOnly(end);
+
+    if (selectedEnd < today) {
+      end = dateToKey(today);
+    }
+  }
+
   let data = getData();
+
+  let duplicate = data.some(p => {
+    if (!p || typeof p !== "object") return false;
+    return String(p.start || "") === String(start || "")
+      && String(p.end || "") === String(end || "");
+  });
+
+  if (duplicate) {
+    alert("This budget period already exists");
+    return;
+  }
 
   data.push({
     id: Date.now(),
@@ -803,6 +907,11 @@ function saveBudget() {
 
   closeBudgetForm();
   render();
+}
+
+// Expose page-specific action without colliding with dashboard `saveBudget`.
+if (typeof window !== 'undefined') {
+  window.saveBudgetPeriod = saveBudgetPeriod;
 }
 
 /* DETAILS */
@@ -829,25 +938,33 @@ function openDetails(id) {
     ? calculateSpentForPeriod(d.start, d.end)
     : 0;
 
+  let today = toDateOnly(new Date());
+  let startDate = toDateOnly(d.start);
+  let endDate = getEffectiveEndDate(d, today);
+
+  let remainingDays = 0;
+  if (d.status === "active") {
+    remainingDays = Math.max(0, Math.ceil((endDate - today) / (1000 * 60 * 60 * 24)) + 1);
+  }
+
+  let durationDays = Math.ceil((endDate - startDate) / (1000 * 60 * 60 * 24)) + 1;
+  if (!Number.isFinite(durationDays) || durationDays < 1) durationDays = 1;
+
   document.getElementById("detailsTitle").innerText =
     format(d.start) + " → " + (d.status === "active" ? "Running" : format(d.end));
 
   document.getElementById("detailsContent").innerHTML = `
+    <div class="details-grid">
+      <p><strong>Start Date:</strong> ${format(d.start)}</p>
+      <p><strong>End Date:</strong> ${format(endDate)}</p>
+      <p><strong>Status:</strong> ${d.status}</p>
+      <p><strong>Remaining Days:</strong> ${d.status === "active" ? remainingDays : 0}</p>
+    </div>
     <p><strong>Budget:</strong> ${formatCurrency(budgetAmount)}</p>
     <p><strong>Spent:</strong> ${formatCurrency(spent)}</p>
-    <p><strong>Status:</strong> ${d.status}</p>
 <p>
   <strong>Total Duration:</strong>
-  ${Math.ceil(
-    (
-      new Date(
-        d.end ||
-        new Date()
-      ) -
-      new Date(d.start)
-    ) / (1000 * 60 * 60 * 24)
-  ) + 1 + (d.extraDays || 0)
-    }
+  ${durationDays}
   Days
 </p>
     <p><strong>Extra Days:</strong> ${d.extraDays || 0}</p>
@@ -872,7 +989,10 @@ function toggleStatus() {
     d.end = new Date().toISOString().split("T")[0];
   } else {
     d.status = "active";
-    d.end = null; // 🔥 keep structure consistent
+    let today = toDateOnly(new Date());
+    let end = d.end ? toDateOnly(d.end) : null;
+
+    d.end = end && end >= today ? dateToKey(end) : null;
   }
 
   saveData(data);
@@ -903,6 +1023,8 @@ function format(date) {
 
 function calculateEndDate() {
 
+  if (!document.getElementById || !document.getElementById("bpStartDate")) return;
+
   let start = document.getElementById("bpStartDate").value;
   let duration = parseInt(document.getElementById("bpDuration").value || 30);
 
@@ -927,6 +1049,14 @@ function goToSavings() {
   window.location.href = "savings.html"; // adjust path
 }
 function deleteBudget() {
+
+  if (typeof validateBudgetPeriodDeletion === "function") {
+    let check = validateBudgetPeriodDeletion(selectedId);
+    if (check && check.blocked) {
+      alert("Cannot delete budget period. " + check.summary);
+      return;
+    }
+  }
 
   let data = getData();
 

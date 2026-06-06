@@ -9,6 +9,7 @@ let quotationCharges = JSON.parse(localStorage.getItem("quotationCharges")) || [
 // 🔗 OPEN PRODUCT LINK
 // =========================
 function openProductLink() {
+  if (!document.getElementById || !document.getElementById("mLink")) return;
   let link = document.getElementById("mLink").value;
   if (link) window.open(link, "_blank");
 }
@@ -18,29 +19,34 @@ function openProductLink() {
 // 📦 MODAL CONTROL
 // =========================
 function openItemModal() {
+  if (!document.getElementById || !document.getElementById("itemModal")) return;
   document.getElementById("itemModal").style.display = "flex";
-  loadSources(); // 🔥 important
+  if (typeof loadSources === 'function') loadSources(); // 🔥 important
 }
 
 function closeItemModal() {
+  if (!document.getElementById || !document.getElementById("itemModal")) return;
   document.getElementById("itemModal").style.display = "none";
 }
 
 function openChargeModal() {
+  if (!document.getElementById || !document.getElementById("chargeModal")) return;
   document.getElementById("chargeModal").style.display = "flex";
 
   let select = document.getElementById("cApplyTo");
-  select.innerHTML = `<option value="all">All Items</option>`;
-
-  quotationItems.forEach(i => {
-    let option = document.createElement("option");
-    option.value = i.id;
-    option.textContent = i.name;
-    select.appendChild(option);
-  });
+  if (select) {
+    select.innerHTML = `<option value="all">All Items</option>`;
+    quotationItems.forEach(i => {
+      let option = document.createElement("option");
+      option.value = i.id;
+      option.textContent = i.name;
+      select.appendChild(option);
+    });
+  }
 }
 
 function closeChargeModal() {
+  if (!document.getElementById || !document.getElementById("chargeModal")) return;
   document.getElementById("chargeModal").style.display = "none";
 }
 
@@ -49,11 +55,12 @@ function closeChargeModal() {
 // ➕ ADD ITEM FROM MODAL
 // =========================
 function addItemFromModal() {
+  if (!document.getElementById || !document.getElementById("mSource")) return;
 
   let sourceSelect = document.getElementById("mSource");
   let newSourceInput = document.getElementById("newSourceInput");
 
-  let source = sourceSelect.value;
+  let source = sourceSelect ? sourceSelect.value : "";
 
   // =========================
   // 🧠 HANDLE NEW SOURCE
@@ -79,10 +86,10 @@ function addItemFromModal() {
   // =========================
   // 📦 GET VALUES
   // =========================
-  let name = document.getElementById("mName").value.trim();
-  let price = Number(document.getElementById("mPrice").value);
-  let qty = Number(document.getElementById("mQty").value);
-  let link = document.getElementById("mLink").value.trim();
+  let name = document.getElementById("mName") ? document.getElementById("mName").value.trim() : "";
+  let price = document.getElementById("mPrice") ? Number(document.getElementById("mPrice").value) : 0;
+  let qty = document.getElementById("mQty") ? Number(document.getElementById("mQty").value) : 0;
+  let link = document.getElementById("mLink") ? document.getElementById("mLink").value.trim() : "";
 
   // =========================
   // 🔗 AUTO NAME FROM LINK
@@ -147,11 +154,11 @@ function deleteItem(id) {
 // 🧹 CLEAR MODAL INPUTS
 // =========================
 function clearItemModal() {
-  document.getElementById("mName").value = "";
-  document.getElementById("mPrice").value = "";
-  document.getElementById("mQty").value = "";
-  document.getElementById("mSource").value = "";
-  document.getElementById("mLink").value = "";
+  if (document.getElementById("mName")) document.getElementById("mName").value = "";
+  if (document.getElementById("mPrice")) document.getElementById("mPrice").value = "";
+  if (document.getElementById("mQty")) document.getElementById("mQty").value = "";
+  if (document.getElementById("mSource")) document.getElementById("mSource").value = "";
+  if (document.getElementById("mLink")) document.getElementById("mLink").value = "";
 }
 
 
@@ -159,6 +166,7 @@ function clearItemModal() {
 // 📋 RENDER ITEMS
 // =========================
 function renderQuotation() {
+  if (!document.getElementById || !document.getElementById("quotationItems")) return;
   let container = document.getElementById("quotationItems");
 
   if (!quotationItems.length) {
@@ -200,6 +208,7 @@ function renderQuotation() {
 // ➕ ADD CHARGE
 // =========================
 function addCharge() {
+  if (!document.getElementById || !document.getElementById("cType")) return;
   let type = document.getElementById("cType").value;
   let value = Number(document.getElementById("cValue").value);
   let mode = document.getElementById("cMode").value;

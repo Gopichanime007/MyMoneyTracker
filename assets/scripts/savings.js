@@ -66,439 +66,194 @@ Savings Source
    ↓
 Transfer / Budget / Settlement
    ↓
-Tracking + Remaining Balance
-
-This architecture enables:
-----------------------------------------------------------------------------------------------------
-✔ Source tracking
-✔ Remaining calculations
-✔ Budget linking
-✔ Settlement tracking
-✔ Audit history
-✔ Financial analytics
-
-====================================================================================================
-CORE DATA FLOW
-====================================================================================================
-
-Income Entry
-│
-├── Creates Source
-│
-├── Source becomes available
-│
-└── Other transactions consume source
-
-----------------------------------------------------------------------------------------------------
-
-Transfer Entry
-│
-├── Reduces Source Balance
-│
-├── Assigns Person
-│
-└── Tracks Pending Settlement
-
-----------------------------------------------------------------------------------------------------
-
-Settlement Entry
-│
-├── Linked to Transfer
-│
-├── Recovers Amount
-│
-└── Updates Pending Balance
-
-----------------------------------------------------------------------------------------------------
-
-Budget Allocation
-│
-├── Converts Savings → Budget
-│
-├── Creates Budget Allocation
-│
-└── Updates Budget Records
-
-====================================================================================================
-APPLICATION FLOW
-====================================================================================================
-
-Page Load
-│
-├── Load Savings
-├── Load Sources
-├── Load Categories
-├── Load Persons
-├── Load Budget Years
-├── Apply Theme
-└── Render History
-
-====================================================================================================
-STORAGE ARCHITECTURE
-====================================================================================================
-
-Primary Storage:
-----------------------------------------------------------------------------------------------------
-localStorage
-
-Storage Keys:
-----------------------------------------------------------------------------------------------------
-
-savingsTransactions
-→ Main savings ledger
-
-budgets
-→ Budget allocation records
-
-categories
-→ Savings categories
-
-persons
-→ Person registry
-
-theme
-→ Dynamic theme system
-
-====================================================================================================
-ANDROID STORAGE MIGRATION
-====================================================================================================
-
-HTML / JS
-----------------------------------------------------------------------------------------------------
-localStorage
-
-Android Equivalent:
-----------------------------------------------------------------------------------------------------
-Room Database
-+
-SharedPreferences
-
-----------------------------------------------------------------------------------------------------
-savingsTransactions
-→ SavingsRepository
-
-budgets
-→ BudgetRepository
-
-theme
-→ SettingsManager
-
-====================================================================================================
-ENTRY FACTORY ARCHITECTURE
-====================================================================================================
-
-createSavingsEntry()
-
-Purpose:
-----------------------------------------------------------------------------------------------------
-Creates standardized ledger entries.
-
-Responsibilities:
-----------------------------------------------------------------------------------------------------
-✔ Generates ID
-✔ Applies timestamps
-✔ Applies monthKey
-✔ Applies periodKey
-✔ Standardizes structure
-
-IMPORTANT:
-----------------------------------------------------------------------------------------------------
-ALL transactions MUST pass through this factory.
-
-Android Equivalent:
-----------------------------------------------------------------------------------------------------
-SavingsEntryFactory
-or
-SavingsManager.createEntry()
-
-====================================================================================================
-TRANSACTION TYPES
-====================================================================================================
-
-Supported Types:
-----------------------------------------------------------------------------------------------------
-
-income
-→ Adds savings source
-
-transfer
-→ Deducts money from source
-
-settlement
-→ Recovers pending transfer amount
-
-budget_allocation
-→ Allocates savings into budget
-
-====================================================================================================
-ANDROID DOMAIN MODEL
-====================================================================================================
-
-SavingsEntity
-│
-├── id
-├── type
-├── amount
-├── sourceId
-├── entity
-├── paymentType
-├── person
-├── note
-├── date
-├── monthKey
-├── periodKey
-├── createdAt
-└── updatedAt
-
-====================================================================================================
-SOURCE ARCHITECTURE
-====================================================================================================
-
-Income entries act as:
-----------------------------------------------------------------------------------------------------
-Financial Sources
-
-Meaning:
-----------------------------------------------------------------------------------------------------
-Income itself becomes a reusable financial container.
-
-Example:
-----------------------------------------------------------------------------------------------------
-
-Salary ₹50,000
-│
-├── Budget Allocation ₹20,000
-├── Transfer ₹5,000
-├── Settlement Recovery ₹1,000
-│
-└── Remaining ₹26,000
-
-====================================================================================================
-BUDGET PERIOD ARCHITECTURE
-====================================================================================================
-
-Savings module integrates with:
-----------------------------------------------------------------------------------------------------
-Budget Period Module
-
-Through:
-----------------------------------------------------------------------------------------------------
-periodKey
-
-Purpose:
-----------------------------------------------------------------------------------------------------
-Allows:
-✔ period-based savings
-✔ period-based budgets
-✔ scoped analytics
-✔ scoped calculations
-
-IMPORTANT:
-----------------------------------------------------------------------------------------------------
-Budget Period acts as:
-MASTER FINANCIAL CONTEXT
-
-====================================================================================================
-SCOPED DATA ARCHITECTURE
-====================================================================================================
-
-getScopedSavings()
-
-Purpose:
-----------------------------------------------------------------------------------------------------
-Returns ONLY savings related to:
-- active budget period
-OR
-- current month fallback
-
-This prevents:
-----------------------------------------------------------------------------------------------------
-cross-period data pollution
-
-Android Equivalent:
-----------------------------------------------------------------------------------------------------
-SavingsRepository.getScopedSavings()
-
-====================================================================================================
-LOAD SAVINGS ARCHITECTURE
-====================================================================================================
-
-loadSavings()
-
-Purpose:
-----------------------------------------------------------------------------------------------------
-Main dashboard calculation engine.
-
-Responsibilities:
-----------------------------------------------------------------------------------------------------
-✔ Total savings calculation
-✔ Allocated amount calculation
-✔ Available balance calculation
-✔ Daily budget calculation
-✔ History rendering
-
-IMPORTANT:
-----------------------------------------------------------------------------------------------------
-This function acts as:
-SAVINGS DASHBOARD CONTROLLER
-
-Android Equivalent:
-----------------------------------------------------------------------------------------------------
-SavingsDashboardManager
-
-====================================================================================================
-HISTORY ARCHITECTURE
-====================================================================================================
-
-renderSavingsHistory()
-
-Purpose:
-----------------------------------------------------------------------------------------------------
-Renders transaction history.
-
-Displays:
-----------------------------------------------------------------------------------------------------
-✔ Type
-✔ Amount
-✔ Date
-✔ Source
-✔ Payment
-✔ Person
-✔ Notes
-
-Android Equivalent:
-----------------------------------------------------------------------------------------------------
-RecyclerView Adapter
-
-Recommended:
-----------------------------------------------------------------------------------------------------
-SavingsHistoryAdapter
-
-====================================================================================================
-FILTER ARCHITECTURE
-====================================================================================================
-
-handleSavingsFilter()
-
-Supported Filters:
-----------------------------------------------------------------------------------------------------
-today
-week
-month
-period
-all
-
-Purpose:
-----------------------------------------------------------------------------------------------------
-Scoped historical analysis.
-
-Android Equivalent:
-----------------------------------------------------------------------------------------------------
-FilterManager
-or
-SavingsFilterManager
-
-====================================================================================================
-ANALYTICS ARCHITECTURE
-====================================================================================================
-
-loadSavingsGraph()
-
-Purpose:
-----------------------------------------------------------------------------------------------------
-Creates:
-Income vs Expense analytics
-
-Library:
-----------------------------------------------------------------------------------------------------
-Chart.js
-
-Android Equivalent:
-----------------------------------------------------------------------------------------------------
-MPAndroidChart
-
-Android Fragment:
-----------------------------------------------------------------------------------------------------
-SavingsAnalyticsFragment
-
-====================================================================================================
-SOURCE DETAILS ARCHITECTURE
-====================================================================================================
-
-renderSourceDetails()
-
-Purpose:
-----------------------------------------------------------------------------------------------------
-Displays:
-FULL source financial breakdown
-
-Includes:
-----------------------------------------------------------------------------------------------------
-✔ Total
-✔ Used
-✔ Credited
-✔ Remaining
-✔ Related transactions
-
-This acts like:
-----------------------------------------------------------------------------------------------------
-Mini ledger statement screen
-
-Android Equivalent:
-----------------------------------------------------------------------------------------------------
-SavingsDetailsFragment
-
-====================================================================================================
-CATEGORY ARCHITECTURE
-====================================================================================================
-
-Categories represent:
-----------------------------------------------------------------------------------------------------
-Savings ownership or grouping.
-
-Examples:
-----------------------------------------------------------------------------------------------------
-Self
-Family
-Friend
-Company
-Charity
-
-Storage:
-----------------------------------------------------------------------------------------------------
-localStorage.categories
-
-Android Equivalent:
-----------------------------------------------------------------------------------------------------
-CategoryRepository
-
-====================================================================================================
-PERSON ARCHITECTURE
-====================================================================================================
-
-Persons represent:
-----------------------------------------------------------------------------------------------------
-Transfer-related people.
-
-Used for:
-----------------------------------------------------------------------------------------------------
-✔ Borrowing
-✔ Lending
-✔ Settlements
-✔ Transfer tracking
-
-Android Equivalent:
-----------------------------------------------------------------------------------------------------
-PersonRepository
-
-====================================================================================================
-MODAL ARCHITECTURE
-====================================================================================================
-
-HTML MODAL
-----------------------------------------------------------------------------------------------------
-categoryModal
-personModal
+async function addSavings() {
+
+    if (!document.getElementById || !document.getElementById("sType")) return;
+
+    const rawType = document.getElementById("sType") ? document.getElementById("sType").value : null;
+    const type = rawType === "income" ? "deposit" : rawType;
+    const amount = document.getElementById("sAmount") ? Number(document.getElementById("sAmount").value) : 0;
+    const note = document.getElementById("sNote") ? document.getElementById("sNote").value : "";
+    const dateInput = document.getElementById("sDate") ? document.getElementById("sDate").value : "";
+    const entity = document.getElementById("sEntity") ? document.getElementById("sEntity").value : "";
+    const payment = document.getElementById("sPayment") ? document.getElementById("sPayment").value : null;
+    const sourceSelect = document.getElementById("sourceSelect");
+    const destinationType = document.getElementById("destinationType")?.value || null;
+    const destination = document.getElementById("destinationSelect")?.value || null;
+
+    if (!amount || amount <= 0) {
+        showToast("Enter valid amount ❗", "warning");
+        return;
+    }
+
+    let date;
+    if (!dateInput) {
+        date = new Date().toISOString();
+    } else {
+        let todayStr = new Date().toISOString().split("T")[0];
+        date = dateInput === todayStr ? new Date().toISOString() : `${dateInput}T12:00:00`;
+    }
+
+    let data = getSavings();
+
+    const sAttachmentId = await (window.storeAttachmentFromInput ? storeAttachmentFromInput('sAttachment') : (async ()=>{
+        const fileInput = document.getElementById('sAttachment');
+        const file = fileInput && fileInput.files && fileInput.files[0] ? fileInput.files[0] : null;
+        if(!file) return null;
+        const store = window.reMoAttachments && window.reMoAttachments.storeImage ? window.reMoAttachments.storeImage : (window.reMoAttachmentsIndexed && window.reMoAttachmentsIndexed.storeImage);
+        if(!store) return null;
+        try{ const res = await store(null,file); return res && res.id ? res.id : null; }catch(e){console.warn('Attachment save failed',e); return null; }
+    })());
+
+    if (type === "deposit") {
+        const entry = createSavingsEntry({
+            type: "deposit",
+            amount: Math.abs(amount),
+            entity,
+            payment,
+            note,
+            date
+        });
+        if (sAttachmentId) entry.attachmentId = sAttachmentId;
+        data.push(entry);
+    }
+
+    else if (type === "transfer") {
+        const sourceId = String(sourceSelect?.value || "");
+
+        if (!sourceId) {
+            showToast("Select source ❗", "warning");
+            return;
+        }
+
+        let remaining = getSourceRemainingById(sourceId, data);
+        if (!person) {
+            showToast("Select person ❗", "warning");
+            return;
+        }
+            showToast(`Insufficient source balance (₹${remaining} available)`, "warning");
+            return;
+        }
+
+        if (!destinationType || !destination) {
+            showToast("Select destination type and destination ❗", "warning");
+            return;
+        }
+
+        const entry = createSavingsEntry({
+            type: "transfer",
+            amount: -Math.abs(amount),
+            sourceId,
+            person,
+            entity,
+            payment,
+            note,
+            date
+        });
+        entry.destinationType = destinationType;
+        entry.destination = destination;
+        if (sAttachmentId) entry.attachmentId = sAttachmentId;
+        data.push(entry);
+    }
+
+    else if (type === "refund") {
+            let snapshot = getSavingsResolutionSnapshot(refId);
+            let pending = Number(snapshot.remainingRefundable || 0);
+            if (pending <= 0) {
+                showToast("This transfer is already fully resolved", "warning");
+                return;
+            }
+        const refId = refundValue.includes(":") ? refundValue.split(":")[1] : refundValue;
+        let original = data.find(t => String(t.id) === String(refId));
+
+        if (!original || original.type !== "transfer") {
+            showToast("Only transfer transactions are refundable in Savings Wallet", "warning");
+            return;
+        }
+
+        let alreadyRefunded = data
+            .filter(t => t.type === "refund" && String(t.linkedTransactionId) === String(refId))
+            .reduce((sum, t) => sum + Math.abs(Number(t.amount || 0)), 0);
+
+        let pending = Math.max(0, Math.abs(Number(original.amount || 0)) - alreadyRefunded);
+        if (Math.abs(amount) > pending) {
+            showToast(`Only ₹${pending} refundable for this transaction`, "warning");
+            return;
+        }
+
+        const entry = createSavingsEntry({
+            type: "refund",
+            amount: Math.abs(amount),
+            sourceId: original.sourceId || null,
+            entity,
+            payment,
+            note,
+            date
+        });
+        entry.linkedTransactionId = original.id;
+        if (sAttachmentId) entry.attachmentId = sAttachmentId;
+        data.push(entry);
+    }
+
+    else if (type === "withdraw_budget") {
+        const sourceId = String(sourceSelect?.value || "");
+
+        if (!sourceId) {
+            showToast("Select source ❗", "warning");
+            return;
+        }
+
+        let remaining = getSourceRemainingById(sourceId, data);
+        if (Math.abs(amount) > remaining) {
+            showToast(`Insufficient source balance (₹${remaining} available)`, "warning");
+            return;
+        }
+
+        const activePeriod = (typeof getActiveBudgetPeriod === "function") ? getActiveBudgetPeriod() : null;
+        if (!activePeriod) {
+            showToast("Please create or activate a Budget Period before moving funds into Budget.", "warning");
+            return;
+        }
+
+        const entry = createSavingsEntry({
+            type: "budget_allocation",
+            amount: -Math.abs(amount),
+            sourceId,
+            entity,
+            payment,
+            note,
+            date,
+            person: "Self"
+        });
+
+        const wallet = upsertActiveBudgetWalletFromSavings(entry);
+        if (!wallet || !wallet.budgetId) {
+            showToast("Budget Wallet allocation failed", "error");
+            return;
+        }
+
+        entry.targetBudgetId = wallet.budgetId;
+        entry.budgetWalletId = wallet.budgetId;
+        if (sAttachmentId) entry.attachmentId = sAttachmentId;
+        data.push(entry);
+    }
+
+    else {
+        showToast("Unsupported savings transaction type", "warning");
+        return;
+    }
+
+    saveSavings(data);
+    loadSavings();
+    loadSourceOptions();
+    loadBudgetTargetOptions();
+    loadRefundCandidates();
+    renderIncomeList();
+
+    showToast("Saved successfully ✅", "success");
+
+    resetSavingsForm();
+}
 backupModal
 importModal
 splitModal
@@ -762,33 +517,46 @@ document.addEventListener("DOMContentLoaded", () => {
 
 // 🔥 FIX MODAL CLOSE (SAFE CLICK ONLY ON BACKDROP)
 
-document.getElementById("categoryModal").addEventListener("click", function (e) {
-    if (e.target === this) {
-        closeCategoryModal();
-    }
-});
+const _catModal = document.getElementById("categoryModal");
+if (_catModal) {
+    _catModal.addEventListener("click", function (e) {
+        if (e.target === this) closeCategoryModal();
+    });
+}
 
-document.getElementById("personModal").addEventListener("click", function (e) {
-    if (e.target === this) {
-        closePersonModal();
-    }
-});
+const _personModal = document.getElementById("personModal");
+if (_personModal) {
+    _personModal.addEventListener("click", function (e) {
+        if (e.target === this) closePersonModal();
+    });
+}
 
 // =========================
 // 🚀 INIT
 // =========================
 // Initializes page: loads data, sets date, loads sources, applies theme
 window.addEventListener("load", function () {
+    // Only run savings initialization when savings form element exists
+    if (!document.getElementById || !document.getElementById("sType")) return;
+
     loadSavings();
     setTodayDate();
     loadSourceOptions();
+    loadRefundCandidates();
     handleSavingsTypeChange();
     loadBudgetYears();
     loadCategoryOptions();
     loadPersonOptions();
+    refreshSavingsRefundGuidance();
+
+    let refundTypeEl = document.getElementById("sRefundType");
+    if (refundTypeEl) refundTypeEl.addEventListener("change", refreshSavingsRefundGuidance);
+
+    let resolutionEl = document.getElementById("sRefundResolutionType");
+    if (resolutionEl) resolutionEl.addEventListener("change", refreshSavingsRefundGuidance);
+
     renderCategoryList();
     renderPersonList();
-    loadSettlementOptions();
     setTimeout(() => {
         loadSavings();
     }, 50);
@@ -802,45 +570,49 @@ window.addEventListener("load", function () {
 /* =========================
    🧠 MASTER LEDGER (SAVINGS)
 ========================= */
-//Show Toast
-let activeToast = null;
+// Toast helper: define only if not already present to avoid overriding global app toast
+if (typeof window.showToast !== 'function') {
+    let activeToast = null;
+    window.showToast = function(message, type = "info") {
+        if (activeToast) activeToast.remove();
 
-// Shows a single temporary toast message (replaces previous one to avoid spam)
-function showToast(message, type = "info") {
-    if (activeToast) activeToast.remove();
+        let toast = document.createElement("div");
+        toast.className = "simple-toast";
+        toast.innerText = message;
 
-    let toast = document.createElement("div");
-    toast.className = "simple-toast";
-    toast.innerText = message;
+        const colors = {
+            success: "#4caf50",
+            error: "#e53935",
+            warning: "#fb8c00",
+            info: "#333"
+        };
 
-    const colors = {
-        success: "#4caf50",
-        error: "#e53935",
-        warning: "#fb8c00",
-        info: "#333"
+        toast.style.background = colors[type] || "#333";
+
+        document.body.appendChild(toast);
+        activeToast = toast;
+
+        setTimeout(() => {
+            toast.remove();
+            activeToast = null;
+        }, 1500);
     };
-
-    toast.style.background = colors[type] || "#333";
-
-    document.body.appendChild(toast);
-    activeToast = toast;
-
-    setTimeout(() => {
-        toast.remove();
-        activeToast = null;
-    }, 1500);
 }
 // =========================
 // 📦 STORAGE
 // =========================
 
-// Fetch all savings transactions from localStorage
-function getSavings() {
-    return JSON.parse(localStorage.getItem("savingsTransactions")) || [];
+// Fetch all savings transactions from localStorage (define only if not present)
+if (typeof window.getSavings !== 'function') {
+    window.getSavings = function () {
+        return JSON.parse(localStorage.getItem("savingsTransactions")) || [];
+    };
 }
-// Save updated savings transactions into localStorage
-function saveSavings(data) {
-    localStorage.setItem("savingsTransactions", JSON.stringify(data));
+// Save updated savings transactions into localStorage (define only if not present)
+if (typeof window.saveSavings !== 'function') {
+    window.saveSavings = function (data) {
+        try { localStorage.setItem("savingsTransactions", JSON.stringify(data)); } catch (e) { console.error('saveSavings failed', e); }
+    };
 }
 
 // =========================
@@ -855,10 +627,16 @@ function createSavingsEntry({
     payment = null,
     person = null,
     note = "",
-    date = new Date().toISOString()
+    date = new Date().toISOString(),
+    attachmentId = null,
+    linkedTransactionId = null,
+    refundType = null,
+    resolutionType = null,
+    resolvedAmount = 0,
+    lossAmount = 0
 }) {
 
-    let periodKey = getActivePeriodKey(); // safe call
+    let periodKey = (typeof getActivePeriodKey === 'function') ? getActivePeriodKey() : null; // safe call
 
     return {
         id: Date.now(),
@@ -879,88 +657,256 @@ function createSavingsEntry({
         periodKey: periodKey || null,    // new system
 
         createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
+        updatedAt: new Date().toISOString(),
+        attachmentId: attachmentId || null,
+        linkedTransactionId: linkedTransactionId || null,
+        refundType: (type === "refund" || refundType) ? (typeof normalizeRefundType === "function" ? normalizeRefundType(refundType) : String(refundType || "custom")) : null,
+        resolutionType: resolutionType ? (typeof normalizeResolutionType === "function" ? normalizeResolutionType(resolutionType) : String(resolutionType)) : null,
+        resolvedAmount: Number(resolvedAmount || 0),
+        lossAmount: Number(lossAmount || 0)
     };
+}
+
+function getSavingsResolutionSnapshot(originalId, savingsList) {
+    let entries = Array.isArray(savingsList)
+        ? savingsList
+        : ((typeof getScopedSavings === "function") ? getScopedSavings() : (getSavings() || []));
+
+    let root = entries.find(e => String(e.id) === String(originalId));
+    if (!root || root.type !== "transfer" || Number(root.amount || 0) >= 0) {
+        return {
+            exists: false,
+            originalAmount: 0,
+            refunded: 0,
+            loss: 0,
+            remainingRefundable: 0,
+            status: "UNKNOWN"
+        };
+    }
+
+    let originalAmount = Math.abs(Number(root.amount || 0));
+
+    let refunded = entries
+        .filter(e => e.type === "refund" && String(e.linkedTransactionId) === String(originalId))
+        .reduce((sum, e) => sum + Math.abs(Number(e.amount || 0)), 0);
+
+    let resolutionEntries = entries
+        .filter(e => e.type === "expense_resolution" && String(e.linkedTransactionId) === String(originalId));
+
+    let loss = resolutionEntries
+        .reduce((sum, e) => sum + Math.abs(Number(e.lossAmount || 0)), 0);
+
+    let remainingRefundable = Math.max(0, originalAmount - refunded - loss);
+
+    let consumed = resolutionEntries.some(e => (typeof normalizeResolutionType === "function" ? normalizeResolutionType(e.resolutionType) : e.resolutionType) === "consumed");
+    let cancelledWithCharges = resolutionEntries.some(e => (typeof normalizeResolutionType === "function" ? normalizeResolutionType(e.resolutionType) : e.resolutionType) === "cancelled_with_charges");
+    let writtenOff = resolutionEntries.some(e => (typeof normalizeResolutionType === "function" ? normalizeResolutionType(e.resolutionType) : e.resolutionType) === "written_off");
+    let settled = resolutionEntries.some(e => (typeof normalizeResolutionType === "function" ? normalizeResolutionType(e.resolutionType) : e.resolutionType) === "settled");
+
+    let status = "OPEN";
+    if (consumed) status = "CONSUMED";
+    else if (cancelledWithCharges) status = "CANCELLED_WITH_CHARGES";
+    else if (writtenOff) status = "WRITTEN_OFF";
+    else if (settled) status = "SETTLED";
+    else if (remainingRefundable <= 0 && refunded > 0) status = "FULLY_REFUNDED";
+    else if (refunded > 0) status = "PARTIALLY_REFUNDED";
+
+    return {
+        exists: true,
+        originalAmount,
+        refunded,
+        loss,
+        remainingRefundable,
+        status
+    };
+}
+
+function formatSavingsResolutionStatus(status) {
+    let map = {
+        OPEN: "Open",
+        PARTIALLY_REFUNDED: "Partially Refunded",
+        FULLY_REFUNDED: "Fully Refunded",
+        CONSUMED: "Consumed",
+        WRITTEN_OFF: "Written Off",
+        SETTLED: "Settled",
+        CANCELLED_WITH_CHARGES: "Cancelled With Charges",
+        UNKNOWN: "-"
+    };
+    return map[status] || String(status || "-");
+}
+
+function refreshSavingsRefundGuidance() {
+    let refundTypeEl = document.getElementById("sRefundType");
+    let resolutionEl = document.getElementById("sRefundResolutionType");
+    let refundTypeHelpEl = document.getElementById("sRefundTypeHelp");
+    let resolutionHelpEl = document.getElementById("sRefundResolutionHelp");
+
+    if (refundTypeHelpEl && refundTypeEl) {
+        let label = (typeof formatRefundType === "function")
+            ? formatRefundType(refundTypeEl.value)
+            : String(refundTypeEl.value || "Custom");
+        let desc = (typeof getRefundTypeGuidance === "function")
+            ? getRefundTypeGuidance(refundTypeEl.value)
+            : "Any refund not covered above.";
+        refundTypeHelpEl.textContent = `${label}: ${desc}`;
+    }
+
+    if (resolutionHelpEl && resolutionEl) {
+        let normalized = (typeof normalizeResolutionType === "function")
+            ? normalizeResolutionType(resolutionEl.value)
+            : String(resolutionEl.value || "open");
+        let label = (typeof RESOLUTION_TYPE_LABELS === "object" && RESOLUTION_TYPE_LABELS[normalized])
+            ? RESOLUTION_TYPE_LABELS[normalized]
+            : "Open";
+        let desc = (typeof getResolutionTypeGuidance === "function")
+            ? getResolutionTypeGuidance(resolutionEl.value)
+            : "Refund is still in progress.";
+        resolutionHelpEl.textContent = `${label}: ${desc}`;
+    }
+}
+
+function handleSavingsRefundResolutionChange() {
+    let wrapper = document.getElementById("refundWrapper");
+    if (!wrapper || wrapper.style.display === "none") return;
+
+    let amountEl = document.getElementById("sAmount");
+    let selectEl = document.getElementById("refundSelect");
+    let resolutionEl = document.getElementById("sRefundResolutionType");
+    let infoEl = document.getElementById("sRefundInfo");
+    if (!amountEl || !selectEl || !resolutionEl || !infoEl) return;
+
+    let raw = String(selectEl.value || "");
+    if (!raw) {
+        amountEl.disabled = false;
+        amountEl.placeholder = "Amount";
+        infoEl.textContent = "";
+        return;
+    }
+
+    let refId = raw.includes(":") ? raw.split(":")[1] : raw;
+    let snapshot = getSavingsResolutionSnapshot(refId);
+    if (!snapshot.exists) {
+        amountEl.disabled = false;
+        amountEl.placeholder = "Amount";
+        infoEl.textContent = "";
+        return;
+    }
+
+    let mode = (typeof normalizeResolutionType === "function")
+        ? normalizeResolutionType(resolutionEl.value || "open")
+        : (resolutionEl.value || "open");
+    let pending = Number(snapshot.remainingRefundable || 0);
+
+    if (mode === "fully_refunded") {
+        amountEl.value = pending ? String(pending) : "";
+        amountEl.disabled = true;
+        amountEl.placeholder = "Auto-filled complete refund";
+    } else if (mode === "consumed" || mode === "written_off") {
+        amountEl.value = "0";
+        amountEl.disabled = true;
+        amountEl.placeholder = "No wallet credit for this closure";
+    } else {
+        amountEl.disabled = false;
+        amountEl.placeholder = "Amount";
+    }
+
+    infoEl.textContent = `Original: ₹${snapshot.originalAmount.toFixed(2)} | Refunded: ₹${snapshot.refunded.toFixed(2)} | Remaining Refundable: ₹${snapshot.remainingRefundable.toFixed(2)} | Loss: ₹${snapshot.loss.toFixed(2)} | Status: ${formatSavingsResolutionStatus(snapshot.status)}`;
+    refreshSavingsRefundGuidance();
 }
 
 // =========================
 // ➕ ADD ENTRY
 // =========================
-// Handles adding income, transfer, or budget allocation into savings ledger
-function addSavings() {
+// Handles adding savings wallet transactions
+async function addSavings() {
 
-    // =========================
-    // 📥 INPUTS
-    // =========================
-    const type = document.getElementById("sType").value;
-    const amount = Number(document.getElementById("sAmount").value);
-    const note = document.getElementById("sNote").value;
-    const dateInput = document.getElementById("sDate").value;
-    const entity = document.getElementById("sEntity").value;
-    const payment = document.getElementById("sPayment").value;
+    if (!document.getElementById || !document.getElementById("sType")) return;
+
+    const rawType = document.getElementById("sType") ? document.getElementById("sType").value : null;
+    const type = rawType === "income" ? "deposit" : rawType;
+    const amount = document.getElementById("sAmount") ? Number(document.getElementById("sAmount").value) : 0;
+    const note = document.getElementById("sNote") ? document.getElementById("sNote").value : "";
+    const dateInput = document.getElementById("sDate") ? document.getElementById("sDate").value : "";
+    const entity = document.getElementById("sEntity") ? document.getElementById("sEntity").value : "";
+    const payment = document.getElementById("sPayment") ? document.getElementById("sPayment").value : null;
     const sourceSelect = document.getElementById("sourceSelect");
     const personSelect = document.getElementById("sPerson");
+    const destinationTypeEl = document.getElementById("destinationType");
+    const destinationSelectEl = document.getElementById("destinationSelect");
 
     if (!amount || amount <= 0) {
         showToast("Enter valid amount ❗", "warning");
         return;
     }
 
-    // =========================
-    // 📅 DATE HANDLING (FIXED)
-    // =========================
     let date;
-
     if (!dateInput) {
-
-        // current exact datetime
         date = new Date().toISOString();
-
     } else {
-
         let todayStr = new Date().toISOString().split("T")[0];
-
-        // today's transaction → keep current time
-        if (dateInput === todayStr) {
-
-            date = new Date().toISOString();
-
-        } else {
-
-            // preserve exact selected date
-            date = `${dateInput}T12:00:00`;
-        }
+        date = dateInput === todayStr ? new Date().toISOString() : `${dateInput}T12:00:00`;
     }
 
     let data = getSavings();
 
-    // =========================
-    // 💰 INCOME
-    // =========================
-    if (type === "income") {
+    let attachmentMeta = { attachmentId: null, status: "none", error: null };
+    try {
+        if (typeof window.storeAttachmentWithStatus === "function") {
+            attachmentMeta = await window.storeAttachmentWithStatus("sAttachment");
+        } else if (typeof window.storeAttachmentFromInput === "function") {
+            const attachmentId = await window.storeAttachmentFromInput("sAttachment");
+            attachmentMeta = {
+                attachmentId,
+                status: attachmentId ? "linked" : "none",
+                error: attachmentId ? null : null
+            };
+        }
+    } catch (err) {
+        attachmentMeta = {
+            attachmentId: null,
+            status: "failed",
+            error: err && err.message ? err.message : "Attachment save failed"
+        };
+    }
 
+    if (type === "deposit") {
         const entry = createSavingsEntry({
-            type: "income",
+            type: "deposit",
             amount: Math.abs(amount),
             entity,
             payment,
             note,
             date
         });
-
+        if (attachmentMeta.attachmentId) entry.attachmentId = attachmentMeta.attachmentId;
+        entry.attachmentStatus = attachmentMeta.status;
+        entry.attachmentError = attachmentMeta.error;
         data.push(entry);
     }
-
-    // =========================
-    // 🔁 TRANSFER
-    // =========================
     else if (type === "transfer") {
-
         const sourceId = String(sourceSelect?.value || "");
         const person = personSelect?.value || null;
+        const destinationType = destinationTypeEl?.value || null;
+        const destination = destinationSelectEl?.value || null;
 
         if (!sourceId) {
             showToast("Select source ❗", "warning");
+            return;
+        }
+
+        let remaining = getSourceRemainingById(sourceId, data);
+        if (Math.abs(amount) > remaining) {
+            showToast(`Insufficient source balance (₹${remaining} available)`, "warning");
+            return;
+        }
+
+        if (destinationTypeEl && destinationSelectEl && (!destinationType || !destination)) {
+            showToast("Select destination type and destination ❗", "warning");
+            return;
+        }
+
+        if (!person) {
+            showToast("Select person ❗", "warning");
             return;
         }
 
@@ -968,98 +914,118 @@ function addSavings() {
             type: "transfer",
             amount: -Math.abs(amount),
             sourceId,
+            entity,
+            payment,
             person,
-            entity,
-            payment,
             note,
             date
         });
-
+        if (destinationType) entry.destinationType = destinationType;
+        if (destination) entry.destination = destination;
+        if (attachmentMeta.attachmentId) entry.attachmentId = attachmentMeta.attachmentId;
+        entry.attachmentStatus = attachmentMeta.status;
+        entry.attachmentError = attachmentMeta.error;
         data.push(entry);
     }
-    // =========================
-    // 💸 SETTLEMENT / RETURN
-    // =========================
-    else if (type === "settlement") {
-
-        const settlementSelect =
-            document.getElementById("settlementSelect");
-
-        const transferId =
-            String(settlementSelect?.value || "");
-
-        if (!transferId) {
-
-            showToast(
-                "Select pending transfer ❗",
-                "warning"
-            );
-
+    else if (type === "refund") {
+        const person = personSelect?.value || null;
+        const refundValue = String(document.getElementById("refundSelect")?.value || "");
+        if (!refundValue) {
+            showToast("Select refund transaction ❗", "warning");
             return;
         }
 
-        // 🔥 find original transfer
-        let originalTransfer = data.find(
-            t => String(t.id) === transferId
-        );
-
-        if (!originalTransfer) {
-
-            showToast(
-                "Original transfer not found ❗",
-                "error"
-            );
-
-            return;
-        }
-        // 🔥 prevent over settlement
-        let alreadySettled = data
-            .filter(s =>
-                s.type === "settlement" &&
-                String(s.linkedTransactionId) === String(originalTransfer.id)
-            )
-            .reduce((sum, s) => sum + Math.abs(s.amount), 0);
-
-        let pending =
-            Math.abs(originalTransfer.amount) - alreadySettled;
-
-        if (amount > pending) {
-
-            showToast(
-                `Only ₹${pending} pending ❗`,
-                "warning"
-            );
-
+        const [, refId] = refundValue.split(":");
+        let original = data.find(t => String(t.id) === String(refId));
+        if (!original) {
+            showToast("Original transaction not found ❗", "error");
             return;
         }
 
-        const entry = createSavingsEntry({
+        if (original.type !== "transfer") {
+            showToast("Only transfer transactions are refundable in Savings Wallet", "warning");
+            return;
+        }
 
-            type: "settlement",
+        let snapshot = getSavingsResolutionSnapshot(refId, data);
+        let pending = Number(snapshot.remainingRefundable || 0);
+        if (pending <= 0) {
+            showToast("This transfer is already fully resolved", "warning");
+            return;
+        }
 
-            amount: Math.abs(amount),
+        let resolutionType = (typeof normalizeResolutionType === "function")
+            ? normalizeResolutionType(document.getElementById("sRefundResolutionType")?.value || "open")
+            : (document.getElementById("sRefundResolutionType")?.value || "open");
+        let refundType = (typeof normalizeRefundType === "function")
+            ? normalizeRefundType(document.getElementById("sRefundType")?.value || "custom")
+            : String(document.getElementById("sRefundType")?.value || "custom");
+        let creditAmount = Math.abs(Number(amount || 0));
 
-            sourceId: originalTransfer.sourceId,
+        if (refundType === "loan_recovery" && !person) {
+            showToast("Select person for Loan Recovery ❗", "warning");
+            return;
+        }
 
-            person: originalTransfer.person,
+        if (resolutionType === "fully_refunded") {
+            creditAmount = pending;
+        }
+        if (resolutionType === "consumed" || resolutionType === "written_off") {
+            creditAmount = 0;
+        }
 
-            entity,
-            payment,
-            note,
+        if (creditAmount > pending) {
+            showToast(`Only ₹${pending} refundable for this transaction`, "warning");
+            return;
+        }
 
-            date
-        });
+        if (["open", "partially_refunded", "fully_refunded", "cancelled_with_charges", "settled"].includes(resolutionType)) {
+            if (creditAmount > 0) {
+                const refundEntry = createSavingsEntry({
+                    type: "refund",
+                    amount: Math.abs(creditAmount),
+                    sourceId: original.sourceId || null,
+                    entity,
+                    payment,
+                    person,
+                    note,
+                    date,
+                    linkedTransactionId: refId,
+                    refundType,
+                    resolutionType,
+                    resolvedAmount: creditAmount,
+                    lossAmount: 0
+                });
+                if (attachmentMeta.attachmentId) refundEntry.attachmentId = attachmentMeta.attachmentId;
+                refundEntry.attachmentStatus = attachmentMeta.status;
+                refundEntry.attachmentError = attachmentMeta.error;
+                data.push(refundEntry);
+            }
+        }
 
-        // 🔥 link settlement
-        entry.linkedTransactionId = originalTransfer.id;
+        if (["consumed", "cancelled_with_charges", "written_off", "settled"].includes(resolutionType)) {
+            let lossAmount = resolutionType === "cancelled_with_charges"
+                ? Math.max(0, pending - creditAmount)
+            : (resolutionType === "written_off" ? pending : 0);
 
-        data.push(entry);
+            const resolutionEntry = createSavingsEntry({
+                type: "expense_resolution",
+                amount: 0,
+                sourceId: original.sourceId || null,
+                entity,
+                payment,
+                person,
+                note: note || (resolutionType === "consumed" ? "Transfer marked consumed" : "Transfer cancelled with charges"),
+                date,
+                linkedTransactionId: refId,
+                resolutionType,
+                resolvedAmount: pending,
+                lossAmount
+            });
+            data.push(resolutionEntry);
+        }
     }
-    // =========================
-    // 📦 BUDGET ALLOCATION
-    // =========================
     else if (type === "withdraw_budget") {
-
         const sourceId = String(sourceSelect?.value || "");
 
         if (!sourceId) {
@@ -1067,14 +1033,17 @@ function addSavings() {
             return;
         }
 
-        const periodKey =
-            typeof getActivePeriodKey === "function"
-                ? getActivePeriodKey()
-                : null;
+        let remaining = getSourceRemainingById(sourceId, data);
+        if (Math.abs(amount) > remaining) {
+            showToast(`Insufficient source balance (₹${remaining} available)`, "warning");
+            return;
+        }
 
-        const fallbackMonth = date.slice(0, 7);
-
-        const budgetId = `budget_${periodKey || fallbackMonth}_${sourceId}`;
+        const activePeriod = (typeof getActiveBudgetPeriod === "function") ? getActiveBudgetPeriod() : null;
+        if (!activePeriod) {
+            showToast("Please create or activate a Budget Period before moving funds into Budget.", "warning");
+            return;
+        }
 
         const entry = createSavingsEntry({
             type: "budget_allocation",
@@ -1087,22 +1056,38 @@ function addSavings() {
             person: "Self"
         });
 
+        const wallet = upsertActiveBudgetWalletFromSavings(entry);
+        if (!wallet || !wallet.budgetId) {
+            showToast("Budget Wallet allocation failed", "error");
+            return;
+        }
+
+        entry.targetBudgetId = wallet.budgetId;
+        entry.budgetWalletId = wallet.budgetId;
+        if (attachmentMeta.attachmentId) entry.attachmentId = attachmentMeta.attachmentId;
+        entry.attachmentStatus = attachmentMeta.status;
+        entry.attachmentError = attachmentMeta.error;
         data.push(entry);
-
-        createOrUpdateBudget(budgetId, entry);
     }
-
-    // =========================
-    // 💾 SAVE + UI
-    // =========================
-    console.log("Final Date:", date);
+    else {
+        showToast("Unsupported savings transaction type", "warning");
+        return;
+    }
 
     saveSavings(data);
     loadSavings();
     loadSourceOptions();
+    loadRefundCandidates();
+    renderIncomeList();
+
+    if (typeof loadDashboard === "function") loadDashboard();
+    if (typeof loadHistory === "function") loadHistory();
+    if (typeof loadGraph === "function") loadGraph();
+    if (typeof renderBudgetEntries === "function") renderBudgetEntries();
+    if (typeof loadBudgetOptions === "function") loadBudgetOptions();
+    if (typeof updateBudgetEfficiency === "function") updateBudgetEfficiency();
 
     showToast("Saved successfully ✅", "success");
-
     resetSavingsForm();
 }
 
@@ -1110,7 +1095,7 @@ function addSavings() {
 // 📦 BUDGET CREATION (FROM SAVINGS)
 // =========================
 // Creates or updates monthly budget based on savings allocation
-function createOrUpdateBudget(budgetId, entry) {
+function createOrUpdateBudget(budgetId, entry, selectedBudgetId = null) {
 
     let budgets = JSON.parse(localStorage.getItem("budgets")) || [];
 
@@ -1125,6 +1110,12 @@ function createOrUpdateBudget(budgetId, entry) {
     // 🔥 Find existing budget (PERIOD-FIRST MATCH)
     // Match by generated budgetId OR legacyId OR by sourceId+period+entity (best-effort)
     let existing = budgets.find(b => {
+        if (selectedBudgetId && (
+            String(b.budgetId) === String(selectedBudgetId) ||
+            String(b.id) === String(selectedBudgetId) ||
+            String(b.legacyId || "") === String(selectedBudgetId)
+        )) return true;
+
         const samePeriod = periodKey ? b.periodKey === periodKey : b.monthKey === fallbackMonth;
 
         if ((b.budgetId && b.budgetId === budgetId) || (b.legacyId && b.legacyId === budgetId)) return b.entity === entry.entity && samePeriod;
@@ -1188,6 +1179,77 @@ function createOrUpdateBudget(budgetId, entry) {
 
     localStorage.setItem("budgets", JSON.stringify(budgets));
 }
+
+function resolveActivePeriodKeyForSavings() {
+    if (typeof getActivePeriodKey === "function") {
+        let key = getActivePeriodKey();
+        if (key) return key;
+    }
+
+    if (typeof getActiveBudgetPeriod === "function") {
+        let period = getActiveBudgetPeriod();
+        if (period && period.start && period.end) {
+            let start = new Date(period.start);
+            let end = new Date(period.end);
+
+            let s = `${start.getFullYear()}-${String(start.getMonth() + 1).padStart(2, "0")}-${String(start.getDate()).padStart(2, "0")}`;
+            let e = `${end.getFullYear()}-${String(end.getMonth() + 1).padStart(2, "0")}-${String(end.getDate()).padStart(2, "0")}`;
+
+            return `${s}_to_${e}`;
+        }
+    }
+
+    return null;
+}
+
+function upsertActiveBudgetWalletFromSavings(entry) {
+    let budgets = JSON.parse(localStorage.getItem("budgets")) || [];
+    let periodKey = resolveActivePeriodKeyForSavings();
+    let sourceId = String(entry && entry.sourceId ? entry.sourceId : "savings_wallet");
+
+    if (!periodKey) return null;
+
+    let wallet = budgets.find(b => b && b.periodKey === periodKey && b.isBudgetWallet === true && String(b.sourceId || "") === sourceId);
+
+    if (!wallet) {
+        wallet = budgets.find(b => b && b.periodKey === periodKey && (String(b.entity || "").toLowerCase() === "budget wallet") && String(b.sourceId || "") === sourceId);
+    }
+
+    if (!wallet) {
+        wallet = budgets.find(b => b && b.periodKey === periodKey && b.isBudgetWallet === true && String(b.sourceId || "") === "savings_wallet");
+        if (wallet) {
+            wallet.sourceId = sourceId;
+        }
+    }
+
+    if (!wallet) {
+        let uid = (typeof crypto !== "undefined" && crypto.randomUUID)
+            ? crypto.randomUUID()
+            : `${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
+
+        wallet = {
+            id: Date.now(),
+            type: "budget",
+            budgetId: `budget_wallet_${periodKey}_${sourceId}_${uid}`,
+            sourceId: sourceId,
+            totalAllocated: 0,
+            entity: "Budget Wallet",
+            note: "Auto Budget Wallet",
+            periodKey,
+            monthKey: null,
+            isBudgetWallet: true,
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString()
+        };
+        budgets.push(wallet);
+    }
+
+    wallet.totalAllocated = Number(wallet.totalAllocated || 0) + Math.abs(Number(entry.amount || 0));
+    wallet.updatedAt = new Date().toISOString();
+
+    localStorage.setItem("budgets", JSON.stringify(budgets));
+    return wallet;
+}
 // =========================
 // 🗓️ FORMAT HELPERS
 // =========================
@@ -1210,52 +1272,126 @@ function formatMonth(monthKey) {
 // 📊 LOAD UI
 // =========================
 
+function formatSavingsAmount(value) {
+    let n = Number(value || 0);
+    if (!Number.isFinite(n)) n = 0;
+    if (typeof formatCurrency === "function") return formatCurrency(n);
+    return `Rs. ${n.toFixed(2)}`;
+}
+
+function setTextById(id, value) {
+    let el = document.getElementById(id);
+    if (!el) return;
+    el.textContent = value;
+}
+
+function getPeriodEntriesForSavingsDashboard(allRows, activePeriod, periodKey) {
+    if (!Array.isArray(allRows)) return [];
+    if (periodKey) return allRows.filter(r => r && r.periodKey === periodKey);
+    if (!activePeriod || !activePeriod.start || !activePeriod.end) return allRows;
+
+    const startTs = new Date(activePeriod.start).getTime();
+    const endRaw = (typeof getBudgetPeriodEffectiveEndDate === "function")
+        ? getBudgetPeriodEffectiveEndDate(activePeriod, new Date())
+        : new Date(activePeriod.end);
+    const endTs = new Date(endRaw).getTime();
+
+    if (!Number.isFinite(startTs) || !Number.isFinite(endTs)) return allRows;
+    return allRows.filter(r => {
+        const ts = new Date(r && r.date ? r.date : 0).getTime();
+        return Number.isFinite(ts) && ts >= startTs && ts <= endTs;
+    });
+}
+
 // Calculates totals and updates savings dashboard UI
 function loadSavings() {
+    let scoped = (typeof getScopedSavings === "function") ? getScopedSavings() : (getSavings() || []);
+    let allRows = (typeof getSavings === "function") ? (getSavings() || []) : scoped;
+    let periodKey = (typeof getActivePeriodKey === "function") ? getActivePeriodKey() : null;
+    let activePeriod = (typeof getActiveBudgetPeriod === "function") ? getActiveBudgetPeriod() : null;
+    let periodRows = getPeriodEntriesForSavingsDashboard(allRows, activePeriod, periodKey);
 
-    let data = getSavings() || [];
-
-    let periodKey = typeof getActivePeriodKey === "function"
-        ? getActivePeriodKey()
-        : null;
-
-    let now = new Date();
-    let currentMonth = now.toISOString().slice(0, 7);
     let daily = getDailyBudget();
-
     let dailyEl = document.getElementById("dailyBudget");
-    if (dailyEl) dailyEl.innerText = "₹ " + daily.toFixed(2);
-    // 🔥 MERGED FILTER (period + fallback)
-    // let filtered = data.filter(t => {
-    //     if (periodKey) {
-    //         return (
-    //             t.periodKey === periodKey ||
-    //             (!t.periodKey && t.monthKey === currentMonth)
-    //         );
-    //     }
-    //     return t.monthKey === currentMonth;
-    // });
-    let filtered = [...data];
-    // 🔥 CALCULATIONS
-    let total = filtered.reduce((sum, t) => sum + t.amount, 0);
+    if (dailyEl) dailyEl.innerText = "₹ " + Number(daily || 0).toFixed(2);
 
-    let allocated = filtered
-        .filter(t => t.type === "budget_allocation")
-        .reduce((sum, t) => sum + Math.abs(t.amount), 0);
+    let totalBalance = allRows.reduce((sum, t) => sum + Number(t && t.amount || 0), 0);
+    let totalDeposits = allRows.filter(t => t && t.type === "deposit").reduce((sum, t) => sum + Math.abs(Number(t.amount || 0)), 0);
+    let totalTransfers = allRows.filter(t => t && (t.type === "transfer" || t.type === "budget_allocation")).reduce((sum, t) => sum + Math.abs(Number(t.amount || 0)), 0);
+    let totalRefunds = allRows.filter(t => t && t.type === "refund").reduce((sum, t) => sum + Math.abs(Number(t.amount || 0)), 0);
+    let netMovement = allRows.reduce((sum, t) => sum + Number(t && t.amount || 0), 0);
+    let allocated = allRows.filter(t => t && t.type === "budget_allocation").reduce((sum, t) => sum + Math.abs(Number(t.amount || 0)), 0);
+    let available = totalBalance;
 
-    let available = total;
+    let sortedByDate = allRows.slice().sort((a, b) => new Date(b.date || 0).getTime() - new Date(a.date || 0).getTime());
+    let latest = sortedByDate[0] || null;
 
-    // 🔥 UI UPDATE
-    document.getElementById("savingsBalance").innerText = 'Rs. ' + total;
+    let largestTransfer = allRows
+        .filter(t => t && (t.type === "transfer" || t.type === "budget_allocation") && Number(t.amount || 0) < 0)
+        .reduce((mx, t) => Math.max(mx, Math.abs(Number(t.amount || 0))), 0);
 
-    let allocatedEl = document.getElementById("allocatedToBudget");
-    if (allocatedEl) allocatedEl.innerText = 'Rs. ' + allocated;
+    let largestRefund = allRows
+        .filter(t => t && t.type === "refund")
+        .reduce((mx, t) => Math.max(mx, Math.abs(Number(t.amount || 0))), 0);
 
-    let availableEl = document.getElementById("availableBalance");
-    if (availableEl) availableEl.innerText = 'Rs. ' + available;
+    let periodLabel = "No Active Period";
+    let periodStart = "-";
+    let periodEnd = "-";
+    let daysRemaining = "-";
 
-    // 🔥 HISTORY
-    renderSavingsHistory(filtered);
+    if (activePeriod) {
+        let effectiveEnd = (typeof getBudgetPeriodEffectiveEndDate === "function")
+            ? getBudgetPeriodEffectiveEndDate(activePeriod, new Date())
+            : new Date(activePeriod.end || activePeriod.start || Date.now());
+        let endDate = new Date(effectiveEnd);
+        let startDate = new Date(activePeriod.start || activePeriod.end || Date.now());
+
+        periodLabel = activePeriod.periodKey || [activePeriod.start || "-", activePeriod.end || "-"].join(" to ");
+        periodStart = Number.isFinite(startDate.getTime()) ? startDate.toLocaleDateString("en-IN") : "-";
+        periodEnd = Number.isFinite(endDate.getTime()) ? endDate.toLocaleDateString("en-IN") : "-";
+
+        if (Number.isFinite(endDate.getTime())) {
+            let now = new Date();
+            let diff = Math.ceil((endDate.setHours(23, 59, 59, 999) - now.getTime()) / (24 * 60 * 60 * 1000));
+            daysRemaining = diff >= 0 ? `${diff}` : "Closed";
+        }
+    }
+
+    setTextById("savingsBalance", formatSavingsAmount(totalBalance));
+    setTextById("totalDeposits", formatSavingsAmount(totalDeposits));
+    setTextById("totalTransfers", formatSavingsAmount(totalTransfers));
+    setTextById("totalRefunds", formatSavingsAmount(totalRefunds));
+    setTextById("netSavingsMovement", formatSavingsAmount(netMovement));
+    setTextById("allocatedToBudget", formatSavingsAmount(allocated));
+    setTextById("availableBalance", formatSavingsAmount(available));
+
+    setTextById("currentBudgetPeriodLabel", periodLabel);
+    setTextById("currentBudgetPeriodStart", periodStart);
+    setTextById("currentBudgetPeriodEnd", periodEnd);
+    let remainingLabel = "-";
+    if (daysRemaining === "Closed") remainingLabel = "Closed";
+    else if (daysRemaining !== "-") remainingLabel = `${daysRemaining} days`;
+    setTextById("currentBudgetPeriodRemaining", remainingLabel);
+
+    setTextById("transactionsThisPeriod", String(periodRows.length));
+    setTextById("largestExpenseTransfer", formatSavingsAmount(largestTransfer));
+    setTextById("largestRefund", formatSavingsAmount(largestRefund));
+
+    if (latest) {
+        setTextById("latestTransactionValue", formatSavingsAmount(Number(latest.amount || 0)));
+        let latestMeta = `${latest.type || "entry"} • ${new Date(latest.date || Date.now()).toLocaleString("en-IN")}`;
+        setTextById("latestTransactionMeta", latestMeta);
+    } else {
+        setTextById("latestTransactionValue", "-");
+        setTextById("latestTransactionMeta", "No transactions");
+    }
+
+    setTextById("savingsHealthBalance", formatSavingsAmount(totalBalance));
+    setTextById("savingsHealthAllocated", formatSavingsAmount(allocated));
+    setTextById("savingsHealthNet", formatSavingsAmount(netMovement));
+    setTextById("savingsHealthTransactions", String(periodRows.length));
+
+    renderSavingsHistory(scoped);
 }
 
 // =========================
@@ -1300,43 +1436,78 @@ function renderSavingsHistory(data) {
 
     container.innerHTML = "";
 
-    data.slice().reverse().forEach((t, index) => {
+    if (!Array.isArray(data) || !data.length) {
+        container.innerHTML = `<p class="empty-state">No data yet</p>`;
+        return;
+    }
 
-        // let realIndex = data.length - 1 - index; // 🔥 FIX INDEX
+    let compareTxn = (a, b) => {
+        let da = new Date(a.date || 0).getTime();
+        let db = new Date(b.date || 0).getTime();
+        if (da !== db) return da - db;
+        return String(a.id || "").localeCompare(String(b.id || ""));
+    };
+
+    let chronological = data.slice().sort(compareTxn);
+    let persisted = ((typeof getSavings === "function") ? getSavings() : []) || [];
+    let persistedById = new Map(persisted.map(x => [String(x && x.id), x]));
+
+    let withRunning = chronological.map(t => {
+        let p = persistedById.get(String(t.id));
+        let persistedAfter = Number(p && p.BalanceAfterTransaction);
+        if (Number.isFinite(persistedAfter)) {
+            return Object.assign({}, t, { runningBalance: persistedAfter });
+        }
+        let fallback = Number(t.runningBalance);
+        return Object.assign({}, t, { runningBalance: Number.isFinite(fallback) ? fallback : Number(t.amount || 0) });
+    });
+
+    withRunning.slice().reverse().forEach((t) => {
 
         let div = document.createElement("div");
         div.className = "expense-item";
 
         let labelMap = {
-            income: "💰 Income",
+            income: "💰 Deposit",
+            deposit: "💰 Deposit",
             transfer: "🔁 Transfer",
             budget_allocation: "📦 Budget",
-            settlement: "💸 Settlement"
+            refund: "💵 Refund",
+            expense_resolution: "🧾 Closure"
         };
 
-        let label = labelMap[t.type] || t.type;
-        let color = t.amount < 0 ? "red" : "green";
+                let label = labelMap[t.type] || t.type;
+                let amountClass = t.amount < 0 ? "negative" : "positive";
+                let date = new Date(t.date).toLocaleString("en-IN");
+                let runningBalance = formatCurrency(Number(t.runningBalance || 0));
+                let meta = [];
+                if (t.type === "refund" && typeof formatRefundType === "function") meta.push(`Refund Type: ${formatRefundType(t.refundType)}`);
+                if (t.resolutionType && typeof normalizeResolutionType === "function") {
+                    const key = normalizeResolutionType(t.resolutionType);
+                    meta.push(`Resolution: ${(typeof RESOLUTION_TYPE_LABELS === "object" && RESOLUTION_TYPE_LABELS[key]) ? RESOLUTION_TYPE_LABELS[key] : key}`);
+                }
 
         div.innerHTML = `
-    <div>
-        <strong>${t.note || t.person || "Entry"}</strong><br>
-        <small>
-            ${label} • ${t.sourceName || t.note || t.entity || "-"} • ${t.paymentType || t.payment || "-"} • 
-            ${new Date(t.date).toLocaleString()}
-        </small>
+        <div class="history-main">
+            <div class="history-type">${label}</div>
+            ${meta.length ? `<div class="history-note">${meta.join(" • ")}</div>` : ""}
+            <div class="history-meta">${date}</div>
+            <div class="history-running">Running Balance: ${runningBalance}</div>
     </div>
 
-    <div style="display:flex; align-items:center; gap:10px;">
-        <span style="color:${color}; font-weight:600;">
-            ₹${Math.abs(t.amount)}
-        </span>
-
-        <button class="delete-btn"
-                style="background:none; border:none; cursor:pointer; font-size:16px;">
-            🗑
-        </button>
+        <div>
+                <div class="history-amount ${amountClass}">${formatCurrency(Math.abs(Number(t.amount || 0)))}</div>
+                <div class="history-actions">
+                    <button class="delete-btn" title="Delete">🗑</button>
+                </div>
     </div>
 `;
+
+        div.addEventListener("click", () => {
+            if (typeof openTransactionAuditDetails === "function") {
+                openTransactionAuditDetails("savings", t);
+            }
+        });
 
         // 🔥 attach event
         let btn = div.querySelector(".delete-btn");
@@ -1352,7 +1523,49 @@ function renderSavingsHistory(data) {
 // =========================
 // 🔗 SOURCES
 // =========================
-// Returns all income entries (used as available sources)
+function isSavingsSourceSeed(entry) {
+    if (!entry) return false;
+    return entry.type === "income" || entry.type === "deposit";
+}
+
+function buildSavingsSourceLedger(entries) {
+    let data = Array.isArray(entries) ? entries : [];
+
+    let sources = data.filter(isSavingsSourceSeed);
+
+    return sources.map(s => {
+        let sid = String(s.id);
+
+        let incoming = data
+            .filter(t => String(t.id) !== sid && String(t.sourceId) === sid && Number(t.amount || 0) > 0)
+            .reduce((sum, t) => sum + Number(t.amount || 0), 0);
+
+        let outgoing = data
+            .filter(t => String(t.id) !== sid && String(t.sourceId) === sid && Number(t.amount || 0) < 0)
+            .reduce((sum, t) => sum + Math.abs(Number(t.amount || 0)), 0);
+
+        let base = Math.max(0, Number(s.amount || 0));
+        let remaining = base + incoming - outgoing;
+
+        return {
+            source: s,
+            incoming,
+            outgoing,
+            remaining
+        };
+    });
+}
+
+function getSourceRemainingById(sourceId, entries) {
+    let scoped = (typeof getScopedSavings === "function")
+        ? getScopedSavings()
+        : (getSavings() || []);
+    let ledger = buildSavingsSourceLedger(entries || scoped);
+    let row = ledger.find(x => String(x.source.id) === String(sourceId));
+    return row ? Number(row.remaining || 0) : 0;
+}
+
+// Returns all source-seed entries (used as available sources)
 function getAvailableSources() {
     let data = getSavings() || [];
 
@@ -1364,46 +1577,11 @@ function getAvailableSources() {
     let currentMonth = now.toISOString().slice(0, 7);
 
     return data.filter(t => {
-        if (periodKey) return t.type === "income" && t.periodKey === periodKey;
-        return t.type === "income" && t.monthKey === currentMonth;
+        if (periodKey) return isSavingsSourceSeed(t) && t.periodKey === periodKey;
+        return isSavingsSourceSeed(t) && t.monthKey === currentMonth;
     });
 }
-// Loads income sources into dropdown with remaining balance
-// function loadSourceOptions() {
-//     let select = document.getElementById("sourceSelect");
-//     if (!select) return;
 
-//     let data = getSavings();
-//     let sources = data.filter(t => t.type === "income");
-
-//     select.innerHTML = "";
-
-//     if (!sources.length) {
-//         let option = document.createElement("option");
-//         option.value = "";
-//         option.textContent = "No sources available";
-//         select.appendChild(option);
-//         return;
-//     }
-
-//     select.innerHTML = "<option value=''>Select Source</option>";
-
-//     sources.forEach(s => {
-//         let used = data
-//             .filter(t => String(t.sourceId) === String(s.id))
-//             .reduce((sum, t) => sum + Math.abs(t.amount), 0);
-
-//         let remaining = s.amount - used;
-
-//         if (remaining <= 0) return;
-
-//         let option = document.createElement("option");
-//         option.value = s.id;
-//         option.textContent = `${s.note || "Income"} (₹${remaining} left)`;
-
-//         select.appendChild(option);
-//     });
-// }
 function loadSourceOptions({
     showAll = true,
     includeUsed = true
@@ -1412,7 +1590,9 @@ function loadSourceOptions({
     let select = document.getElementById("sourceSelect");
     if (!select) return;
 
-    let data = getSavings() || [];
+    let data = (typeof getScopedSavings === "function")
+        ? getScopedSavings()
+        : (getSavings() || []);
 
     let periodKey = typeof getActivePeriodKey === "function"
         ? getActivePeriodKey()
@@ -1421,43 +1601,74 @@ function loadSourceOptions({
     let now = new Date();
     let currentMonth = now.toISOString().slice(0, 7);
 
-    // 🔥 FILTER BASE
-    // let scoped = data.filter(t => {
-    //     if (periodKey) return t.periodKey === periodKey;
-    //     return t.monthKey === currentMonth;
-    // });
     let scoped = [...data];
-    let sources = scoped.filter(t => t.type === "income");
+    let ledger = buildSavingsSourceLedger(scoped);
 
     select.innerHTML = "<option value=''>Select Source</option>";
 
-    if (!sources.length) {
+    if (!ledger.length) {
         let option = document.createElement("option");
         option.textContent = "No sources available";
         select.appendChild(option);
         return;
     }
 
-    sources.forEach(s => {
+    ledger.forEach(item => {
 
-        let used = scoped
-            .filter(t => String(t.sourceId) === String(s.id) && t.amount < 0)
-            .reduce((sum, t) => sum + Math.abs(t.amount), 0);
-
-        let remaining = s.amount - used;
+        let s = item.source;
+        let remaining = Number(item.remaining || 0);
 
         if (!includeUsed && remaining <= 0) return;
 
         let option = document.createElement("option");
         option.value = s.id;
+        option.dataset.remaining = String(remaining);
 
         let status = remaining <= 0
             ? "Used"
             : `₹${remaining} left`;
 
-        option.textContent = `${s.note || "Income"} — ${status}`;
+        option.textContent = `${s.note || "Savings Source"} — ${status}`;
 
         select.appendChild(option);
+    });
+}
+
+function loadDestinationOptions() {
+    let typeEl = document.getElementById("destinationType");
+    let select = document.getElementById("destinationSelect");
+    if (!typeEl || !select) return;
+
+    let type = typeEl.value;
+
+    select.innerHTML = "<option value=''>Select Destination</option>";
+
+    let persons = (typeof getPersons === "function") ? getPersons() : [];
+    let categories = (typeof getCategories === "function") ? getCategories() : [];
+
+    let base = [];
+
+    if (type === "person" || type === "friend") {
+        base = persons.map(p => p && p.name).filter(Boolean);
+    } else if (type === "hotel" || type === "vendor" || type === "business") {
+        base = categories.map(c => (typeof c === "string" ? c : c && c.name)).filter(Boolean);
+    } else if (type === "bank") {
+        base = ["Bank Account", "Credit Card", "Loan Account"];
+    } else if (type === "wallet") {
+        base = ["Cash Wallet", "UPI Wallet", "Card Wallet"];
+    } else {
+        base = ["Other Entity"];
+    }
+
+    let seen = new Set();
+    base.forEach(name => {
+        let key = String(name).trim();
+        if (!key || seen.has(key.toLowerCase())) return;
+        seen.add(key.toLowerCase());
+        let opt = document.createElement("option");
+        opt.value = key;
+        opt.textContent = key;
+        select.appendChild(opt);
     });
 }
 // =========================
@@ -1467,9 +1678,33 @@ function resetSavingsForm() {
     document.getElementById("sAmount").value = "";
     document.getElementById("sNote").value = "";
     document.getElementById("sourceSelect").value = "";
-    document.getElementById("sType").value = "income";
+    if (document.getElementById("refundSelect")) document.getElementById("refundSelect").value = "";
+    if (document.getElementById("sRefundResolutionType")) document.getElementById("sRefundResolutionType").value = "open";
+    if (document.getElementById("sRefundType")) document.getElementById("sRefundType").value = "custom";
+    if (document.getElementById("sPerson")) document.getElementById("sPerson").value = "";
+    if (document.getElementById("sRefundInfo")) document.getElementById("sRefundInfo").textContent = "";
+    if (document.getElementById("sPersonHelp")) document.getElementById("sPersonHelp").textContent = "";
+    if (document.getElementById("sAmount")) {
+        document.getElementById("sAmount").disabled = false;
+        document.getElementById("sAmount").placeholder = "Amount";
+    }
+    let sInput = document.getElementById("sAttachment");
+    let sPreview = document.getElementById("sAttachmentPreview");
+    let sWrapper = document.getElementById("sAttachmentPreviewWrapper");
+    let sRemove = document.getElementById("sAttachmentRemove");
+    if (sInput) sInput.value = "";
+    if (sPreview && sPreview.dataset && sPreview.dataset._previewUrl) {
+        try { URL.revokeObjectURL(sPreview.dataset._previewUrl); } catch (e) { }
+        sPreview.dataset._previewUrl = "";
+    }
+    if (sPreview) sPreview.src = "";
+    if (sWrapper) sWrapper.style.display = "none";
+    if (sRemove) sRemove.style.display = "none";
+    document.getElementById("sType").value = "deposit";
 
     setTodayDate();
+    handleSavingsTypeChange();
+    refreshSavingsRefundGuidance();
 }
 
 // =========================
@@ -1616,6 +1851,11 @@ function handleSavingsFilter(type) {
 // Generates income vs expense chart using filtered or full data
 function loadSavingsGraph(data) {
 
+    if (!window.Chart) {
+        console.warn("Chart.js not loaded; skipping savings graph render");
+        return;
+    }
+
     let periodKey = typeof getActivePeriodKey === "function"
         ? getActivePeriodKey()
         : null;
@@ -1694,6 +1934,14 @@ function showSavingsScreen(id) {
     // 🔹 Controlled rendering
     switch (id) {
 
+        case "history":
+            renderSavingsHistory(
+                filteredSavingsData.length
+                    ? filteredSavingsData
+                    : getScopedSavings()
+            );
+            break;
+
         case "income":
             renderIncomeList();
             break;
@@ -1713,13 +1961,18 @@ function showSavingsScreen(id) {
 function getSourceSummary(sourceId) {
     let data = getSavings();
 
-    let income = data.find(t => String(t.id) === String(sourceId));
+    let income = data.find(t => String(t.id) === String(sourceId) && isSavingsSourceSeed(t));
     if (!income) return null;
 
-    let outgoing = data.filter(t => String(t.sourceId) === String(income.id));
+    let linked = data.filter(t => String(t.sourceId) === String(income.id));
 
-    let totalOutgoing = outgoing.reduce(
-        (sum, t) => t.amount < 0 ? sum + Math.abs(t.amount) : sum,
+    let totalOutgoing = linked.reduce((sum, t) =>
+        Number(t.amount || 0) < 0 ? sum + Math.abs(Number(t.amount || 0)) : sum,
+        0
+    );
+
+    let totalIncoming = linked.reduce((sum, t) =>
+        Number(t.amount || 0) > 0 ? sum + Number(t.amount || 0) : sum,
         0
     );
 
@@ -1727,8 +1980,8 @@ function getSourceSummary(sourceId) {
         name: income.note || "Income",
         totalIncome: income.amount,
         totalOutgoing,
-        remaining: income.amount - totalOutgoing,
-        entries: outgoing
+        remaining: Number(income.amount || 0) - totalOutgoing + totalIncoming,
+        entries: linked
     };
 }
 
@@ -1783,8 +2036,10 @@ function renderSourceDetails(sourceId) {
             let labelMap = {
                 transfer: "🔁 Transfer",
                 budget_allocation: "📦 Budget",
-                income: "💰 Income",
-                settlement: "💸 Settlement"
+                income: "💰 Deposit",
+                deposit: "💰 Deposit",
+                withdrawal: "📤 Withdrawal",
+                refund: "💵 Refund"
             };
 
             let label = labelMap[t.type] || t.type;
@@ -1856,7 +2111,9 @@ function renderSourceDetails(sourceId) {
 // Renders all income entries and allows navigation to detailed view
 function renderIncomeList() {
 
-    let data = getSavings() || [];
+    let data = (typeof getScopedSavings === "function")
+        ? getScopedSavings()
+        : (getSavings() || []);
 
     let periodKey = typeof getActivePeriodKey === "function"
         ? getActivePeriodKey()
@@ -1868,8 +2125,8 @@ function renderIncomeList() {
     // 🔥 GLOBAL SOURCES
     let scoped = [...data];
 
-    // all income sources from all periods
-    let sources = scoped.filter(t => t.type === "income");
+    // all source seeds from all periods
+    let sources = scoped.filter(isSavingsSourceSeed);
 
     let container = document.getElementById("incomeList");
     if (!container) return;
@@ -1877,17 +2134,21 @@ function renderIncomeList() {
     container.innerHTML = "";
 
     if (!sources.length) {
-        container.innerHTML = `<p style="color:#888;">No income sources yet</p>`;
+        container.innerHTML = `<p style="color:#888;">No savings sources yet</p>`;
         return;
     }
 
     sources.slice().reverse().forEach(i => {
 
         let used = scoped
-            .filter(t => String(t.sourceId) === String(i.id) && t.amount < 0)
-            .reduce((sum, t) => sum + Math.abs(t.amount), 0);
+            .filter(t => String(t.sourceId) === String(i.id) && Number(t.amount || 0) < 0)
+            .reduce((sum, t) => sum + Math.abs(Number(t.amount || 0)), 0);
 
-        let remaining = i.amount - used;
+        let credited = scoped
+            .filter(t => String(t.sourceId) === String(i.id) && Number(t.amount || 0) > 0)
+            .reduce((sum, t) => sum + Number(t.amount || 0), 0);
+
+        let remaining = Number(i.amount || 0) - used + credited;
 
         let div = document.createElement("div");
         div.className = "income-card";
@@ -1899,7 +2160,7 @@ function renderIncomeList() {
             year: "numeric"
         });
 
-        let name = i.note || `${monthYear} Income`;
+        let name = i.note || `${monthYear} Source`;
 
         let statusText = remaining <= 0
             ? "❌ All used"
@@ -1944,38 +2205,47 @@ function closeSavingsModal() {
 // Controls UI fields based on selected type (income / transfer / budget)
 function handleSavingsTypeChange() {
 
-    let type = document.getElementById("sType").value;
+    let rawType = document.getElementById("sType")?.value || "deposit";
+    let type = rawType === "income" ? "deposit" : rawType;
 
     let source = document.getElementById("sourceWrapper");
-    let budget = document.getElementById("budgetConfig");
-    let personField = document.getElementById("personWrapper");
-    let settlement = document.getElementById("settlementWrapper");
+    let refund = document.getElementById("refundWrapper");
+    let person = document.getElementById("sPersonWrapper");
+    let personHelp = document.getElementById("sPersonHelp");
 
     // reset
-    source.style.display = "none";
-    budget.style.display = "none";
-    personField.style.display = "none";
-    settlement.style.display = "none";
+    [source, refund, person]
+        .filter(Boolean)
+        .forEach(el => { el.style.display = "none"; });
 
-    // 🔁 TRANSFER
     if (type === "transfer") {
-
-        source.style.display = "block";
-        personField.style.display = "block";
+        if (source) source.style.display = "block";
+        if (person) person.style.display = "block";
+        if (personHelp) personHelp.textContent = "Person is required for transfer transactions.";
+        loadSourceOptions({ includeUsed: false });
+        return;
     }
 
-    // 📦 BUDGET
-    else if (type === "withdraw_budget") {
-
-        source.style.display = "block";
+    if (type === "withdraw_budget") {
+        if (source) source.style.display = "block";
+        loadSourceOptions({ includeUsed: false });
+        return;
     }
 
-    // 💸 SETTLEMENT
-    else if (type === "settlement") {
+    if (type === "refund") {
+        if (refund) refund.style.display = "block";
+        if (person) person.style.display = "block";
+        if (personHelp) personHelp.textContent = "Person is optional for refunds. Select it only when needed.";
+        loadRefundCandidates();
+        handleSavingsRefundResolutionChange();
+        refreshSavingsRefundGuidance();
+        return;
+    }
 
-        settlement.style.display = "block";
-
-        loadSettlementOptions();
+    let amountEl = document.getElementById("sAmount");
+    if (amountEl) {
+        amountEl.disabled = false;
+        amountEl.placeholder = "Amount";
     }
 }
 
@@ -2168,7 +2438,12 @@ function goToTransfers() {
 //     showToast("Savings report downloaded 📄", "success");
 // }
 function exportSavingsPDF() {
-    const { jsPDF } = window.jspdf;
+    const jsPdfApi = window.jspdf || {};
+    const jsPDF = jsPdfApi.jsPDF;
+    if (!jsPDF) {
+        showToast("PDF export unavailable offline: jsPDF not loaded", "warning");
+        return;
+    }
     const doc = new jsPDF();
 
     let data = getSavings();
@@ -2227,7 +2502,14 @@ function exportSavingsPDF() {
         let date = new Date(t.date).toLocaleDateString("en-IN");
         let type = t.type || "-";
         let entity = t.entity || "-";
-        let purpose = t.note || "-";
+        let details = [];
+        if (t.type === "refund" && typeof formatRefundType === "function") details.push(`Type: ${formatRefundType(t.refundType)}`);
+        if (t.resolutionType && typeof normalizeResolutionType === "function") {
+            const key = normalizeResolutionType(t.resolutionType);
+            const label = (typeof RESOLUTION_TYPE_LABELS === "object" && RESOLUTION_TYPE_LABELS[key]) ? RESOLUTION_TYPE_LABELS[key] : key;
+            details.push(`Resolution: ${label}`);
+        }
+        let purpose = [t.note || "-"].concat(details).join(" | ");
         let amount = t.amount || 0;
 
         // Totals
@@ -2288,7 +2570,7 @@ function exportSavingsPDF() {
     // 💾 SAVE
     // =========================
     doc.save("savings-report.pdf");
-
+        saveSavings(data);
     showToast("Savings report downloaded 📄", "success");
 }
 // Converts HEX color to RGB (used for dynamic theming if needed)
@@ -2308,7 +2590,7 @@ function hexToRgb(hex) {
 // ❌ DELETE SAVINGS ENTRY
 // =========================
 // Removes a savings transaction by index
-function deleteSavings(id) {
+async function deleteSavings(id) {
 
     let data = getSavings();
 
@@ -2316,8 +2598,33 @@ function deleteSavings(id) {
 
     if (!entry) return;
 
+    let rootIds = [String(id)];
+    if (typeof validateTransactionDependencies === "function") {
+        let safePlan = validateTransactionDependencies("savings", rootIds, false);
+        if (safePlan.blocked) {
+            let proceed = window.confirm(
+                `Cannot delete because dependent records exist (${safePlan.summary}).\n\n` +
+                `Use cascade delete and remove all dependents as well?`
+            );
+            if (!proceed) return;
+
+            let cascadePlan = validateTransactionDependencies("savings", rootIds, true);
+            if (typeof executeDeletePlan === "function") {
+                await executeDeletePlan(cascadePlan);
+                loadSavings();
+                if (typeof loadHistory === "function") loadHistory();
+                if (typeof loadDashboard === "function") loadDashboard();
+                if (typeof loadGraph === "function") loadGraph();
+                if (typeof renderBudgetEntries === "function") renderBudgetEntries();
+                showToast("Deleted with dependents", "success");
+                return;
+            }
+        }
+    }
+
     // 🔥 remove by ID (not index)
-    data = data.filter(e => e.id != id);
+    const deletedId = String(id);
+    data = data.filter(e => String(e.id) != deletedId);
 
     saveSavings(data);
 
@@ -2397,13 +2704,16 @@ function generateBudgetId(period, date) {
     return null;
 }
 
-function getCategories() {
-    return JSON.parse(localStorage.getItem("categories")) ||
-        ["Self", "Family", "Friend", "Company", "Charity", "Other"];
+if (typeof window.getCategories !== 'function') {
+    window.getCategories = function () {
+        return JSON.parse(localStorage.getItem("categories")) || ["Self", "Family", "Friend", "Company", "Charity", "Other"];
+    };
 }
 
-function saveCategories(list) {
-    localStorage.setItem("categories", JSON.stringify(list));
+if (typeof window.saveCategories !== 'function') {
+    window.saveCategories = function (list) {
+        try { localStorage.setItem("categories", JSON.stringify(list)); } catch (e) { console.error('saveCategories failed', e); }
+    };
 }
 
 function getPersons() {
@@ -2489,6 +2799,14 @@ function addPerson() {
 
 
 function deleteCategory(value) {
+    let check = (typeof validateLookupDeletion === "function")
+        ? validateLookupDeletion("category", value)
+        : { blocked: false, summary: "" };
+    if (check.blocked) {
+        showToast(`Cannot delete category. ${check.summary}`, "warning");
+        return;
+    }
+
     let categories = getCategories();
 
     categories = categories.filter(c => c !== value);
@@ -2499,6 +2817,14 @@ function deleteCategory(value) {
 }
 
 function deletePerson(value) {
+    let check = (typeof validateLookupDeletion === "function")
+        ? validateLookupDeletion("person", value)
+        : { blocked: false, summary: "" };
+    if (check.blocked) {
+        showToast(`Cannot delete person. ${check.summary}`, "warning");
+        return;
+    }
+
     let persons = getPersons();
 
     persons = persons.filter(p => p !== value);
@@ -2600,22 +2926,8 @@ window.addEventListener("DOMContentLoaded", function () {
 
     personSelect.addEventListener("change", function () {
         if (this.value === "__add_new__") {
-
-            if (this.value === "__add_new__") {
-                openAddPersonModal();
-            }
-
-            //if (!name) return;
-
-            let persons = getPersons();
-
-            if (!persons.includes(name)) {
-                persons.push(name);
-                savePersons(persons);
-            }
-
-            loadPersonOptions();
-            this.value = name; // auto select
+            openAddPersonModal();
+            this.value = "";
         }
     });
 });
@@ -2726,52 +3038,74 @@ function getDailyBudget() {
     return total / days;
 }
 
-
-function loadSettlementOptions() {
-
-    let select = document.getElementById("settlementSelect");
-
+function loadRefundCandidates() {
+    let select = document.getElementById("refundSelect");
     if (!select) return;
 
-    let data = getSavings() || [];
+    let savings = (typeof getScopedSavings === "function")
+        ? getScopedSavings()
+        : (getSavings() || []);
 
-    select.innerHTML =
-        "<option value=''>Select Pending Transfer</option>";
+    select.innerHTML = "<option value=''>Select Transfer Transaction</option>";
 
-    // 🔥 only transfers
-    let transfers = data.filter(t => t.type === "transfer");
-
-    transfers.forEach(t => {
-
-        // total settled against this transfer
-        let settled = data
-            .filter(s =>
-                s.type === "settlement" &&
-                String(s.linkedTransactionId) === String(t.id)
-            )
-            .reduce((sum, s) => sum + Math.abs(s.amount), 0);
-
-        let original = Math.abs(t.amount);
-
-        let pending = original - settled;
-
-        // skip fully settled
+    // Savings wallet refunds are only for outbound transfer entries.
+    let savingsCandidates = savings.filter(t => t.type === "transfer" && Number(t.amount || 0) < 0);
+    savingsCandidates.forEach(t => {
+        let snapshot = getSavingsResolutionSnapshot(t.id, savings);
+        let pending = Number(snapshot.remainingRefundable || 0);
         if (pending <= 0) return;
 
-        let option = document.createElement("option");
-
-        option.value = t.id;
-
-        option.textContent =
-            `${t.person || "Unknown"} — ${t.note || "Transfer"} — ₹${pending} pending`;
-
-        // 🔥 metadata
-        option.dataset.sourceId = t.sourceId;
-        option.dataset.person = t.person || "";
-        option.dataset.pending = pending;
-
-        select.appendChild(option);
+        let opt = document.createElement("option");
+        opt.value = `sav:${t.id}`;
+        opt.textContent = `Transfer • ${t.note || t.destination || "-"} • ₹${pending.toFixed(2)} pending • ${formatSavingsResolutionStatus(snapshot.status)}`;
+        select.appendChild(opt);
     });
+
+    handleSavingsRefundResolutionChange();
+}
+
+function loadRecoveryExpenseOptions() {
+    let select = document.getElementById("recoveryExpenseSelect");
+    if (!select) return;
+
+    let expenses = (typeof getExpenses === "function") ? getExpenses() : [];
+
+    select.innerHTML = "<option value=''>Select Expense</option>";
+
+    expenses
+        .filter(e => Number(e.amount || 0) < 0)
+        .forEach(e => {
+            let recovered = expenses
+                .filter(x => x.type === "recovery" && String(x.linkedTransactionId) === String(e.id))
+                .reduce((sum, x) => {
+                    if (Array.isArray(x.allocationTrail) && x.allocationTrail.length) {
+                        return sum + x.allocationTrail.reduce((s, a) => s + Math.abs(Number(a.amount || 0)), 0);
+                    }
+                    return sum + Math.abs(Number(x.amount || 0));
+                }, 0);
+
+            let pending = Math.max(0, Math.abs(Number(e.amount || 0)) - recovered);
+            if (pending <= 0) return;
+
+            let opt = document.createElement("option");
+            opt.value = String(e.id);
+            opt.textContent = `${e.category || "Expense"} • ${e.purpose || "-"} • ₹${pending} recoverable`;
+            select.appendChild(opt);
+        });
+}
+
+
+function loadSettlementOptions() {
+    // Deprecated in current savings architecture.
+    return;
+}
+
+if (typeof window !== "undefined") {
+    window.renderSavingsHistory = window.renderSavingsHistory || renderSavingsHistory;
+    window.handleSavingsFilter = window.handleSavingsFilter || handleSavingsFilter;
+    window.resetSavingsForm = window.resetSavingsForm || resetSavingsForm;
+    window.getSavingsResolutionSnapshot = window.getSavingsResolutionSnapshot || getSavingsResolutionSnapshot;
+    window.loadRefundCandidates = window.loadRefundCandidates || loadRefundCandidates;
 }
 
 // Savings Module End Savings.js

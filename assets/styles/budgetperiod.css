@@ -391,3 +391,63 @@ body {
   gap: 8px;
   margin-top: 10px;
 }
+
+.page-container {
+  display: grid;
+  gap: 14px;
+}
+
+.list-title {
+  display: grid;
+  gap: 2px;
+}
+
+.list-filter {
+  display: flex;
+  align-items: center;
+}
+
+.plus {
+  font-size: 18px;
+  line-height: 1;
+}
+
+.budget-list {
+  display: grid;
+  gap: 10px;
+}
+
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.modal-body {
+  display: grid;
+  gap: 10px;
+}
+
+.modal-sub {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.details-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px 12px;
+  margin-bottom: 10px;
+}
+
+.details-grid p {
+  margin: 0;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--hover);
+  color: var(--text);
+}

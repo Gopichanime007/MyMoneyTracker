@@ -1,573 +1,3 @@
-<!--
-====================================================================================================
-MONEY TRACKER APPLICATION
-MASTER FRONTEND ARCHITECTURE DOCUMENTATION
-====================================================================================================
-
-PROJECT TYPE
-----------------------------------------------------------------------------------------------------
-Hybrid Architecture Financial Tracking System
-
-This HTML architecture acts as:
-1. Web Application
-2. Android UI Blueprint
-3. Navigation Blueprint
-4. Business Workflow Blueprint
-5. XML Conversion Reference
-
-The purpose of this architecture is to ensure that:
-- HTML screens
-- JavaScript logic
-- Android Fragments
-- Android XML layouts
-- Android Navigation
-- Android Managers / Domain Layers
-
-all remain synchronized.
-
-====================================================================================================
-HIGH LEVEL APPLICATION FLOW
-====================================================================================================
-
-Application Structure:
-----------------------------------------------------------------------------------------------------
-
-App Shell
-│
-├── Header
-├── Navigation
-│
-├── Expense League
-│    ├── Dashboard
-│    ├── Add Expense
-│    ├── Expense History
-│    ├── Budget Management
-│    ├── Analytics
-│    ├── Budget Entries
-│    └── Budget Details
-│
-├── Settings League
-│    ├── Currency
-│    ├── Themes
-│    ├── Categories
-│    ├── Backup & Restore
-│    └── Reset
-│
-└── Modal Layer
-     ├── Date Period Modal
-     ├── Category Modal
-     ├── Backup Modal
-     ├── Import Modal
-     ├── Split Modal
-     └── Confirmation Modal
-
-====================================================================================================
-HTML ARCHITECTURE
-====================================================================================================
-
-ROOT CONTAINER
-----------------------------------------------------------------------------------------------------
-
-<div class="app">
-
-This acts as the entire application shell.
-
-Android Equivalent:
-----------------------------------------------------------------------------------------------------
-MainActivity
-or
-Activity + NavHostFragment container
-
-Responsibilities:
-----------------------------------------------------------------------------------------------------
-✔ Holds all screens
-✔ Controls navigation visibility
-✔ Global theme rendering
-✔ Application-level layout container
-
-====================================================================================================
-HEADER ARCHITECTURE
-====================================================================================================
-
-<header class="header">
-
-Purpose:
-----------------------------------------------------------------------------------------------------
-Displays application branding and top identity.
-
-Contains:
-----------------------------------------------------------------------------------------------------
-✔ Application Title
-✔ Global Toolbar Area
-
-Android Equivalent:
-----------------------------------------------------------------------------------------------------
-MaterialToolbar
-
-Responsibilities in Android:
-----------------------------------------------------------------------------------------------------
-✔ Dynamic screen title
-✔ Drawer toggle icon
-✔ Settings icon
-✔ Toolbar actions
-✔ Theme coloring
-
-====================================================================================================
-NAVIGATION ARCHITECTURE
-====================================================================================================
-
-<div class="nav">
-
-Purpose:
-----------------------------------------------------------------------------------------------------
-Controls screen switching inside the SPA architecture.
-
-Buttons:
-----------------------------------------------------------------------------------------------------
-🏠 Home
-➕ Add Expense
-📜 History
-💰 Budget
-📊 Analytics
-📦 Budget Entries
-⚙️ Settings
-
-Navigation Logic:
-----------------------------------------------------------------------------------------------------
-showScreen('home')
-showScreen('add')
-showScreen('history')
-
-This acts like a mini router.
-
-Android Equivalent:
-----------------------------------------------------------------------------------------------------
-Navigation Component
-+
-DrawerLayout
-+
-NavController
-
-IMPORTANT:
-----------------------------------------------------------------------------------------------------
-Android implementation SHOULD NOT use bottom navigation for scaling.
-
-Instead use:
-Drawer → League → Workflow Architecture
-
-Because the application already contains:
-- Expense workflows
-- Savings workflows
-- Budget workflows
-- Analytics workflows
-- Settings workflows
-
-which become too large for bottom navigation scaling.
-
-====================================================================================================
-SCREEN ARCHITECTURE
-====================================================================================================
-
-Every:
-----------------------------------------------------------------------------------------------------
-<section class="screen">
-
-represents:
-----------------------------------------------------------------------------------------------------
-ONE independent application screen.
-
-Android Equivalent:
-----------------------------------------------------------------------------------------------------
-ONE Fragment
-
-----------------------------------------------------------------------------------------------------
-HTML SECTION → ANDROID FRAGMENT MAPPING
-----------------------------------------------------------------------------------------------------
-
-#home
-→ DashboardFragment
-
-#add
-→ ExpenseFragment
-
-#history
-→ ExpenseHistoryFragment
-
-#budget
-→ BudgetFragment
-
-#graph
-→ AnalyticsFragment
-
-#budgets
-→ BudgetEntriesFragment
-
-#budgetDetails
-→ BudgetDetailsFragment
-
-#settings
-→ SettingsFragment
-
-====================================================================================================
-DASHBOARD ARCHITECTURE
-====================================================================================================
-
-<section id="home">
-
-Purpose:
-----------------------------------------------------------------------------------------------------
-Financial overview dashboard.
-
-Contains:
-----------------------------------------------------------------------------------------------------
-✔ Budget summary
-✔ Spent amount
-✔ Remaining balance
-✔ Today spending
-✔ Income
-✔ Net calculations
-✔ Progress tracking
-✔ Financial insights
-
-Business Logic Source:
-----------------------------------------------------------------------------------------------------
-script.js
-
-Android Architecture:
-----------------------------------------------------------------------------------------------------
-DashboardFragment
-+
-DashboardManager
-
-IMPORTANT:
-----------------------------------------------------------------------------------------------------
-Dashboard screen MUST NEVER directly calculate values inside UI layer.
-
-Calculations belong inside:
-- Manager
-- Repository
-- Domain layer
-
-====================================================================================================
-ADD EXPENSE ARCHITECTURE
-====================================================================================================
-
-<section id="add">
-
-Purpose:
-----------------------------------------------------------------------------------------------------
-Expense & income creation workflow.
-
-Contains:
-----------------------------------------------------------------------------------------------------
-✔ Expense Type
-✔ Amount
-✔ Category
-✔ Purpose
-✔ Date
-✔ Budget Selection
-✔ Payment Method
-
-Primary Workflow:
-----------------------------------------------------------------------------------------------------
-saveExpense()
-
-Android Equivalent:
-----------------------------------------------------------------------------------------------------
-ExpenseFragment
-
-Business Logic:
-----------------------------------------------------------------------------------------------------
-ExpenseManager
-
-IMPORTANT:
-----------------------------------------------------------------------------------------------------
-Expense form validation should NEVER remain inside XML/UI layer.
-
-Validation belongs inside:
-- Manager
-- Validator
-- Domain layer
-
-====================================================================================================
-HISTORY ARCHITECTURE
-====================================================================================================
-
-<section id="history">
-
-Purpose:
-----------------------------------------------------------------------------------------------------
-Displays historical expense transactions.
-
-Contains:
-----------------------------------------------------------------------------------------------------
-✔ Filtering
-✔ Export
-✔ Share
-✔ History listing
-
-Filters:
-----------------------------------------------------------------------------------------------------
-- Today
-- Week
-- Month
-- Custom Period
-
-Android Equivalent:
-----------------------------------------------------------------------------------------------------
-ExpenseHistoryFragment
-
-UI Components:
-----------------------------------------------------------------------------------------------------
-RecyclerView
-NestedScrollView
-
-Business Logic:
-----------------------------------------------------------------------------------------------------
-HistoryManager
-
-====================================================================================================
-BUDGET ARCHITECTURE
-====================================================================================================
-
-<section id="budget">
-
-Purpose:
-----------------------------------------------------------------------------------------------------
-Budget planning and financial target management.
-
-Contains:
-----------------------------------------------------------------------------------------------------
-✔ Budget type
-✔ Budget amount
-✔ Budget period
-✔ Daily limit calculations
-✔ Smart savings insights
-
-Business Logic:
-----------------------------------------------------------------------------------------------------
-saveBudget()
-
-Android Equivalent:
-----------------------------------------------------------------------------------------------------
-BudgetFragment
-
-Domain Layer:
-----------------------------------------------------------------------------------------------------
-BudgetManager
-
-====================================================================================================
-ANALYTICS ARCHITECTURE
-====================================================================================================
-
-<section id="graph">
-
-Purpose:
-----------------------------------------------------------------------------------------------------
-Financial analytics visualization.
-
-Contains:
-----------------------------------------------------------------------------------------------------
-✔ Chart rendering
-✔ Category breakdown
-✔ Date filtering
-✔ Period filtering
-
-Libraries:
-----------------------------------------------------------------------------------------------------
-Chart.js
-
-Android Equivalent:
-----------------------------------------------------------------------------------------------------
-AnalyticsFragment
-
-Android Library Equivalent:
-----------------------------------------------------------------------------------------------------
-MPAndroidChart
-
-Business Layer:
-----------------------------------------------------------------------------------------------------
-AnalyticsManager
-
-====================================================================================================
-SETTINGS ARCHITECTURE
-====================================================================================================
-
-<section id="settings">
-
-Purpose:
-----------------------------------------------------------------------------------------------------
-Global application configuration management.
-
-Contains:
-----------------------------------------------------------------------------------------------------
-✔ Currency management
-✔ Theme management
-✔ HEX theme support
-✔ Category management
-✔ Backup & restore
-✔ App reset
-
-Android Equivalent:
-----------------------------------------------------------------------------------------------------
-SettingsFragment
-
-Managers:
-----------------------------------------------------------------------------------------------------
-SettingsManager
-ThemeManager
-
-IMPORTANT:
-----------------------------------------------------------------------------------------------------
-NO HARDCODED COLORS
-NO HARDCODED CURRENCY SYMBOLS
-
-Everything must use:
-----------------------------------------------------------------------------------------------------
-✔ Dynamic Theme Engine
-✔ CurrencyUtils
-✔ SharedPreferences
-✔ Runtime theme updates
-
-====================================================================================================
-MODAL ARCHITECTURE
-====================================================================================================
-
-All:
-----------------------------------------------------------------------------------------------------
-<div class="modal">
-
-represent:
-----------------------------------------------------------------------------------------------------
-temporary workflow overlays.
-
-Android Equivalent:
-----------------------------------------------------------------------------------------------------
-DialogFragment
-
-----------------------------------------------------------------------------------------------------
-HTML MODAL → ANDROID DIALOG MAPPING
-----------------------------------------------------------------------------------------------------
-
-periodModal
-→ PeriodDialogFragment
-
-categoryModal
-→ CategoryDialogFragment
-
-backupModal
-→ BackupDialogFragment
-
-importModal
-→ ImportDialogFragment
-
-splitModal
-→ SplitAllocationDialogFragment
-
-confirmModal
-→ ConfirmResetDialogFragment
-
-====================================================================================================
-SCRIPT ARCHITECTURE
-====================================================================================================
-
-script.js acts as:
-----------------------------------------------------------------------------------------------------
-Application Workflow Controller
-
-storage.js acts as:
-----------------------------------------------------------------------------------------------------
-Persistence Layer
-
-Responsibilities:
-----------------------------------------------------------------------------------------------------
-✔ Screen navigation
-✔ Financial calculations
-✔ Data persistence
-✔ Filtering
-✔ Analytics
-✔ Backup/export
-✔ Theme handling
-✔ Currency handling
-
-Android Equivalent:
-----------------------------------------------------------------------------------------------------
-Java Managers + Repositories + SharedPreferences
-
-====================================================================================================
-ANDROID MIGRATION STRATEGY
-====================================================================================================
-
-When converting HTML → Android:
-
-DO NOT directly convert:
-----------------------------------------------------------------------------------------------------
-HTML Sections → XML Screens only
-
-Instead convert:
-----------------------------------------------------------------------------------------------------
-Workflow → Fragment + Manager + Repository
-
-Correct Android Architecture:
-----------------------------------------------------------------------------------------------------
-
-Feature
-│
-├── data
-├── domain
-├── models
-├── adapters
-└── ui
-
-====================================================================================================
-IMPORTANT ENGINEERING RULES
-====================================================================================================
-
-1.
-Every HTML section becomes:
-ONE Fragment
-
-2.
-Every JavaScript workflow becomes:
-ONE Manager
-
-3.
-Every modal becomes:
-ONE DialogFragment
-
-4.
-Navigation should use:
-NavController + DrawerLayout
-
-5.
-Avoid:
-Business logic inside Fragment/UI
-
-6.
-Avoid:
-Hardcoded colors and currency symbols
-
-7.
-Use:
-Theme-aware XML colors
-
-8.
-Use:
-RecyclerView instead of repeated HTML blocks
-
-9.
-Use:
-NestedScrollView for vertical screen scalability
-
-10.
-Keep modules isolated:
-Expense must not directly manipulate Savings logic.
-
-====================================================================================================
-END OF MASTER ARCHITECTURE DOCUMENT
-====================================================================================================
--->
-<!-- Budget Expense Module Start index.html-->
 <!DOCTYPE html>
 <html lang="en">
 
@@ -652,6 +82,11 @@ END OF MASTER ARCHITECTURE DOCUMENT
 
         </div>
 
+        <div class="refund-type-card">
+          <h4>Refund Types This Period</h4>
+          <div id="refundTypeBreakdown"></div>
+        </div>
+
         <!-- Progress -->
         <div class="progress-wrapper">
           <div class="progress-bar">
@@ -673,40 +108,92 @@ END OF MASTER ARCHITECTURE DOCUMENT
       <div class="card">
         <h3>Add Expense</h3>
 
-        <select id="entryType">
+        <label for="entryType">Entry Type</label>
+        <select id="entryType" onchange="handleEntryTypeUIChange()">
           <option value="expense">Expense</option>
-
-          <option value="lend">Lend</option>
-
-          <option value="recovery">Recovery</option>
-
-          <option value="transfer">Transfer</option>
-
           <option value="income">Income</option>
+          <option value="transfer">Transfer</option>
+          <option value="refund">Refund</option>
+          <option value="transfer_back">Transfer Back</option>
         </select>
 
         <input type="number" id="amount" placeholder="Amount">
-        <select id="category"></select>
+
+        <div id="categoryWrapper" class="form-group">
+          <label for="category">Category</label>
+          <select id="category"></select>
+        </div>
+
         <input type="text" id="purpose" placeholder="Purpose (optional)">
         <input type="date" id="expenseDate">
-        <select id="budgetSelect"></select>
-        <select id="paymentType">
-          <option value="PhonePe">PhonePe</option>
-          <option value="UPI">UPI</option>
-          <option value="Cash">Cash</option>
-          <option value="Google Pay">Google Pay</option>
-          <option value="Bank Transfer">Bank Transfer</option>
-        </select>
-        <div id="linkedTransactionWrapper" style="display:none; margin-top:10px;">
 
-          <select id="linkedTransaction">
+        <div id="budgetWrapper" class="form-group">
+          <label for="budgetSelect">Budget</label>
+          <select id="budgetSelect"></select>
+        </div>
 
-            <option value="">
-              Select linked transaction
-            </option>
-
+        <div id="linkedTransactionWrapper" class="form-group hidden">
+          <label for="linkedTransactionSelect">Linked Transaction</label>
+          <select id="linkedTransactionSelect" onchange="updateLinkedRemainingUI();handleRefundResolutionChange()">
+            <option value="">Select transaction</option>
           </select>
 
+          <label for="refundResolutionType">Resolution Type</label>
+          <select id="refundResolutionType" onchange="handleRefundResolutionChange()">
+            <option value="open">Open</option>
+            <option value="partially_refunded">Partially Refunded</option>
+            <option value="fully_refunded">Fully Refunded</option>
+            <option value="cancelled_with_charges">Cancelled With Charges</option>
+            <option value="consumed">Consumed</option>
+            <option value="written_off">Written Off</option>
+            <option value="settled">Settled</option>
+          </select>
+          <small id="refundResolutionHelp" class="muted-note refund-info"></small>
+
+          <label for="refundType">Refund Type</label>
+          <select id="refundType">
+            <option value="cancellation">Ticket Cancellation</option>
+            <option value="return">Product Return</option>
+            <option value="cashback">Cashback</option>
+            <option value="reversal">Bank Reversal</option>
+            <option value="recovery">Expense Recovery</option>
+            <option value="correction">Transfer Correction</option>
+            <option value="adjustment">Salary Adjustment</option>
+            <option value="loan_recovery">Loan Recovery</option>
+            <option value="custom" selected>Custom</option>
+          </select>
+          <small id="refundTypeHelp" class="muted-note refund-info"></small>
+
+          <small id="linkedRemainingText" class="muted-note hidden"></small>
+        </div>
+
+        <div id="personWrapper" class="form-group hidden">
+          <label for="personSelect">Person</label>
+          <select id="personSelect">
+            <option value="">No specific person</option>
+          </select>
+          <small id="personSelectionHelp" class="muted-note"></small>
+        </div>
+
+        <div id="paymentWrapper" class="form-group">
+          <label for="paymentType">Payment Method</label>
+          <select id="paymentType">
+            <option value="PhonePe">PhonePe</option>
+            <option value="UPI">UPI</option>
+            <option value="Cash">Cash</option>
+            <option value="Google Pay">Google Pay</option>
+            <option value="Bank Transfer">Bank Transfer</option>
+          </select>
+        </div>
+
+        <!-- Attachment -->
+        <label class="field-label">Attach Receipt (optional)</label>
+        <div class="inline-row"> 
+          <input class="flex-input" id="expenseAttachment" type="file" accept="image/*,.pdf,application/pdf" capture="environment" />
+          <button type="button" id="expenseAttachmentRemove" class="link-btn hidden">Remove</button>
+        </div>
+        <div id="expenseAttachmentPreviewWrapper" class="attachment-preview-wrapper hidden">
+          <img id="expenseAttachmentPreview" src="" class="attachment-preview" />
         </div>
         <button type="button" class="primary" onclick="saveExpense()">Save</button>
       </div>
@@ -725,7 +212,7 @@ END OF MASTER ARCHITECTURE DOCUMENT
           <option value="period">Custom Period</option>
         </select>
 
-        <div style="display:flex; gap:10px; margin-top:10px;">
+        <div class="inline-row history-tools">
 
           <!-- DOWNLOAD -->
           <button class="icon-btn" onclick="exportPDF()">
@@ -777,17 +264,17 @@ END OF MASTER ARCHITECTURE DOCUMENT
       <div class="budget-insights">
 
         <div class="insight-card success">
-          <small>Saved Today</small>
+          <small>Daily Remaining</small>
           <h4 id="savedToday">₹0</h4>
         </div>
 
         <div class="insight-card info">
-          <small>Week Efficiency</small>
+          <small>Weekly Remaining</small>
           <h4 id="savedWeek">₹0</h4>
         </div>
 
         <div class="insight-card premium">
-          <small>Period Efficiency</small>
+          <small>Monthly Remaining</small>
           <h4 id="savedPeriod">₹0</h4>
         </div>
 
@@ -799,7 +286,7 @@ END OF MASTER ARCHITECTURE DOCUMENT
       <div class="card">
         <h3>Analytics</h3>
 
-        <div style="display:flex; gap:8px;">
+        <div class="inline-row graph-controls">
           <select onchange="handleGraphFilter(this.value)">
             <option value="day">Day</option>
             <option value="week">Week</option>
@@ -813,12 +300,12 @@ END OF MASTER ARCHITECTURE DOCUMENT
           <canvas id="myChart"></canvas>
         </div>
 
-        <div class="card" style="margin-top:10px;">
+        <div class="card card-tight">
           <h4>Category Breakdown</h4>
           <div id="categoryBreakdown"></div>
         </div>
 
-        <div id="graphDate" style="text-align:center; font-size:12px; color:#777;"></div>
+        <div id="graphDate" class="graph-date"></div>
       </div>
     </section>
 
@@ -847,17 +334,30 @@ END OF MASTER ARCHITECTURE DOCUMENT
           <option value="GBP">GBP (£)</option>
         </select>
         <!-- Theme -->
-        <h4>Theme</h4>
-        <select onchange="handleTheme(this.value)">
-          <option value="#4caf50">Green</option>
-          <option value="#ff5722">Orange</option>
-          <option value="#2196f3">Blue</option>
+        <h4>Appearance Mode</h4>
+        <select id="appearanceModeSelect" onchange="applyAppearanceSettings(this.value)">
+          <option value="metallic">Metallic</option>
+          <option value="matte">Matte</option>
+          <option value="glossy">Glossy</option>
+          <option value="chromium">Chromium</option>
+          <option value="glass">Glass</option>
+          <option value="paper">Paper</option>
+          <option value="neon">Neon</option>
+        </select>
+
+        <h4>Accent Color</h4>
+        <select id="accentColorSelect" onchange="handleTheme(this.value)">
+          <option value="purple">Purple</option>
+          <option value="blue">Blue</option>
+          <option value="emerald">Emerald</option>
+          <option value="orange">Orange</option>
+          <option value="red">Red</option>
           <option value="custom">Custom</option>
         </select>
         <input type="text" id="hexInput" placeholder="Apply custom theme using hex code (e.g. #4caf50)">
         <button class="secondary" onclick="applyHex()">Apply</button>
 
-        <input type="color" id="colorPicker" style="display:none;" onchange="applyCustomColor(this.value)">
+        <input type="color" id="colorPicker" class="hidden" onchange="applyCustomColor(this.value)">
 
         <!-- Category -->
         <h4>Add Category</h4>
@@ -878,24 +378,40 @@ END OF MASTER ARCHITECTURE DOCUMENT
           <button class="secondary" onclick="openConfirm()">🗑 Reset App</button>
         </div>
 
+        <h4>Automatic Backup</h4>
+        <div class="form-group">
+          <label for="autoBackupEnabled">
+            <input id="autoBackupEnabled" type="checkbox" onchange="applyAutoBackupSettings()" class="inline-checkbox" />
+            Enable Auto Backup
+          </label>
+
+          <label for="autoBackupFrequency">Backup Frequency</label>
+          <select id="autoBackupFrequency" onchange="applyAutoBackupSettings()">
+            <option value="daily">Daily</option>
+            <option value="weekly">Weekly</option>
+            <option value="monthly">Monthly</option>
+          </select>
+
+          <label for="autoBackupTarget">Backup Target</label>
+          <select id="autoBackupTarget" onchange="applyAutoBackupSettings()">
+            <option value="local_download">Local File Download</option>
+            <option value="google_drive">Google Drive (future-ready)</option>
+            <option value="one_drive">OneDrive (future-ready)</option>
+          </select>
+
+          <small id="autoBackupLastRun" class="muted-note">Last Backup: Not available</small>
+          <small id="autoBackupNextRun" class="muted-note">Next Scheduled Backup: Not available</small>
+          <small id="autoBackupRetentionState" class="muted-note">Retention: Not available</small>
+          <small id="autoBackupRuntimeState" class="muted-note">Export runtime: checking capabilities...</small>
+
+          <button class="secondary" type="button" onclick="runAutoBackupNow()">Run Backup Now</button>
+        </div>
+
         <!-- <h4>💸 Loans / Recoveries</h4>
         <div id="loanSummary"></div>
       </div>
       <div class="app-signature">
         Developed by <strong>Gopichaninme</strong>
-      </div> -->
-        <!-- <div class="card" style="margin-top:15px;">
-        <h3>🔔 Notifications</h3>
-
-        <p id="notifStatus">Status: Checking...</p>
-
-      <div class="notif-actions">
-          <button class="btn btn-enable" onclick="enableNotifications()">Enable</button>
-          <button class="btn btn-test" onclick="testNotification()">Test</button>
-          <button class="btn btn-toggle" onclick="toggleNotifications()" id="notifToggleBtn">
-            Stop
-          </button>
-        </div>
       </div> -->
     </section>
 
@@ -930,7 +446,7 @@ END OF MASTER ARCHITECTURE DOCUMENT
 
       <h3>Backup & Restore</h3>
 
-      <div class="modal-actions" style="flex-direction:column; gap:10px;">
+      <div class="modal-actions modal-stack-actions">
 
         <button class="primary" onclick="exportDataAsJSON()">
           📄 Export JSON
@@ -954,7 +470,8 @@ END OF MASTER ARCHITECTURE DOCUMENT
     <div class="modal-content">
       <h3>Import Data</h3>
 
-      <textarea id="importText" placeholder="Paste JSON here" style="height:120px;"></textarea>
+      <textarea id="importText" placeholder="Paste JSON here" class="import-textarea"></textarea>
+      <pre id="importValidationReport" class="muted-note" aria-live="polite">Import report will appear here.</pre>
 
       <input type="file" accept=".json" onchange="handleFileImport(event)">
 
@@ -982,7 +499,7 @@ END OF MASTER ARCHITECTURE DOCUMENT
     </div>
   </div>
 
-  <div id="confirmModal" class="modal" style="display:none;">
+  <div id="confirmModal" class="modal hidden">
     <div class="modal-content">
       <h3>Clear all app data?</h3>
 
@@ -995,12 +512,7 @@ END OF MASTER ARCHITECTURE DOCUMENT
 
   <!-- SCRIPT -->
   <script src="assets/scripts/storage.js"></script>
-  <script src="assets/scripts/pdf/pdfUtils.js"></script>
-  <script src="assets/scripts/pdf/pdfTheme.js"></script>
-  <script src="assets/scripts/pdf/pdfRenderers.js"></script>
-  <script src="assets/scripts/pdf/pdfGenerator.js"></script>
   <script src="assets/scripts/script.js"></script>
-  <script src="tests/financial.test.js"></script>
   <script>
     document.addEventListener("DOMContentLoaded", () => {
       showScreen('home');
@@ -1010,5 +522,3 @@ END OF MASTER ARCHITECTURE DOCUMENT
 </body>
 
 </html>
-
-<!-- Budget Expense Module END index.htm-->

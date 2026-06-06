@@ -1,751 +1,3 @@
-<!--
-====================================================================================================
-SAVINGS MODULE UI
-MASTER HTML ARCHITECTURE + ANDROID MIGRATION DOCUMENTATION
-====================================================================================================
-
-FILE NAME
-----------------------------------------------------------------------------------------------------
-savings.html
-
-ROLE
-----------------------------------------------------------------------------------------------------
-This file acts as:
-1. Savings Dashboard UI
-2. Savings Workflow UI
-3. Source Ledger UI
-4. Savings Navigation System
-5. Savings Analytics UI
-6. Financial Source Management Screen
-7. Savings History Viewer
-8. Savings Settings Interface
-
-IMPORTANT:
-----------------------------------------------------------------------------------------------------
-This is NOT just a normal savings page.
-
-This page behaves like:
-----------------------------------------------------------------------------------------------------
-Mini Financial Ledger Application
-
-====================================================================================================
-HIGH LEVEL SAVINGS ARCHITECTURE
-====================================================================================================
-
-Savings Module
-│
-├── Dashboard Screen
-│
-├── Add Savings Screen
-│
-├── Savings History Screen
-│
-├── Savings Analytics Screen
-│
-├── Income Sources Screen
-│
-├── Source Details Screen
-│
-├── Settings Screen
-│
-└── Modal Layer
-
-====================================================================================================
-CORE FINANCIAL CONCEPT
-====================================================================================================
-
-The Savings Module uses:
-----------------------------------------------------------------------------------------------------
-SOURCE-BASED SAVINGS TRACKING
-
-Meaning:
-----------------------------------------------------------------------------------------------------
-Every:
-✔ Savings
-✔ Transfers
-✔ Settlements
-✔ Budget allocations
-
-originate from:
-----------------------------------------------------------------------------------------------------
-ONE financial source
-
-====================================================================================================
-HTML ARCHITECTURE
-====================================================================================================
-
-ROOT CONTAINER
-----------------------------------------------------------------------------------------------------
-
-<div class="app">
-
-Purpose:
-----------------------------------------------------------------------------------------------------
-Acts as:
-Savings Application Shell
-
-Android Equivalent:
-----------------------------------------------------------------------------------------------------
-Fragment Root Container
-
-Recommended Android Layout:
-----------------------------------------------------------------------------------------------------
-NestedScrollView
-+
-LinearLayout
-
-====================================================================================================
-HEADER ARCHITECTURE
-====================================================================================================
-
-<header class="header">
-
-Purpose:
-----------------------------------------------------------------------------------------------------
-Displays:
-✔ Module title
-✔ Savings identity
-
-Android Equivalent:
-----------------------------------------------------------------------------------------------------
-MaterialToolbar
-or
-Fragment Header
-
-====================================================================================================
-NAVIGATION ARCHITECTURE
-====================================================================================================
-
-<nav class="nav">
-
-Purpose:
-----------------------------------------------------------------------------------------------------
-Internal savings workflow navigation.
-
-Current Navigation Buttons:
-----------------------------------------------------------------------------------------------------
-🏠 Home
-➕ Add Entry
-📜 History
-📊 Graph
-🏦 Income Sources
-⚙️ Settings
-📊 Budget Period
-
-Current Navigation Logic:
-----------------------------------------------------------------------------------------------------
-showSavingsScreen('home')
-
-This behaves like:
-----------------------------------------------------------------------------------------------------
-Single Page Application Router
-
-====================================================================================================
-ANDROID NAVIGATION MIGRATION
-====================================================================================================
-
-HTML Navigation
-----------------------------------------------------------------------------------------------------
-→ Fragment Navigation
-
-Recommended Android Architecture:
-----------------------------------------------------------------------------------------------------
-
-MainActivity
-│
-└── Drawer Navigation
-      │
-      └── Savings League
-             │
-             ├── SavingsDashboardFragment
-             ├── SavingsEntryFragment
-             ├── SavingsHistoryFragment
-             ├── SavingsAnalyticsFragment
-             ├── IncomeSourcesFragment
-             ├── SourceDetailsFragment
-             └── SavingsSettingsFragment
-
-====================================================================================================
-SCREEN ARCHITECTURE
-====================================================================================================
-
-Every:
-----------------------------------------------------------------------------------------------------
-<section class="screen">
-
-represents:
-----------------------------------------------------------------------------------------------------
-ONE independent workflow screen
-
-Android Equivalent:
-----------------------------------------------------------------------------------------------------
-ONE Fragment
-
-====================================================================================================
-SCREEN → FRAGMENT MAPPING
-====================================================================================================
-
-#home
-----------------------------------------------------------------------------------------------------
-→ SavingsDashboardFragment
-
-#add
-----------------------------------------------------------------------------------------------------
-→ SavingsEntryFragment
-
-#history
-----------------------------------------------------------------------------------------------------
-→ SavingsHistoryFragment
-
-#graph
-----------------------------------------------------------------------------------------------------
-→ SavingsAnalyticsFragment
-
-#income
-----------------------------------------------------------------------------------------------------
-→ IncomeSourcesFragment
-
-#details
-----------------------------------------------------------------------------------------------------
-→ SourceDetailsFragment
-
-#settings
-----------------------------------------------------------------------------------------------------
-→ SavingsSettingsFragment
-
-====================================================================================================
-HOME DASHBOARD ARCHITECTURE
-====================================================================================================
-
-<section id="home">
-
-Purpose:
-----------------------------------------------------------------------------------------------------
-Displays:
-✔ Total savings
-✔ Allocated budget
-✔ Available balance
-
-Acts as:
-----------------------------------------------------------------------------------------------------
-Savings Overview Dashboard
-
-Business Logic Source:
-----------------------------------------------------------------------------------------------------
-loadSavings()
-
-Android Equivalent:
-----------------------------------------------------------------------------------------------------
-SavingsDashboardFragment
-+
-SavingsDashboardManager
-
-====================================================================================================
-ADD ENTRY ARCHITECTURE
-====================================================================================================
-
-<section id="add">
-
-Purpose:
-----------------------------------------------------------------------------------------------------
-Main savings transaction workflow.
-
-Supported Transaction Types:
-----------------------------------------------------------------------------------------------------
-✔ Add Savings
-✔ Move to Budget
-✔ Transfer
-✔ Settlement / Return
-
-====================================================================================================
-TRANSACTION ENGINE
-====================================================================================================
-
-Savings transactions support:
-----------------------------------------------------------------------------------------------------
-
-1.
-income
-
-Meaning:
-----------------------------------------------------------------------------------------------------
-Adds money into savings system.
-
-2.
-withdraw_budget
-
-Meaning:
-----------------------------------------------------------------------------------------------------
-Moves savings into budgeting system.
-
-3.
-transfer
-
-Meaning:
-----------------------------------------------------------------------------------------------------
-Transfers money to another person/entity.
-
-4.
-settlement
-
-Meaning:
-----------------------------------------------------------------------------------------------------
-Recovers transferred money.
-
-====================================================================================================
-INPUT ARCHITECTURE
-====================================================================================================
-
-The Add Entry screen contains:
-----------------------------------------------------------------------------------------------------
-✔ Transaction Type
-✔ Amount
-✔ Entity
-✔ Person
-✔ Settlement Link
-✔ Notes
-✔ Date
-✔ Source Selection
-✔ Budget Period
-✔ Payment Method
-
-====================================================================================================
-ANDROID FORM MIGRATION
-====================================================================================================
-
-HTML Form
-----------------------------------------------------------------------------------------------------
-→ Material Components Form
-
-Recommended Android:
-----------------------------------------------------------------------------------------------------
-TextInputLayout
-Spinner
-DatePicker
-RecyclerView
-BottomSheetDialog
-
-====================================================================================================
-SOURCE ARCHITECTURE
-====================================================================================================
-
-<div id="sourceWrapper">
-
-Purpose:
-----------------------------------------------------------------------------------------------------
-Selects:
-Financial Source
-
-Examples:
-----------------------------------------------------------------------------------------------------
-Salary
-Freelance
-Savings Deposit
-Cash Reserve
-
-IMPORTANT:
-----------------------------------------------------------------------------------------------------
-Every financial action should track:
-SOURCE OF MONEY
-
-====================================================================================================
-SETTLEMENT ARCHITECTURE
-====================================================================================================
-
-<div id="settlementWrapper">
-
-Purpose:
-----------------------------------------------------------------------------------------------------
-Handles:
-Transfer settlements
-
-Meaning:
-----------------------------------------------------------------------------------------------------
-Money borrowed earlier
-can later be returned.
-
-====================================================================================================
-BUDGET CONFIGURATION ARCHITECTURE
-====================================================================================================
-
-<div id="budgetConfig">
-
-Purpose:
-----------------------------------------------------------------------------------------------------
-Controls:
-Budget frequency configuration
-
-Supported:
-----------------------------------------------------------------------------------------------------
-✔ Daily
-✔ Weekly
-✔ Monthly
-
-====================================================================================================
-PAYMENT METHOD ARCHITECTURE
-====================================================================================================
-
-<select id="sPayment">
-
-Purpose:
-----------------------------------------------------------------------------------------------------
-Tracks:
-Payment source
-
-Supported Methods:
-----------------------------------------------------------------------------------------------------
-✔ Cash
-✔ UPI
-✔ PhonePe
-✔ Google Pay
-✔ Bank
-
-====================================================================================================
-HISTORY ARCHITECTURE
-====================================================================================================
-
-<section id="history">
-
-Purpose:
-----------------------------------------------------------------------------------------------------
-Displays:
-Savings transaction history.
-
-Features:
-----------------------------------------------------------------------------------------------------
-✔ Filtering
-✔ PDF export
-✔ Historical rendering
-
-Android Equivalent:
-----------------------------------------------------------------------------------------------------
-RecyclerView
-+
-SavingsHistoryAdapter
-
-====================================================================================================
-FILTER ARCHITECTURE
-====================================================================================================
-
-Supported Filters:
-----------------------------------------------------------------------------------------------------
-✔ all
-✔ today
-✔ week
-✔ month
-✔ custom period
-
-Business Logic:
-----------------------------------------------------------------------------------------------------
-handleSavingsFilter()
-
-====================================================================================================
-ANALYTICS ARCHITECTURE
-====================================================================================================
-
-<section id="graph">
-
-Purpose:
-----------------------------------------------------------------------------------------------------
-Displays:
-Savings analytics graph.
-
-Current Library:
-----------------------------------------------------------------------------------------------------
-Chart.js
-
-Android Equivalent:
-----------------------------------------------------------------------------------------------------
-MPAndroidChart
-
-Android Fragment:
-----------------------------------------------------------------------------------------------------
-SavingsAnalyticsFragment
-
-====================================================================================================
-INCOME SOURCE ARCHITECTURE
-====================================================================================================
-
-<section id="income">
-
-Purpose:
-----------------------------------------------------------------------------------------------------
-Displays:
-All financial sources.
-
-Examples:
-----------------------------------------------------------------------------------------------------
-✔ Salary
-✔ Freelance
-✔ Bonus
-✔ Deposits
-
-This acts like:
-----------------------------------------------------------------------------------------------------
-Source Ledger Dashboard
-
-====================================================================================================
-SOURCE DETAILS ARCHITECTURE
-====================================================================================================
-
-<section id="details">
-
-Purpose:
-----------------------------------------------------------------------------------------------------
-Displays:
-Detailed source breakdown.
-
-Includes:
-----------------------------------------------------------------------------------------------------
-✔ Related transactions
-✔ Remaining balance
-✔ Settlement history
-✔ Budget allocations
-
-Android Equivalent:
-----------------------------------------------------------------------------------------------------
-SourceDetailsFragment
-
-====================================================================================================
-SETTINGS ARCHITECTURE
-====================================================================================================
-
-<section id="settings">
-
-Purpose:
-----------------------------------------------------------------------------------------------------
-Savings-specific settings management.
-
-Includes:
-----------------------------------------------------------------------------------------------------
-✔ Categories
-✔ Persons
-✔ Navigation
-
-====================================================================================================
-CATEGORY ARCHITECTURE
-====================================================================================================
-
-Categories represent:
-----------------------------------------------------------------------------------------------------
-Savings grouping types.
-
-Examples:
-----------------------------------------------------------------------------------------------------
-✔ Family
-✔ Self
-✔ Friend
-✔ Company
-
-====================================================================================================
-PERSON ARCHITECTURE
-====================================================================================================
-
-Persons represent:
-----------------------------------------------------------------------------------------------------
-Transfer-linked people.
-
-Used for:
-----------------------------------------------------------------------------------------------------
-✔ lending
-✔ borrowing
-✔ settlements
-
-====================================================================================================
-MODAL ARCHITECTURE
-====================================================================================================
-
-Current HTML Modals:
-----------------------------------------------------------------------------------------------------
-savingsDateModal
-addPersonModal
-categoryModal
-personModal
-
-Android Equivalent:
-----------------------------------------------------------------------------------------------------
-DialogFragment
-or
-BottomSheetDialogFragment
-
-====================================================================================================
-MODAL → ANDROID DIALOG MAPPING
-====================================================================================================
-
-savingsDateModal
-----------------------------------------------------------------------------------------------------
-→ SavingsDateFilterDialogFragment
-
-addPersonModal
-----------------------------------------------------------------------------------------------------
-→ AddPersonDialogFragment
-
-categoryModal
-----------------------------------------------------------------------------------------------------
-→ CategoryDialogFragment
-
-personModal
-----------------------------------------------------------------------------------------------------
-→ PersonDialogFragment
-
-====================================================================================================
-PDF EXPORT ARCHITECTURE
-====================================================================================================
-
-Function:
-----------------------------------------------------------------------------------------------------
-exportSavingsPDF()
-
-Purpose:
-----------------------------------------------------------------------------------------------------
-Generates:
-Savings financial report.
-
-Current Library:
-----------------------------------------------------------------------------------------------------
-jsPDF
-
-Android Equivalent:
-----------------------------------------------------------------------------------------------------
-PdfDocument
-or
-iTextPDF
-
-====================================================================================================
-ANDROID CLEAN ARCHITECTURE
-====================================================================================================
-
-Recommended Android Feature Structure:
-----------------------------------------------------------------------------------------------------
-
-features/
-└── savings/
-     ├── adapters/
-     ├── data/
-     ├── domain/
-     ├── models/
-     └── ui/
-
-====================================================================================================
-ANDROID MANAGER MAPPING
-====================================================================================================
-
-HTML / JS
-----------------------------------------------------------------------------------------------------
-loadSavings()
-→ SavingsDashboardManager
-
-addSavings()
-→ SavingsManager
-
-renderSavingsHistory()
-→ SavingsHistoryManager
-
-loadSavingsGraph()
-→ SavingsAnalyticsManager
-
-====================================================================================================
-ANDROID REPOSITORY MAPPING
-====================================================================================================
-
-Savings Storage
-----------------------------------------------------------------------------------------------------
-→ SavingsRepository
-
-Categories
-----------------------------------------------------------------------------------------------------
-→ CategoryRepository
-
-Persons
-----------------------------------------------------------------------------------------------------
-→ PersonRepository
-
-====================================================================================================
-IMPORTANT ENGINEERING RULES
-====================================================================================================
-
-1.
-DO NOT place calculations inside UI.
-
-2.
-Fragments should ONLY render data.
-
-3.
-Business logic belongs inside:
-- Managers
-- Repositories
-- Domain Layer
-
-4.
-RecyclerView replaces:
-dynamic HTML rendering.
-
-5.
-DialogFragment replaces:
-HTML modals.
-
-6.
-Use:
-Room Database
-
-instead of:
-localStorage
-
-7.
-All savings transactions must remain:
-period-aware.
-
-8.
-Use:
-NestedScrollView
-
-for scalable Android layouts.
-
-9.
-Avoid:
-hardcoded currency symbols.
-
-10.
-Theme handling should support:
-dynamic accent colors + HEX colors.
-
-====================================================================================================
-FUTURE SCALABILITY
-====================================================================================================
-
-This architecture supports:
-----------------------------------------------------------------------------------------------------
-✔ Source accounting
-✔ Settlement tracking
-✔ Financial ledgers
-✔ Multi-period savings
-✔ Financial analytics
-✔ PDF reports
-✔ Budget integrations
-✔ Dynamic theming
-
-====================================================================================================
-AUTHOR NOTES
-====================================================================================================
-
-Savings Architecture Designed By:
-----------------------------------------------------------------------------------------------------
-Gopichanime 🐉
-
-Purpose:
-----------------------------------------------------------------------------------------------------
-To maintain synchronized:
-✔ HTML architecture
-✔ Android architecture
-✔ Savings workflows
-✔ Ledger tracking
-✔ Source management
-
-====================================================================================================
-END OF SAVINGS MODULE UI DOCUMENTATION
-====================================================================================================
--->
-<!-- Savings Module Start savings.html -->
 <!DOCTYPE html>
 <html lang="en">
 
@@ -783,17 +35,97 @@ END OF SAVINGS MODULE UI DOCUMENTATION
     <!-- ================= HOME ================= -->
     <section id="home" class="screen active">
       <div class="card">
-        <h3>Total Savings</h3>
-        <h1 id="savingsBalance">0</h1>
+        <h3>Savings Dashboard</h3>
+        <h1 id="savingsBalance">₹0</h1>
 
-        <div class="summary">
-          <div class="box">
-            <small>📦 Allocated</small>
-            <h3 id="allocatedToBudget">0</h3>
+        <div class="savings-summary-grid">
+          <div class="summary box">
+            <small>Total Deposits</small>
+            <h3 id="totalDeposits">₹0</h3>
           </div>
-          <div class="box success">
-            <small>💵 Available</small>
-            <h3 id="availableBalance">0</h3>
+          <div class="summary box">
+            <small>Total Transfers</small>
+            <h3 id="totalTransfers">₹0</h3>
+          </div>
+          <div class="summary box">
+            <small>Total Refunds</small>
+            <h3 id="totalRefunds">₹0</h3>
+          </div>
+          <div class="summary box">
+            <small>Net Movement</small>
+            <h3 id="netSavingsMovement">₹0</h3>
+          </div>
+          <div class="summary box">
+            <small>Current Budget Allocation</small>
+            <h3 id="allocatedToBudget">₹0</h3>
+          </div>
+          <div class="summary box success">
+            <small>Available Savings</small>
+            <h3 id="availableBalance">₹0</h3>
+          </div>
+        </div>
+
+        <div class="period-summary-card">
+          <h4>Current Budget Period</h4>
+          <div class="period-grid">
+            <div>
+              <small>Period</small>
+              <strong id="currentBudgetPeriodLabel">No Active Period</strong>
+            </div>
+            <div>
+              <small>Start Date</small>
+              <strong id="currentBudgetPeriodStart">-</strong>
+            </div>
+            <div>
+              <small>End Date</small>
+              <strong id="currentBudgetPeriodEnd">-</strong>
+            </div>
+            <div>
+              <small>Days Remaining</small>
+              <strong id="currentBudgetPeriodRemaining">-</strong>
+            </div>
+          </div>
+        </div>
+
+        <div class="activity-summary-grid">
+          <div class="summary box">
+            <small>Transactions This Period</small>
+            <h3 id="transactionsThisPeriod">0</h3>
+          </div>
+          <div class="summary box">
+            <small>Latest Transaction</small>
+            <h3 id="latestTransactionValue">-</h3>
+            <small id="latestTransactionMeta">No transactions</small>
+          </div>
+          <div class="summary box">
+            <small>Largest Expense Transfer</small>
+            <h3 id="largestExpenseTransfer">₹0</h3>
+          </div>
+          <div class="summary box">
+            <small>Largest Refund</small>
+            <h3 id="largestRefund">₹0</h3>
+          </div>
+        </div>
+
+        <div class="health-card">
+          <h4>Financial Health</h4>
+          <div class="health-grid">
+            <div>
+              <small>Savings Balance</small>
+              <strong id="savingsHealthBalance">₹0</strong>
+            </div>
+            <div>
+              <small>Allocated to Budget</small>
+              <strong id="savingsHealthAllocated">₹0</strong>
+            </div>
+            <div>
+              <small>Net Movement</small>
+              <strong id="savingsHealthNet">₹0</strong>
+            </div>
+            <div>
+              <small>Transactions</small>
+              <strong id="savingsHealthTransactions">0</strong>
+            </div>
           </div>
         </div>
       </div>
@@ -806,27 +138,16 @@ END OF SAVINGS MODULE UI DOCUMENTATION
 
         <!-- TYPE -->
         <select id="sType" onchange="handleSavingsTypeChange()">
-          <option value="income">Add Savings</option>
+          <option value="deposit">Deposit</option>
           <option value="withdraw_budget">Move to Budget</option>
           <option value="transfer">Transfer</option>
-          <option value="settlement">Settlement / Return</option>
+          <option value="refund">Refund</option>
         </select>
 
         <!-- BASIC INFO -->
         <input type="number" id="sAmount" placeholder="Amount">
 
         <select id="sEntity"></select>
-        <div id="personWrapper">
-          <label>Person</label>
-          <select id="sPerson"></select>
-        </div>
-        <div id="settlementWrapper" style="display:none;">
-          <label>Pending Transfer</label>
-
-          <select id="settlementSelect">
-            <option value="">Select Pending Transfer</option>
-          </select>
-        </div>
 
         <input type="text" id="sNote" placeholder="Purpose / Note">
 
@@ -835,19 +156,50 @@ END OF SAVINGS MODULE UI DOCUMENTATION
         <input type="date" id="sDate">
 
         <!-- SOURCE -->
-        <div id="sourceWrapper" style="display:none;">
+        <div id="sourceWrapper" class="hidden">
           <label>Source</label>
           <select id="sourceSelect"></select>
         </div>
 
-        <!-- ================= BUDGET CONFIG ================= -->
-        <div id="budgetConfig" style="display:none; margin-top:10px;">
-          <label>Budget Period</label>
-          <select id="budgetPeriod" onchange="handleBudgetPeriodChange()">
-            <option value="day">Daily</option>
-            <option value="week">Weekly</option>
-            <option value="month" selected>Monthly</option>
+        <div id="sPersonWrapper" class="hidden form-offset-top">
+          <label>Person</label>
+          <select id="sPerson">
+            <option value="">No specific person</option>
           </select>
+          <small id="sPersonHelp" class="muted-note"></small>
+        </div>
+
+        <!-- REFUND -->
+        <div id="refundWrapper" class="hidden form-offset-top">
+          <label>Refund Candidate</label>
+          <select id="refundSelect" onchange="handleSavingsRefundResolutionChange()">
+            <option value="">Select Transaction</option>
+          </select>
+          <label class="field-label">Resolution Type</label>
+          <select id="sRefundResolutionType" onchange="handleSavingsRefundResolutionChange()">
+            <option value="open">Open</option>
+            <option value="partially_refunded">Partially Refunded</option>
+            <option value="fully_refunded">Fully Refunded</option>
+            <option value="cancelled_with_charges">Cancelled With Charges</option>
+            <option value="consumed">Consumed</option>
+            <option value="written_off">Written Off</option>
+            <option value="settled">Settled</option>
+          </select>
+          <small id="sRefundResolutionHelp" class="muted-note refund-info"></small>
+          <label class="field-label">Refund Type</label>
+          <select id="sRefundType">
+            <option value="cancellation">Ticket Cancellation</option>
+            <option value="return">Product Return</option>
+            <option value="cashback">Cashback</option>
+            <option value="reversal">Bank Reversal</option>
+            <option value="recovery">Expense Recovery</option>
+            <option value="correction">Transfer Correction</option>
+            <option value="adjustment">Salary Adjustment</option>
+            <option value="loan_recovery">Loan Recovery</option>
+            <option value="custom" selected>Custom</option>
+          </select>
+          <small id="sRefundTypeHelp" class="muted-note refund-info"></small>
+          <small id="sRefundInfo" class="muted-note refund-info"></small>
         </div>
 
         <!-- PAYMENT -->
@@ -859,6 +211,16 @@ END OF SAVINGS MODULE UI DOCUMENTATION
           <option>Google Pay</option>
           <option>Bank</option>
         </select>
+
+        <!-- Attachment -->
+        <label class="field-label">Attach Receipt (optional)</label>
+        <div class="inline-row"> 
+          <input id="sAttachment" class="flex-input" type="file" accept="image/*,.pdf,application/pdf" capture="environment" />
+          <button type="button" id="sAttachmentRemove" class="link-btn hidden">Remove</button>
+        </div>
+        <div id="sAttachmentPreviewWrapper" class="attachment-preview-wrapper hidden">
+          <img id="sAttachmentPreview" src="" class="attachment-preview" />
+        </div>
 
         <!-- ACTION -->
         <button class="primary" onclick="addSavings()">Save</button>
@@ -972,7 +334,7 @@ END OF SAVINGS MODULE UI DOCUMENTATION
           <button class="primary" onclick="addCategory()">➕</button>
         </div>
 
-        <h4 onclick="openCategoryModal()" style="cursor:pointer;">
+        <h4 onclick="openCategoryModal()" class="clickable-header">
           Your Categories ⬇️
         </h4>
 
@@ -984,7 +346,7 @@ END OF SAVINGS MODULE UI DOCUMENTATION
           <button class="primary" onclick="addPerson()">➕</button>
         </div>
 
-        <h4 onclick="openPersonModal()" style="cursor:pointer;">
+        <h4 onclick="openPersonModal()" class="clickable-header">
           Your Persons ⬇️
         </h4>
         <!-- ========================= -->
@@ -1057,5 +419,3 @@ END OF SAVINGS MODULE UI DOCUMENTATION
 </body>
 
 </html>
-
-<!-- Savings Module END savings.html -->

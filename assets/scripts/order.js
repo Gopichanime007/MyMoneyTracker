@@ -11,6 +11,8 @@ function getQuotationData() {
 // =========================
 function renderOrder() {
   let data = getQuotationData();
+  // guard: only run on order page
+  if (!document.getElementById || !document.getElementById("orderItems")) return;
 
   let container = document.getElementById("orderItems");
 
@@ -51,9 +53,9 @@ function renderOrder() {
 // 🧮 UPDATE TOTALS UI
 // =========================
 function updateTotals(subtotal, gst, total) {
-  document.getElementById("oSubtotal").innerText = formatCurrency(subtotal);
-  document.getElementById("oGSTAmount").innerText = formatCurrency(gst);
-  document.getElementById("oFinalTotal").innerText = formatCurrency(total);
+  if (document.getElementById("oSubtotal")) document.getElementById("oSubtotal").innerText = formatCurrency(subtotal);
+  if (document.getElementById("oGSTAmount")) document.getElementById("oGSTAmount").innerText = formatCurrency(gst);
+  if (document.getElementById("oFinalTotal")) document.getElementById("oFinalTotal").innerText = formatCurrency(total);
 }
 
 
@@ -61,6 +63,8 @@ function updateTotals(subtotal, gst, total) {
 // ✅ COMPLETE PURCHASE
 // =========================
 async function completePurchase() {
+  // guard: ensure order UI present
+  if (!document.getElementById || !document.getElementById("oSource")) return;
 
   let data = getQuotationData();
 
@@ -233,11 +237,14 @@ function cancelOrder() {
 // 🚀 INIT
 // =========================
 document.addEventListener("DOMContentLoaded", () => {
-  renderOrder();
-  loadSourceOptions();
+  if (document.getElementById && document.getElementById("orderItems")) {
+    renderOrder();
+    loadSourceOptions();
+  }
 });
 
 function loadSourceOptions() {
+  if (!document.getElementById || !document.getElementById("oSourceType")) return;
 
   let type = document.getElementById("oSourceType").value;
   let select = document.getElementById("oSource");
@@ -278,6 +285,7 @@ function loadSourceOptions() {
   document.getElementById("sourcePreview").innerHTML = "";
 }
 function renderSourcePreview() {
+  if (!document.getElementById || !document.getElementById("oSource")) return;
 
   let select = document.getElementById("oSource");
   let preview = document.getElementById("sourcePreview");

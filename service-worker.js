@@ -1,17 +1,89 @@
+const CACHE_NAME = "moneytracker-cache-v4";
+const CORE_ASSETS = [
+  "/",
+  "/index.html",
+  "/manifest.json",
+  "/assets/styles/style.css",
+  "/assets/scripts/storage.js",
+  "/assets/scripts/script.js",
+  "/assets/scripts/savings.js",
+  "/assets/scripts/order.js",
+  "/assets/scripts/orders.js",
+  "/assets/scripts/quotation.js",
+  "/assets/scripts/budgetperiod.js",
+  "/assets/scripts/remo/attachments.js",
+  "/assets/scripts/remo/attachments-worker.js",
+  "/pages/savings.html",
+  "/pages/orders.html",
+  "/pages/order.html",
+  "/pages/quotation.html",
+  "/pages/budgetperiod.html"
+];
+
 self.addEventListener("install", event => {
-  console.log("Service Worker Installed");
-  self.skipWaiting();
+  event.waitUntil((async () => {
+    const cache = await caches.open(CACHE_NAME);
+    await cache.addAll(CORE_ASSETS);
+    await self.skipWaiting();
+  })());
 });
 
 self.addEventListener("activate", event => {
-  console.log("Service Worker Activated");
+  event.waitUntil((async () => {
+    const keys = await caches.keys();
+    await Promise.all(keys.map(k => (k !== CACHE_NAME ? caches.delete(k) : Promise.resolve())));
+    await self.clients.claim();
+  })());
 });
 
 self.addEventListener("fetch", event => {
-  // no caching yet
+  const req = event.request;
+  if (req.method !== "GET") return;
+
+  const url = new URL(req.url);
+  if (url.origin !== self.location.origin) return;
+
+  const isNavigation = req.mode === "navigate";
+  const isAppShellAsset = /\.(?:html|css|js|json)$/i.test(url.pathname) || url.pathname === "/";
+
+  if (isNavigation || isAppShellAsset) {
+    event.respondWith((async () => {
+      try {
+        const network = await fetch(req, { cache: "no-store" });
+        const cache = await caches.open(CACHE_NAME);
+        cache.put(req, network.clone()).catch(() => {});
+        return network;
+      } catch (_err) {
+        const cached = await caches.match(req);
+        if (cached) return cached;
+        const fallback = await caches.match("/index.html");
+        return fallback || Response.error();
+      }
+    })());
+    return;
+  }
+
+  event.respondWith((async () => {
+    const cached = await caches.match(req);
+    if (cached) return cached;
+
+    try {
+      const network = await fetch(req);
+      const cache = await caches.open(CACHE_NAME);
+      cache.put(req, network.clone()).catch(() => {});
+      return network;
+    } catch (_err) {
+      return Response.error();
+    }
+  })());
 });
 
 self.addEventListener("message", event => {
+  if (event.data?.type === "SKIP_WAITING") {
+    self.skipWaiting();
+    return;
+  }
+
   if (event.data?.type === "SHOW_NOTIFICATION") {
     self.registration.showNotification(event.data.title, {
       body: event.data.body,
