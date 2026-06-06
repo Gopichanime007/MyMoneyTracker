@@ -2502,6 +2502,28 @@ window.showScreen = function showScreen(id) {
     applyResponsiveLayout();
     emitScreenSizeDebug(id);
 
+    const layout = document.documentElement.getAttribute("data-layout") || "unknown";
+    const existingDebugToast = document.getElementById("debugLayoutToast");
+    if (existingDebugToast) {
+        try { existingDebugToast.remove(); } catch (_err) { }
+    }
+
+    const debugToast = document.createElement("div");
+    debugToast.id = "debugLayoutToast";
+    debugToast.innerText = `Layout: ${layout}`;
+    debugToast.style.position = "fixed";
+    debugToast.style.top = "20px";
+    debugToast.style.left = "20px";
+    debugToast.style.zIndex = "999999";
+    debugToast.style.background = "red";
+    debugToast.style.color = "white";
+    debugToast.style.padding = "10px";
+    document.body.appendChild(debugToast);
+
+    setTimeout(() => {
+        try { debugToast.remove(); } catch (_err) { }
+    }, 5000);
+
     buttons.forEach(btn => btn.classList.remove("active"));
     document.querySelector(`[data-screen="${id}"]`)?.classList.add("active");
 
