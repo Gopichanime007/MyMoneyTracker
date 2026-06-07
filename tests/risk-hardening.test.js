@@ -228,6 +228,8 @@ test('transfer back save path records expense, savings credit, history, and expo
     document.getElementById('purpose').value = 'Reverse to wallet';
     document.getElementById('paymentType').value = 'Cash';
     document.getElementById('expenseDate').value = now.toISOString().slice(0, 10);
+    document.getElementById('budgetSelect').innerHTML = '<option value="b-transfer">b-transfer</option>';
+    document.getElementById('budgetSelect').value = 'b-transfer';
 
     window.storeAttachmentWithStatus = jest.fn(async () => ({ attachmentId: null, status: 'none', error: null }));
 
@@ -253,6 +255,173 @@ test('transfer back save path records expense, savings credit, history, and expo
     const dump = window.getFullAppData();
     const exported = (dump.expenses || []).filter(e => e.type === 'transfer_back');
     expect(exported.length).toBe(1);
+});
+
+test('expense save preserves selected budget id end-to-end even when another budget has more available', async () => {
+    const now = new Date();
+    const dateKey = now.toISOString().slice(0, 10);
+    const monthKey = now.toISOString().slice(0, 7);
+
+    window.saveBudgets([
+        { budgetId: 'b-old', totalAllocated: 10000, monthKey, entity: 'Old Budget' },
+        { budgetId: 'b-selected', totalAllocated: 2000, monthKey, entity: 'Selected Budget' }
+    ]);
+    window.saveExpenses([]);
+
+    document.getElementById('entryType').innerHTML = '<option value="expense">expense</option>';
+    document.getElementById('entryType').value = 'expense';
+    document.getElementById('amount').value = '500';
+    document.getElementById('purpose').value = 'Selected budget purchase';
+    document.getElementById('expenseDate').value = dateKey;
+    document.getElementById('budgetSelect').innerHTML = '<option value="b-old">b-old</option><option value="b-selected">b-selected</option>';
+    document.getElementById('budgetSelect').value = 'b-selected';
+
+    window.storeAttachmentWithStatus = jest.fn(async () => ({ attachmentId: null, status: 'none', error: null }));
+
+    window.saveExpense();
+    await Promise.resolve();
+
+    const rows = window.getExpenses();
+    expect(rows.length).toBe(1);
+    expect(String(rows[0].budgetId)).toBe('b-selected');
+    expect(Array.isArray(rows[0].allocationTrail)).toBe(true);
+    expect(rows[0].allocationTrail.length).toBe(1);
+    expect(String(rows[0].allocationTrail[0].budgetId)).toBe('b-selected');
+
+    const selectedNet = window.getNetSpentForBudget('b-selected', rows);
+    const oldNet = window.getNetSpentForBudget('b-old', rows);
+    expect(selectedNet).toBe(500);
+    expect(oldNet).toBe(0);
+});
+
+test('expense save never reroutes to another budget when selected budget is insufficient', async () => {
+    const now = new Date();
+    const dateKey = now.toISOString().slice(0, 10);
+    const monthKey = now.toISOString().slice(0, 7);
+
+    window.saveBudgets([
+        { budgetId: 'b-rich', totalAllocated: 10000, monthKey, entity: 'Rich Budget' },
+        { budgetId: 'b-low', totalAllocated: 100, monthKey, entity: 'Low Budget' }
+    ]);
+    window.saveExpenses([]);
+
+    document.getElementById('entryType').innerHTML = '<option value="expense">expense</option>';
+    document.getElementById('entryType').value = 'expense';
+    document.getElementById('amount').value = '500';
+    document.getElementById('purpose').value = 'Should not reroute';
+    document.getElementById('expenseDate').value = dateKey;
+    document.getElementById('budgetSelect').innerHTML = '<option value="b-rich">b-rich</option><option value="b-low">b-low</option>';
+    document.getElementById('budgetSelect').value = 'b-low';
+
+    window.storeAttachmentWithStatus = jest.fn(async () => ({ attachmentId: null, status: 'none', error: null }));
+
+    window.saveExpense();
+    await Promise.resolve();
+
+    const rows = window.getExpenses();
+    expect(rows.length).toBe(0);
+});
+
+test('transfer back renders budget selector and lists eligible budgets without active period dependency', () => {
+    window.saveBudgets([
+        { budgetId: 'legacy-a', totalAllocated: 3000, monthKey: '2025-01', sourceId: 'src-a', entity: 'Travel Wallet' },
+        { budgetId: 'legacy-b', totalAllocated: 1500, monthKey: '2024-11', sourceId: 'src-b', entity: 'Food Wallet' }
+    ]);
+    window.saveExpenses([]);
+    window.saveSavings([
+        { id: 'src-a', type: 'deposit', amount: 6000, date: '2025-01-01T10:00:00Z' },
+        { id: 'src-b', type: 'deposit', amount: 4000, date: '2024-11-01T10:00:00Z' }
+    ]);
+
+    document.getElementById('entryType').innerHTML = '<option value="transfer_back">transfer_back</option>';
+    document.getElementById('entryType').value = 'transfer_back';
+
+    window.handleEntryTypeUIChange();
+
+    expect(document.getElementById('budgetWrapper').style.display).toBe('block');
+    const options = Array.from(document.querySelectorAll('#budgetSelect option')).map(o => String(o.value));
+    expect(options).toContain('legacy-a');
+    expect(options).toContain('legacy-b');
+});
+
+test('transfer back resolves source from selected budget and updates only selected budget and linked source', async () => {
+    const now = new Date();
+    const dateKey = now.toISOString().slice(0, 10);
+
+    window.saveBudgets([
+        { budgetId: 'b-A', totalAllocated: 3000, monthKey: '2025-01', sourceId: 'src-A', entity: 'Travel' },
+        { budgetId: 'b-B', totalAllocated: 3000, monthKey: '2025-01', sourceId: 'src-B', entity: 'Food' }
+    ]);
+    window.saveExpenses([]);
+    window.saveSavings([
+        { id: 'src-A', type: 'deposit', amount: 8000, date: now.toISOString() },
+        { id: 'src-B', type: 'deposit', amount: 6000, date: now.toISOString() },
+        { id: 'alloc-A', type: 'budget_allocation', amount: -3000, sourceId: 'src-A', targetBudgetId: 'b-A', date: now.toISOString() },
+        { id: 'alloc-B', type: 'budget_allocation', amount: -3000, sourceId: 'src-B', targetBudgetId: 'b-B', date: now.toISOString() }
+    ]);
+
+    document.getElementById('entryType').innerHTML = '<option value="transfer_back">transfer_back</option>';
+    document.getElementById('entryType').value = 'transfer_back';
+    document.getElementById('amount').value = '700';
+    document.getElementById('purpose').value = 'Return selected only';
+    document.getElementById('expenseDate').value = dateKey;
+    document.getElementById('budgetSelect').innerHTML = '<option value="b-A">b-A</option><option value="b-B">b-B</option>';
+    document.getElementById('budgetSelect').value = 'b-A';
+    document.getElementById('paymentType').value = 'Cash';
+
+    window.storeAttachmentWithStatus = jest.fn(async () => ({ attachmentId: null, status: 'none', error: null }));
+
+    window.saveExpense();
+    await Promise.resolve();
+
+    const expenses = window.getExpenses();
+    const tb = expenses.find(e => e.type === 'transfer_back');
+    expect(tb).toBeTruthy();
+    expect(String(tb.budgetId)).toBe('b-A');
+    expect(Array.isArray(tb.allocationTrail)).toBe(true);
+    expect(tb.allocationTrail.length).toBe(1);
+    expect(String(tb.allocationTrail[0].budgetId)).toBe('b-A');
+    expect(Array.isArray(tb.transferBackTrail)).toBe(true);
+    expect(tb.transferBackTrail.length).toBe(1);
+    expect(String(tb.transferBackTrail[0].sourceId)).toBe('src-A');
+
+    const savings = window.getSavings();
+    const generated = savings.filter(s => s.type === 'refund' && String(s.linkedTransactionId) === String(tb.id));
+    expect(generated.length).toBe(1);
+    expect(String(generated[0].sourceId)).toBe('src-A');
+});
+
+test('transaction audit details show budget and source traceability fields', async () => {
+    window.saveBudgets([
+        { budgetId: 'b-audit', totalAllocated: 5000, monthKey: '2026-06', entity: 'Audit Budget', sourceId: 'src-audit' }
+    ]);
+    window.saveSavings([
+        { id: 'src-audit', type: 'deposit', amount: 9000, note: 'Primary Wallet', entity: 'Wallet', date: '2026-06-01T10:00:00Z' }
+    ]);
+
+    const tx = window.addExpense({
+        amount: -400,
+        type: 'transfer_back',
+        category: 'Transfer Back',
+        purpose: 'Audit trail check',
+        budgetId: 'b-audit',
+        allocationTrail: [{ budgetId: 'b-audit', amount: 400 }],
+        transferBackTrail: [{ budgetId: 'b-audit', sourceId: 'src-audit', amount: 400 }],
+        linkedSourceSavingsId: 'src-audit',
+        linkedSourceSavingsIds: ['src-audit'],
+        date: '2026-06-01T11:00:00Z'
+    });
+
+    await window.openTransactionAuditDetails('expense', tx);
+
+    const text = (document.getElementById('txnDetailsBody')?.textContent || '').toLowerCase();
+    expect(text).toContain('budget id');
+    expect(text).toContain('budget name');
+    expect(text).toContain('source id');
+    expect(text).toContain('source name');
+    expect(text).toContain('allocation details');
+    expect(text).toContain('b-audit');
+    expect(text).toContain('src-audit');
 });
 
 test('multiple partial refunds preserve all records and converge to fully refunded state with accurate totals', () => {
