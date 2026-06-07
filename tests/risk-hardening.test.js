@@ -386,6 +386,45 @@ test('normalize budget periods closes expired active periods and keeps valid act
     expect(valid.status).toBe('active');
 });
 
+test('reactivating an expired period extends end date to today and rebinds budget and expense period keys only', () => {
+    localStorage.setItem('bp', JSON.stringify([
+        { id: 'p-react', start: '2026-05-04', end: '2026-06-05', status: 'closed', extraDays: 0 }
+    ]));
+
+    window.saveBudgets([
+        { budgetId: 'b-react', totalAllocated: 12000, periodKey: '2026-05-04_to_2026-06-05' }
+    ]);
+
+    window.saveExpenses([
+        { id: 'e-react', type: 'expense', amount: -1000, budgetId: 'b-react', periodKey: '2026-05-04_to_2026-06-05', date: '2026-06-04T10:00:00Z' }
+    ]);
+
+    window.saveSavings([
+        { id: 's-react', type: 'budget_allocation', amount: -1000, periodKey: '2026-05-04_to_2026-06-05', date: '2026-06-04T11:00:00Z' }
+    ]);
+
+    let out = window.reactivateBudgetPeriodLifecycle('p-react', new Date('2026-06-07T10:00:00Z'));
+
+    expect(out.ok).toBeTruthy();
+    expect(out.oldPeriodKey).toBe('2026-05-04_to_2026-06-05');
+    expect(out.newPeriodKey).toBe('2026-05-04_to_2026-06-07');
+    expect(out.rebound.budgets).toBe(1);
+    expect(out.rebound.expenses).toBe(1);
+    expect(out.rebound.savings).toBe(0);
+
+    let periods = JSON.parse(localStorage.getItem('bp')) || [];
+    expect(periods[0].status).toBe('active');
+    expect(periods[0].end).toBe('2026-06-07');
+
+    let budgets = window.getBudgets();
+    let expenses = window.getExpenses();
+    let savings = window.getSavings();
+
+    expect(budgets[0].periodKey).toBe('2026-05-04_to_2026-06-07');
+    expect(expenses[0].periodKey).toBe('2026-05-04_to_2026-06-07');
+    expect(savings[0].periodKey).toBe('2026-05-04_to_2026-06-05');
+});
+
 test('budget efficiency updates daily, weekly, monthly remaining with transaction impacts', () => {
     const now = new Date();
     const start = new Date(now.getFullYear(), now.getMonth(), 1);
