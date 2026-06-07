@@ -18,15 +18,15 @@
 
     <div class="modal-box">
 
-      <h3>Delete Order</h3>
+      <h3>Cancel Order</h3>
 
-      <p class="modal-sub">Enter reason (optional)</p>
+      <p class="modal-sub">Enter cancellation reason (optional)</p>
 
       <input type="text" id="deleteReason" placeholder="Ex: Cancelled / Wrong order">
 
       <div class="modal-actions">
         <button class="secondary" onclick="closeDeleteModal()">Cancel</button>
-        <button class="danger" onclick="confirmDelete()">Delete</button>
+        <button class="danger" onclick="confirmDelete()">Confirm Cancel</button>
       </div>
 
     </div>
@@ -44,7 +44,17 @@
     <!-- 📦 CONTENT CARD -->
     <div class="card">
 
-      <h4>Order History</h4>
+      <div class="orders-toolbar">
+        <h4>Order History</h4>
+        <select id="ordersStatusFilter" onchange="renderOrders()">
+          <option value="all">All Statuses</option>
+          <option value="draft">Draft</option>
+          <option value="confirmed">Confirmed</option>
+          <option value="processing">Processing</option>
+          <option value="completed">Completed</option>
+          <option value="cancelled">Cancelled</option>
+        </select>
+      </div>
 
       <!-- Orders will be injected here -->
       <div id="ordersList"></div>

@@ -134,21 +134,49 @@ test('delete dependency guard blocks deleting root with linked refund', () => {
 });
 
 test('expense and savings form resets clear attachment preview state', () => {
+    const expenseLabel = document.createElement('small');
+    expenseLabel.className = 'attachment-preview-label';
+    expenseLabel.textContent = 'Attached: receipt.pdf';
+    document.getElementById('expenseAttachmentPreviewWrapper').appendChild(expenseLabel);
+
+    window.__expenseAttachmentState = {
+        status: 'linked',
+        attachmentLabel: 'receipt.pdf',
+        attachmentId: 'att-exp'
+    };
+
     document.getElementById('expenseAttachmentPreview').dataset._previewUrl = 'blob:test-exp';
     window.resetForm();
 
     expect(document.getElementById('expenseAttachment').value).toBe('');
-    expect(document.getElementById('expenseAttachmentPreview').src.endsWith('/')).toBeTruthy();
+    expect(document.getElementById('expenseAttachmentPreview').getAttribute('src')).toBeNull();
     expect(document.getElementById('expenseAttachmentPreviewWrapper').style.display).toBe('none');
     expect(document.getElementById('expenseAttachmentRemove').style.display).toBe('none');
+    expect(document.querySelector('#expenseAttachmentPreviewWrapper .attachment-preview-label').textContent).toBe('');
+    expect(window.__expenseAttachmentState.status).toBe('none');
+    expect(window.__expenseAttachmentState.attachmentId).toBeNull();
+
+    const savingsLabel = document.createElement('small');
+    savingsLabel.className = 'attachment-preview-label';
+    savingsLabel.textContent = 'Attached: note.pdf';
+    document.getElementById('sAttachmentPreviewWrapper').appendChild(savingsLabel);
+
+    window.__savingsAttachmentState = {
+        status: 'linked',
+        attachmentLabel: 'note.pdf',
+        attachmentId: 'att-sav'
+    };
 
     document.getElementById('sAttachmentPreview').dataset._previewUrl = 'blob:test-sav';
     window.resetSavingsForm();
 
     expect(document.getElementById('sAttachment').value).toBe('');
-    expect(document.getElementById('sAttachmentPreview').src.endsWith('/')).toBeTruthy();
+    expect(document.getElementById('sAttachmentPreview').getAttribute('src')).toBeNull();
     expect(document.getElementById('sAttachmentPreviewWrapper').style.display).toBe('none');
     expect(document.getElementById('sAttachmentRemove').style.display).toBe('none');
+    expect(document.querySelector('#sAttachmentPreviewWrapper .attachment-preview-label').textContent).toBe('');
+    expect(window.__savingsAttachmentState.status).toBe('none');
+    expect(window.__savingsAttachmentState.attachmentId).toBeNull();
 });
 
 test('savings history keeps transfer and refund visible together', () => {
@@ -435,4 +463,68 @@ test('business flow reconciles savings, budget spend, and refund reporting', () 
 
     const cards = Array.from(document.querySelectorAll('#historyList .expense-item'));
     expect(cards.length).toBe(2);
+});
+
+test('Add Expense budget dropdown shows budget entries regardless of budget period status', () => {
+    const budgets = [
+        { budgetId: 'b-active', totalAllocated: 3000, entity: 'Wallet A', periodKey: '2026-06-01_to_2026-06-30' },
+        { budgetId: 'b-closed', totalAllocated: 2000, entity: 'Wallet B', periodKey: '2026-05-01_to_2026-05-31' },
+        { budgetId: 'b-archived', totalAllocated: 1000, entity: 'Wallet C', monthKey: '2026-04' }
+    ];
+
+    const scenarios = [
+        [{ id: 'p1', start: '2026-06-01', end: '2026-06-30', status: 'active', extraDays: 0 }],
+        [{ id: 'p2', start: '2026-06-01', end: '2026-06-30', status: 'inactive', extraDays: 0 }],
+        [{ id: 'p3', start: '2026-06-01', end: '2026-06-30', status: 'completed', extraDays: 0 }],
+        [{ id: 'p4', start: '2026-06-01', end: '2026-06-30', status: 'archived', extraDays: 0 }],
+        []
+    ];
+
+    scenarios.forEach((periods) => {
+        localStorage.setItem('bp', JSON.stringify(periods));
+        window.saveBudgets(budgets);
+        window.saveExpenses([]);
+
+        window.loadBudgetOptions();
+
+        const options = Array.from(document.querySelectorAll('#budgetSelect option'));
+        expect(options.length).toBe(3);
+        expect(options.some(o => o.value === 'b-active')).toBeTruthy();
+        expect(options.some(o => o.value === 'b-closed')).toBeTruthy();
+        expect(options.some(o => o.value === 'b-archived')).toBeTruthy();
+        expect(options.some(o => String(o.textContent || '').toLowerCase().includes('no budgets available'))).toBeFalsy();
+    });
+});
+
+test('Add Expense save works even when no active budget period exists', async () => {
+    localStorage.setItem('bp', JSON.stringify([
+        { id: 'p-none', start: '2026-06-01', end: '2026-06-30', status: 'archived', extraDays: 0 }
+    ]));
+
+    window.saveBudgets([
+        { budgetId: 'b1', totalAllocated: 5000, entity: 'Wallet X', periodKey: '2026-06-01_to_2026-06-30' }
+    ]);
+    window.saveExpenses([]);
+
+    document.getElementById('entryType').value = 'expense';
+    document.getElementById('amount').value = '600';
+    document.getElementById('category').value = 'Food';
+    document.getElementById('purpose').value = 'Snacks';
+    document.getElementById('paymentType').value = 'Cash';
+    document.getElementById('expenseDate').value = '2026-06-10';
+
+    window.loadBudgetOptions();
+    document.getElementById('budgetSelect').value = 'b1';
+
+    window.showToast = jest.fn();
+    window.storeAttachmentWithStatus = jest.fn(async () => ({ attachmentId: null, status: 'none', error: null }));
+
+    await window.handleAddExpense();
+
+    const expenses = window.getExpenses();
+    expect(expenses.length).toBe(1);
+    expect(expenses[0].type).toBe('expense');
+    expect(String(expenses[0].budgetId)).toBe('b1');
+    expect(window.showToast).not.toHaveBeenCalledWith('No active budget period');
+    expect(window.showToast).not.toHaveBeenCalledWith('No budgets available');
 });

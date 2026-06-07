@@ -496,7 +496,10 @@ if (typeof window !== 'undefined') {
     window.updateGraphSummary = window.updateGraphSummary || updateGraphSummary;
     window.updateBudgetEfficiency = window.updateBudgetEfficiency || updateBudgetEfficiency;
     window.computeBudgetEfficiencyMetrics = window.computeBudgetEfficiencyMetrics || computeBudgetEfficiencyMetrics;
+    window.loadBudgetOptions = window.loadBudgetOptions || loadBudgetOptions;
     window.setupAttachmentInputs = window.setupAttachmentInputs || setupAttachmentInputs;
+    window.clearExpenseAttachmentState = window.clearExpenseAttachmentState || clearExpenseAttachmentState;
+    window.clearSavingsAttachmentState = window.clearSavingsAttachmentState || clearSavingsAttachmentState;
     window.storeAttachmentFromInput = window.storeAttachmentFromInput || storeAttachmentFromInput;
     window.formatCurrency = window.formatCurrency || formatCurrency;
     window.addExpense = window.addExpense || addExpense;
@@ -1394,39 +1397,47 @@ function loadHistory(list = getExpenses()) {
         withRunning.slice().reverse().forEach((e) => {
 
             let div = document.createElement("div");
-            div.className = "expense-item";
+            div.className = "expense-item transaction-card";
 
-                        let entryType = String(e.type || "entry").replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
-                        let amount = formatCurrency(Math.abs(Number(e.amount || 0)));
-                        let amountClass = e.amount < 0 ? "negative" : "positive";
-                        let date = new Date(e.date).toLocaleString("en-IN");
-                        let runningBalance = formatCurrency(Number(e.BalanceAfterTransaction ?? e.runningBalance ?? 0));
-                        let descriptorParts = [e.category, e.purpose].filter(Boolean);
-                        if (e.type === "refund") descriptorParts.push(`Refund Type: ${formatRefundType(e.refundType)}`);
-                        if (e.resolutionType) descriptorParts.push(`Resolution: ${RESOLUTION_TYPE_LABELS[normalizeResolutionType(e.resolutionType)] || e.resolutionType}`);
-                        let descriptor = descriptorParts.join(" • ");
+            let entryType = String(e.type || "entry").replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
+            let amount = formatCurrency(Math.abs(Number(e.amount || 0)));
+            let amountClass = e.amount < 0 ? "negative" : "positive";
+            let date = new Date(e.date).toLocaleString("en-IN");
+            let runningBalance = formatCurrency(Number(e.BalanceAfterTransaction ?? e.runningBalance ?? 0));
+            let descriptorParts = [e.category, e.purpose].filter(Boolean);
+            if (e.type === "refund") descriptorParts.push(`Refund Type: ${formatRefundType(e.refundType)}`);
+            if (e.resolutionType) descriptorParts.push(`Resolution: ${RESOLUTION_TYPE_LABELS[normalizeResolutionType(e.resolutionType)] || e.resolutionType}`);
+            let descriptor = descriptorParts.join(" • ");
+            let sourceText = e.entity || e.paymentType || "Wallet";
 
             div.innerHTML = `
-                                <div class="history-main">
-                                    <div class="history-type">${entryType}</div>
-                                    ${descriptor ? `<div class="history-note">${descriptor}</div>` : ""}
-                                    <div class="history-meta">${date}</div>
-                                    <div class="history-running">Running Balance: ${runningBalance}</div>
+                <div class="transaction-card-head">
+                    <div class="history-type">${escapeHtml(entryType)}</div>
+                    ${descriptor ? `<div class="transaction-title">${escapeHtml(descriptor)}</div>` : ""}
                 </div>
 
-                                <div>
-                                        <div class="history-amount ${amountClass}">${amount}</div>
-                                        <div class="history-actions">
-                                        <button class="delete-btn" onclick="event.stopPropagation(); deleteExpenseUI('${e.id}')" title="Delete">
-                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <path d="M3 6h18"></path>
-                        <path d="M8 6V4h8v2"></path>
-                        <path d="M19 6l-1 14H6L5 6"></path>
-                        <path d="M10 11v6"></path>
-                        <path d="M14 11v6"></path>
-                      </svg>
-                    </button>
-                                        </div>
+                <div class="transaction-meta-grid">
+                    <span class="entry-label">Source</span>
+                    <span class="entry-value">${escapeHtml(sourceText)}</span>
+                    <span class="entry-label">Date</span>
+                    <span class="entry-value">${escapeHtml(date)}</span>
+                    <span class="entry-label">Running Balance</span>
+                    <span class="entry-value">${escapeHtml(runningBalance)}</span>
+                </div>
+
+                <div class="transaction-card-foot">
+                    <div class="history-amount ${amountClass}">${escapeHtml(amount)}</div>
+                    <div class="history-actions">
+                        <button class="delete-btn" onclick="event.stopPropagation(); deleteExpenseUI('${e.id}')" title="Delete">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M3 6h18"></path>
+                                <path d="M8 6V4h8v2"></path>
+                                <path d="M19 6l-1 14H6L5 6"></path>
+                                <path d="M10 11v6"></path>
+                                <path d="M14 11v6"></path>
+                            </svg>
+                        </button>
+                    </div>
                 </div>
             `;
 
@@ -2111,6 +2122,7 @@ async function handleAddExpense() {
         }
 
         showToast("Added");
+        clearExpenseAttachmentState();
         resetForm();
         loadHistory();
         loadBudgetOptions();
@@ -2169,6 +2181,7 @@ async function handleAddExpense() {
         }
 
         showToast("Added");
+        clearExpenseAttachmentState();
         resetForm();
         loadHistory();
         loadBudgetOptions();
@@ -2200,6 +2213,7 @@ async function handleAddExpense() {
     // =========================
     showToast("Added");
 
+    clearExpenseAttachmentState();
     resetForm();
     loadHistory();
     loadBudgetOptions();
@@ -2229,18 +2243,7 @@ function resetForm() {
     let today = new Date().toISOString().split("T")[0];
     if (document.getElementById("expenseDate")) document.getElementById("expenseDate").value = today;
 
-    let expInput = document.getElementById("expenseAttachment");
-    let expPreview = document.getElementById("expenseAttachmentPreview");
-    let expWrapper = document.getElementById("expenseAttachmentPreviewWrapper");
-    let expRemove = document.getElementById("expenseAttachmentRemove");
-    if (expInput) expInput.value = "";
-    if (expPreview && expPreview.dataset && expPreview.dataset._previewUrl) {
-        try { URL.revokeObjectURL(expPreview.dataset._previewUrl); } catch (e) { }
-        expPreview.dataset._previewUrl = "";
-    }
-    if (expPreview) expPreview.src = "";
-    if (expWrapper) expWrapper.style.display = "none";
-    if (expRemove) expRemove.style.display = "none";
+    clearExpenseAttachmentState();
 
     handleEntryTypeUIChange();
     refreshExpenseRefundGuidance();
@@ -3588,9 +3591,18 @@ function hexToRgb(hex) {
     .remo-ai-panel{position:fixed;right:12px;bottom:12px;z-index:1200;width:360px;max-height:78vh;background:var(--remo-panel-bg,#ffffff);color:var(--remo-panel-fg,#111827);border-radius:12px;box-shadow:0 20px 50px rgba(2,6,23,0.3);overflow:hidden;display:flex;flex-direction:column;transform:translateY(12px);opacity:0;pointer-events:none;transition:opacity .18s ease,transform .22s ease}
     .remo-ai-panel.open{opacity:1;pointer-events:auto;transform:translateY(0)}
     .remo-ai-header{padding:12px 14px;border-bottom:1px solid rgba(0,0,0,0.06);display:flex;align-items:center;gap:10px}
+    .remo-ai-header-meta{display:flex;flex-direction:column;flex:1}
+    .remo-ai-nav{display:flex;gap:6px}
+    .remo-ai-nav button{border:none;border-radius:8px;padding:6px 8px;font-size:12px;background:rgba(0,0,0,0.08);cursor:pointer}
     .remo-title{font-weight:700;font-size:14px}
     .remo-sub{font-size:11px;color:rgba(0,0,0,0.5)}
     .remo-body{padding:10px;overflow:auto;flex:1;display:flex;flex-direction:column;gap:8px}
+    .remo-section{border:1px solid rgba(0,0,0,0.08);border-radius:10px;padding:8px}
+    .remo-section h4{margin:0 0 6px;font-size:12px}
+    .remo-line{font-size:12px;line-height:1.35;padding:4px 0}
+    .remo-line.critical{color:#b91c1c}
+    .remo-line.warning{color:#92400e}
+    .remo-line.good{color:#166534}
     .remo-chips{display:flex;flex-wrap:wrap;gap:8px}
     .remo-chip{background:rgba(0,0,0,0.06);padding:6px 10px;border-radius:999px;font-size:12px;cursor:pointer}
     .remo-messages{display:flex;flex-direction:column;gap:8px}
@@ -3644,12 +3656,18 @@ function hexToRgb(hex) {
         panel.innerHTML = `
             <div class="remo-ai-header">
                 <div style="width:40px;height:40px;border-radius:8px;display:flex;align-items:center;justify-content:center;background:linear-gradient(180deg,#0f1724,#0ea5a4);color:#fff">R</div>
-                <div>
+                <div class="remo-ai-header-meta">
                     <div class="remo-title">ReMo AI</div>
-                    <div class="remo-sub">Your intelligent finance companion</div>
+                    <div class="remo-sub">Context-aware finance intelligence</div>
+                </div>
+                <div class="remo-ai-nav">
+                    <button type="button" data-back>Back</button>
+                    <button type="button" data-home>Home</button>
+                    <button type="button" data-close>Close</button>
                 </div>
             </div>
             <div class="remo-body">
+                <div class="remo-section" data-priority></div>
                 <div class="remo-chips" data-chips></div>
                 <div class="remo-messages" data-messages></div>
             </div>
@@ -3663,34 +3681,121 @@ function hexToRgb(hex) {
         return panel;
     }
 
-    // Lightweight insight engine
-    function topCategory(expenses, periodStart, periodEnd) {
-        const filtered = expenses.filter(e => {
-            const d = new Date(e.date);
-            if (periodStart && d < periodStart) return false;
-            if (periodEnd && d > periodEnd) return false;
-            return true;
-        });
-        const sums = {};
-        filtered.forEach(e => {
-            const cat = e.category || 'Others';
-            sums[cat] = (sums[cat] || 0) + Math.abs(Number(e.amount || 0));
-        });
-        const entries = Object.entries(sums).sort((a, b) => b[1] - a[1]);
-        return entries[0] ? { category: entries[0][0], amount: entries[0][1] } : null;
-    }
-
-    function sumRange(expenses, periodStart, periodEnd) {
-        return expenses.filter(e => {
-            const d = new Date(e.date);
-            if (periodStart && d < periodStart) return false;
-            if (periodEnd && d > periodEnd) return false;
-            return true;
-        }).reduce((s, e) => s + Number(e.amount || 0), 0);
+    function sumRange(entries, start, end, predicate) {
+        return (entries || []).filter(row => {
+            const d = new Date(row && row.date ? row.date : row && row.updatedAt ? row.updatedAt : Date.now());
+            if (start && d < start) return false;
+            if (end && d > end) return false;
+            return typeof predicate === 'function' ? predicate(row) : true;
+        }).reduce((sum, row) => sum + Number(row && row.amount ? row.amount : 0), 0);
     }
 
     function formatCurrencyShort(v) {
         try { return formatCurrencyPDF ? formatCurrencyPDF(v) : new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR' }).format(v); } catch (e) { return v }
+    }
+
+    function collectReMoData() {
+        const expenses = typeof getExpenses === 'function' ? getExpenses() : JSON.parse(localStorage.getItem('expenses') || '[]');
+        const budgets = typeof getBudgets === 'function' ? getBudgets() : JSON.parse(localStorage.getItem('budgets') || '[]');
+        const savings = typeof getSavings === 'function' ? getSavings() : JSON.parse(localStorage.getItem('savingsTransactions') || '[]');
+        const periods = JSON.parse(localStorage.getItem('bp') || '[]');
+        const orders = JSON.parse(localStorage.getItem('orders') || '[]');
+        const quotationRegistry = JSON.parse(localStorage.getItem('quotationRegistry') || '[]');
+        return { expenses, budgets, savings, periods, orders, quotationRegistry };
+    }
+
+    function buildPriorityInsights() {
+        const now = new Date();
+        const day30 = new Date(now); day30.setDate(now.getDate() - 30);
+        const data = collectReMoData();
+
+        const critical = [];
+        const budgetRisks = [];
+        const savingsOps = [];
+        const pendingActions = [];
+        const recommendations = [];
+
+        const activePeriod = typeof getActiveBudgetPeriod === 'function' ? getActiveBudgetPeriod() : (Array.isArray(data.periods) ? data.periods.find(p => p && p.status === 'active') : null);
+        if (!activePeriod) {
+            critical.push('No active Budget Period. Budget, savings transfer controls, and analytics scope can drift.');
+        }
+
+        if (Array.isArray(data.budgets) && data.budgets.length) {
+            data.budgets.forEach(b => {
+                const allocated = Number(b && b.totalAllocated ? b.totalAllocated : 0);
+                const spent = typeof getNetSpentForBudget === 'function'
+                    ? getNetSpentForBudget(b.budgetId, data.expenses)
+                    : Math.abs(sumRange(data.expenses, null, null, (e) => String(e && e.budgetId || '') === String(b && b.budgetId || '') && Number(e && e.amount || 0) < 0));
+                const remaining = allocated - spent;
+                const name = b && (b.name || b.entity || b.note) ? (b.name || b.entity || b.note) : 'Budget';
+
+                if (remaining < 0) {
+                    critical.push(`${name} exceeded by ${formatCurrencyShort(Math.abs(remaining))}.`);
+                } else if (allocated > 0 && (spent / allocated) >= 0.8) {
+                    budgetRisks.push(`${name} is ${(spent / allocated * 100).toFixed(0)}% used, ${formatCurrencyShort(remaining)} remaining.`);
+                }
+            });
+        }
+
+        const savingsDeposits = (data.savings || []).filter(s => s && s.type === 'deposit');
+        const savingsOutflow = Math.abs(sumRange(data.savings, day30, now, (s) => Number(s && s.amount || 0) < 0));
+        const savingsInflow = sumRange(data.savings, day30, now, (s) => Number(s && s.amount || 0) > 0);
+        if (!savingsDeposits.length) {
+            pendingActions.push('No savings deposits found. Add a source to improve order/payment flexibility.');
+        } else if (savingsInflow > 0 && savingsOutflow > savingsInflow) {
+            savingsOps.push(`Savings outflow (${formatCurrencyShort(savingsOutflow)}) is above inflow (${formatCurrencyShort(savingsInflow)}) in the last 30 days.`);
+        }
+
+        const pendingOrders = (data.orders || []).filter(o => ['draft', 'confirmed', 'processing'].includes(String(o && o.status || 'draft')));
+        if (pendingOrders.length) {
+            pendingActions.push(`${pendingOrders.length} orders are pending lifecycle actions.`);
+        }
+
+        const soonExpiringQuotes = (data.quotationRegistry || []).filter(q => {
+            if (!q || !q.validUntil || String(q.status || '') === 'converted' || String(q.status || '') === 'rejected') return false;
+            const exp = new Date(q.validUntil);
+            const diffDays = (exp - now) / (1000 * 60 * 60 * 24);
+            return diffDays >= 0 && diffDays <= 3;
+        });
+        if (soonExpiringQuotes.length) {
+            pendingActions.push(`${soonExpiringQuotes.length} quotations expire within 3 days.`);
+        }
+
+        if (!critical.length && !budgetRisks.length) {
+            recommendations.push('No critical spend risk detected. Keep current budget discipline and continue weekly review.');
+        }
+        if (activePeriod && pendingOrders.length === 0 && soonExpiringQuotes.length === 0) {
+            recommendations.push('Operational queue is clear. Good time to reconcile next period allocations.');
+        }
+
+        return {
+            critical,
+            budgetRisks,
+            savingsOps,
+            pendingActions,
+            recommendations
+        };
+    }
+
+    function renderPriorityDashboard(panel) {
+        const host = panel.querySelector('[data-priority]');
+        if (!host) return;
+
+        const data = buildPriorityInsights();
+        const sectionHtml = [
+            { title: 'Priority 1 - Critical Alerts', className: 'critical', rows: data.critical },
+            { title: 'Priority 2 - Budget Risks', className: 'warning', rows: data.budgetRisks },
+            { title: 'Priority 3 - Savings Opportunities', className: 'good', rows: data.savingsOps },
+            { title: 'Priority 4 - Pending Actions', className: 'warning', rows: data.pendingActions },
+            { title: 'Priority 5 - Recommendations', className: 'good', rows: data.recommendations }
+        ].map(section => {
+            const lines = section.rows.length
+                ? section.rows.map(line => `<div class="remo-line ${section.className}">${line}</div>`).join('')
+                : `<div class="remo-line">No items.</div>`;
+            return `<h4>${section.title}</h4>${lines}`;
+        }).join('');
+
+        host.innerHTML = sectionHtml;
     }
 
     function renderMessage(text, append = true) {
@@ -3704,105 +3809,56 @@ function hexToRgb(hex) {
     }
 
     function generateInsightIntent(intent) {
-        const expenses = (window.currentFilteredExpenses && window.currentFilteredExpenses.length) ? window.currentFilteredExpenses : (typeof getExpenses === 'function' ? getExpenses() : []);
-        const now = new Date();
-        function sumRangeFor(arr, start, end) {
-            return arr.reduce((s, e) => {
-                const d = new Date(e.date);
-                if (d >= start && d <= end) return s + Number(e.amount || 0); return s;
-            }, 0);
+        const i = String(intent || '').toLowerCase();
+        const model = buildPriorityInsights();
+
+        if (i.includes('critical')) {
+            return model.critical.length ? model.critical.join(' ') : 'No critical alerts right now.';
         }
-        function topCategories(arr, start, end, limit = 3) {
-            const m = {};
-            arr.forEach(e => { const d = new Date(e.date); if (d >= start && d <= end) { const k = e.category || 'Uncategorized'; m[k] = (m[k] || 0) + Math.abs(Number(e.amount || 0)); } });
-            return Object.keys(m).map(k => ({ category: k, amount: m[k] })).sort((a, b) => b.amount - a.amount).slice(0, limit);
+        if (i.includes('budget')) {
+            return model.budgetRisks.length ? model.budgetRisks.join(' ') : 'No budget risk detected in active allocations.';
         }
-        if (intent === 'top-spend-week') {
-            const start = new Date(now); start.setDate(now.getDate() - 7);
-            const top = topCategory(expenses, start, now);
-            if (top) return `Top spending in last 7 days: ${top.category} — ${formatCurrencyShort(top.amount)}`;
-            return 'No expenses found in the last 7 days.';
+        if (i.includes('saving')) {
+            return model.savingsOps.length ? model.savingsOps.join(' ') : 'No immediate savings opportunity detected from current records.';
         }
-        if (intent === 'spending-trends' || intent === 'show-spending-trends') {
-            const day7 = new Date(now); day7.setDate(now.getDate() - 7);
-            const day30 = new Date(now); day30.setDate(now.getDate() - 30);
-            const spend7 = Math.abs(sumRangeFor(expenses.filter(e => Number(e.amount) < 0), day7, now));
-            const spend30 = Math.abs(sumRangeFor(expenses.filter(e => Number(e.amount) < 0), day30, now));
-            const avg7 = (spend7 / 7) || 0;
-            const avg30 = (spend30 / 30) || 0;
-            const trend = avg7 > avg30 ? 'increasing' : (avg7 < avg30 ? 'decreasing' : 'stable');
-            return `7-day avg ${formatCurrencyShort(avg7)}; 30-day avg ${formatCurrencyShort(avg30)} — trend ${trend}.`;
+        if (i.includes('pending') || i.includes('order') || i.includes('quotation')) {
+            return model.pendingActions.length ? model.pendingActions.join(' ') : 'No pending operational actions.';
         }
-        if (intent === 'category-analysis') {
-            const start = new Date(now); start.setDate(now.getDate() - 30);
-            const top = topCategories(expenses, start, now, 5);
-            if (!top.length) return 'No category data for last 30 days.';
-            return 'Top categories (30d): ' + top.map(t => `${t.category} ${formatCurrencyShort(t.amount)}`).join(', ');
-        }
-        if (intent === 'savings-progress') {
-            const savings = (typeof getSavings === 'function') ? getSavings() : [];
-            const total = savings.reduce((s, x) => s + Number(x.amount || 0), 0);
-            return `You have ${formatCurrencyShort(total)} in savings (${savings.length} entries).`;
-        }
-        if (intent === 'end-of-day-summary') {
-            const start = new Date(now); start.setHours(0, 0, 0, 0);
-            const end = new Date(now); end.setHours(23, 59, 59, 999);
-            const incomes = expenses.filter(e => Number(e.amount) > 0 && new Date(e.date) >= start && new Date(e.date) <= end);
-            const outs = expenses.filter(e => Number(e.amount) < 0 && new Date(e.date) >= start && new Date(e.date) <= end);
-            const inAmt = incomes.reduce((s, e) => s + Number(e.amount || 0), 0);
-            const outAmt = outs.reduce((s, e) => s + Number(e.amount || 0), 0);
-            return `Today: ${incomes.length} income(s) ${formatCurrencyShort(inAmt)}; ${outs.length} expense(s) ${formatCurrencyShort(Math.abs(outAmt))}.`;
-        }
-        if (intent === 'savings-month') {
-            const start = new Date(now.getFullYear(), now.getMonth(), 1);
-            const income = sumRange(expenses.filter(e => Number(e.amount) > 0), start, now);
-            const expense = Math.abs(sumRange(expenses.filter(e => Number(e.amount) < 0), start, now));
-            const saved = income - expense;
-            return `This month: Income ${formatCurrencyShort(income)}, Expense ${formatCurrencyShort(expense)}, Savings ${formatCurrencyShort(saved)}`;
-        }
-        if (intent === 'budget-alerts') {
-            const budgets = (typeof getBudgets === 'function') ? getBudgets() : [];
-            const alerts = [];
-            budgets.forEach(b => {
-                const allocated = Math.abs(b.totalAllocated || 0);
-                const spent = getNetSpentForBudget(b.budgetId, expenses);
-                if (allocated > 0 && spent / allocated >= 0.85) alerts.push(`${b.name || b.note || 'Budget'} is ${Math.round((spent / allocated) * 100)}% used`);
-            });
-            return alerts.length ? alerts.join('; ') : 'No budget alerts.';
-        }
-        if (intent === 'compare-last-month') {
-            const thisMonthStart = new Date(now.getFullYear(), now.getMonth(), 1);
-            const lastMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-            const lastMonthEnd = new Date(now.getFullYear(), now.getMonth(), 0);
-            const thisSpend = Math.abs(sumRange(expenses.filter(e => Number(e.amount) < 0), thisMonthStart, now));
-            const lastSpend = Math.abs(sumRange(expenses.filter(e => Number(e.amount) < 0), lastMonthStart, lastMonthEnd));
-            const diff = thisSpend - lastSpend;
-            return `Expense this month ${formatCurrencyShort(thisSpend)}. Last month ${formatCurrencyShort(lastSpend)}. Change ${formatCurrencyShort(diff)}.`;
+        if (i.includes('recommend')) {
+            return model.recommendations.length ? model.recommendations.join(' ') : 'No recommendation generated from current data.';
         }
 
-        return "I couldn't compute that automatically. Try a quick suggestion.";
+        const all = []
+            .concat(model.critical)
+            .concat(model.budgetRisks)
+            .concat(model.savingsOps)
+            .concat(model.pendingActions)
+            .concat(model.recommendations);
+        return all.length ? all.slice(0, 3).join(' ') : 'No actionable signal found in current dataset.';
     }
 
     function handlePreset(promptKey) {
         const map = {
-            'Where did I spend most this week?': 'top-spend-week',
-            'How much did I save this month?': 'savings-month',
-            'Which category exceeds budget?': 'budget-alerts',
-            'What changed compared to last month?': 'compare-last-month',
-            'Show spending trends': 'spending-trends'
+            'Show critical alerts': 'critical',
+            'Show budget risks': 'budget',
+            'Show savings opportunities': 'saving',
+            'Show pending actions': 'pending',
+            'Show recommendations': 'recommendations'
         };
-        const intent = map[promptKey] || promptKey;
+        const intent = map[promptKey] || 'summary';
         renderMessage(promptKey);
         const reply = generateInsightIntent(intent);
         setTimeout(() => renderMessage(reply), 200);
     }
 
-    function openPanel(panel) {
+    function openPanel(panel, previousScreenId) {
         panel.classList.add('open');
+        panel.dataset.prevScreen = previousScreenId || '';
+        renderPriorityDashboard(panel);
         // populate chips
         const chips = panel.querySelector('[data-chips]');
         if (chips && chips.children.length === 0) {
-            ['Where did I spend most this week?', 'How much did I save this month?', 'Which category exceeds budget?', 'What changed compared to last month?', 'Show spending trends'].forEach(t => {
+            ['Show critical alerts', 'Show budget risks', 'Show savings opportunities', 'Show pending actions', 'Show recommendations'].forEach(t => {
                 const b = document.createElement('button');
                 b.className = 'remo-chip';
                 b.textContent = t;
@@ -3811,7 +3867,28 @@ function hexToRgb(hex) {
             });
         }
         panel.querySelector('[data-messages]').innerHTML = '';
-        renderMessage('Hi — I am ReMo. I can show insights, reminders and quick actions.');
+        renderMessage('AI dashboard loaded from live app data. Ask for critical, budget, savings, pending, or recommendations.');
+    }
+
+    function restorePreviousScreen(panel) {
+        const prev = panel.dataset.prevScreen || '';
+        if (prev && typeof window.showScreen === 'function') {
+            window.showScreen(prev);
+        }
+        panel.classList.remove('open');
+    }
+
+    function goHomeFromAI(panel) {
+        if (typeof window.showScreen === 'function' && document.querySelector('.screen')) {
+            window.showScreen('home');
+            panel.classList.remove('open');
+            return;
+        }
+        if (location.pathname.includes('/pages/')) {
+            window.location.href = '../index.html';
+            return;
+        }
+        panel.classList.remove('open');
     }
 
     function init() {
@@ -3842,8 +3919,15 @@ function hexToRgb(hex) {
 
             bubble.addEventListener('click', () => {
                 if (panel.classList.contains('open')) { panel.classList.remove('open'); }
-                else { openPanel(panel); }
+                else {
+                    let active = document.querySelector('.screen.active');
+                    openPanel(panel, active ? active.id : '');
+                }
             });
+
+            panel.querySelector('[data-close]').addEventListener('click', () => panel.classList.remove('open'));
+            panel.querySelector('[data-home]').addEventListener('click', () => goHomeFromAI(panel));
+            panel.querySelector('[data-back]').addEventListener('click', () => restorePreviousScreen(panel));
 
             // Send handler
             panel.querySelector('[data-send]').addEventListener('click', () => {
@@ -3851,17 +3935,8 @@ function hexToRgb(hex) {
                 const text = (input.value || '').trim();
                 if (!text) return;
                 renderMessage(text);
-                // naive intent detection
-                const l = text.toLowerCase();
-                if (l.includes('food') || l.includes('where') || l.includes('most')) handlePreset('Where did I spend most this week?');
-                else if (l.includes('save') || l.includes('saving') || l.includes('how much did i save')) handlePreset('How much did I save this month?');
-                else if (l.includes('budget') || l.includes('exceed')) handlePreset('Which category exceeds budget?');
-                else if (l.includes('compare') || l.includes('changed') || l.includes('last month')) handlePreset('What changed compared to last month?');
-                else {
-                    // fallback: try to compute simple numeric answers
-                    const reply = generateInsightIntent(text);
-                    setTimeout(() => renderMessage(reply), 200);
-                }
+                const reply = generateInsightIntent(text);
+                setTimeout(() => renderMessage(reply), 200);
                 input.value = '';
             });
 
@@ -4234,24 +4309,17 @@ function setupAttachmentInputs() {
             label.textContent = file ? `Attached: ${file.name}` : '';
         }
         wrapperEl.style.display = 'block';
+        if (wrapperEl.classList) wrapperEl.classList.remove('hidden');
     }
 
-    function clearFilePreview(inputEl, previewEl, wrapperEl, removeBtn) {
-        if (previewEl && previewEl.dataset._previewUrl) {
-            try { URL.revokeObjectURL(previewEl.dataset._previewUrl); } catch (_err) { }
-            previewEl.dataset._previewUrl = '';
-        }
-        if (inputEl) inputEl.value = '';
-        if (previewEl) {
-            previewEl.removeAttribute('src');
-            previewEl.style.display = 'none';
-        }
-        if (wrapperEl) {
-            const label = wrapperEl.querySelector('.attachment-preview-label');
-            if (label) label.textContent = '';
-            wrapperEl.style.display = 'none';
-        }
-        if (removeBtn) removeBtn.style.display = 'none';
+    function clearFilePreview(inputEl, previewEl, wrapperEl, removeBtn, stateKey) {
+        clearAttachmentInputState({
+            inputEl,
+            previewEl,
+            wrapperEl,
+            removeBtn,
+            stateKey
+        });
     }
 
     // expense attachment
@@ -4262,17 +4330,38 @@ function setupAttachmentInputs() {
     if (expInput) {
         expInput.addEventListener('change', async function () {
             const file = this.files && this.files[0];
-            if (!file) return;
+            if (!file) {
+                clearExpenseAttachmentState();
+                return;
+            }
             // show temporary preview using object URL
             // revoke previous preview url if present
             if (expPreview && expPreview.dataset._previewUrl) { try { URL.revokeObjectURL(expPreview.dataset._previewUrl); } catch (e) { } }
             const url = URL.createObjectURL(file);
             if (expPreview) expPreview.dataset._previewUrl = url;
             setFilePreview(expPreview, expWrapper, file, url);
-            if (expRemove) expRemove.style.display = 'inline';
+            if (expRemove) {
+                expRemove.style.display = 'inline';
+                if (expRemove.classList) expRemove.classList.remove('hidden');
+            }
+            window.__expenseAttachmentState = {
+                inputId: 'expenseAttachment',
+                fileName: file.name || null,
+                mime: file.type || null,
+                size: Number(file.size || 0),
+                previewUrl: url,
+                attachmentId: null,
+                status: 'selected',
+                error: null,
+                attachmentData: null,
+                attachmentLabel: file.name || null,
+                metadata: {
+                    lastUpdatedAt: new Date().toISOString()
+                }
+            };
             expPreview.onclick = () => openAttachmentViewer(url);
         });
-        if (expRemove) expRemove.addEventListener('click', () => clearFilePreview(expInput, expPreview, expWrapper, expRemove));
+        if (expRemove) expRemove.addEventListener('click', () => clearFilePreview(expInput, expPreview, expWrapper, expRemove, 'expense'));
     }
 
     const sInput = document.getElementById('sAttachment');
@@ -4282,16 +4371,133 @@ function setupAttachmentInputs() {
     if (sInput) {
         sInput.addEventListener('change', function () {
             const file = this.files && this.files[0];
-            if (!file) return;
+            if (!file) {
+                clearSavingsAttachmentState();
+                return;
+            }
             if (sPreview && sPreview.dataset._previewUrl) { try { URL.revokeObjectURL(sPreview.dataset._previewUrl); } catch (e) { } }
             const url = URL.createObjectURL(file);
             if (sPreview) sPreview.dataset._previewUrl = url;
             setFilePreview(sPreview, sWrapper, file, url);
-            if (sRemove) sRemove.style.display = 'inline';
+            if (sRemove) {
+                sRemove.style.display = 'inline';
+                if (sRemove.classList) sRemove.classList.remove('hidden');
+            }
+            window.__savingsAttachmentState = {
+                inputId: 'sAttachment',
+                fileName: file.name || null,
+                mime: file.type || null,
+                size: Number(file.size || 0),
+                previewUrl: url,
+                attachmentId: null,
+                status: 'selected',
+                error: null,
+                attachmentData: null,
+                attachmentLabel: file.name || null,
+                metadata: {
+                    lastUpdatedAt: new Date().toISOString()
+                }
+            };
             sPreview.onclick = () => openAttachmentViewer(url);
         });
-        if (sRemove) sRemove.addEventListener('click', () => clearFilePreview(sInput, sPreview, sWrapper, sRemove));
+        if (sRemove) sRemove.addEventListener('click', () => clearFilePreview(sInput, sPreview, sWrapper, sRemove, 'savings'));
     }
+}
+
+function clearAttachmentInputState({ inputEl, previewEl, wrapperEl, removeBtn, stateKey }) {
+    if (previewEl && previewEl.dataset && previewEl.dataset._previewUrl) {
+        try { URL.revokeObjectURL(previewEl.dataset._previewUrl); } catch (_err) { }
+        previewEl.dataset._previewUrl = '';
+    }
+
+    if (inputEl) {
+        inputEl.value = '';
+        if (inputEl.dataset) {
+            inputEl.dataset.attachmentId = '';
+            inputEl.dataset.attachmentStatus = '';
+            inputEl.dataset.attachmentError = '';
+            inputEl.dataset.attachmentLabel = '';
+        }
+    }
+
+    if (previewEl) {
+        previewEl.removeAttribute('src');
+        previewEl.style.display = 'none';
+    }
+
+    if (wrapperEl) {
+        const label = wrapperEl.querySelector('.attachment-preview-label');
+        if (label) label.textContent = '';
+        wrapperEl.style.display = 'none';
+        if (wrapperEl.classList) wrapperEl.classList.add('hidden');
+    }
+
+    if (removeBtn) {
+        removeBtn.style.display = 'none';
+        if (removeBtn.classList) removeBtn.classList.add('hidden');
+    }
+
+    if (stateKey === 'expense') {
+        window.__expenseAttachmentState = {
+            inputId: 'expenseAttachment',
+            fileName: null,
+            mime: null,
+            size: 0,
+            previewUrl: null,
+            attachmentId: null,
+            status: 'none',
+            error: null,
+            attachmentData: null,
+            attachmentLabel: null,
+            metadata: null
+        };
+    }
+
+    if (stateKey === 'savings') {
+        window.__savingsAttachmentState = {
+            inputId: 'sAttachment',
+            fileName: null,
+            mime: null,
+            size: 0,
+            previewUrl: null,
+            attachmentId: null,
+            status: 'none',
+            error: null,
+            attachmentData: null,
+            attachmentLabel: null,
+            metadata: null
+        };
+    }
+}
+
+function clearExpenseAttachmentState() {
+    const expInput = document.getElementById('expenseAttachment');
+    const expPreview = document.getElementById('expenseAttachmentPreview');
+    const expWrapper = document.getElementById('expenseAttachmentPreviewWrapper');
+    const expRemove = document.getElementById('expenseAttachmentRemove');
+
+    clearAttachmentInputState({
+        inputEl: expInput,
+        previewEl: expPreview,
+        wrapperEl: expWrapper,
+        removeBtn: expRemove,
+        stateKey: 'expense'
+    });
+}
+
+function clearSavingsAttachmentState() {
+    const sInput = document.getElementById('sAttachment');
+    const sPreview = document.getElementById('sAttachmentPreview');
+    const sWrapper = document.getElementById('sAttachmentPreviewWrapper');
+    const sRemove = document.getElementById('sAttachmentRemove');
+
+    clearAttachmentInputState({
+        inputEl: sInput,
+        previewEl: sPreview,
+        wrapperEl: sWrapper,
+        removeBtn: sRemove,
+        stateKey: 'savings'
+    });
 }
 
 // initialize attachment inputs on DOM ready
@@ -4318,12 +4524,42 @@ async function storeAttachmentWithStatus(inputId) {
     const file = fileInput && fileInput.files && fileInput.files[0] ? fileInput.files[0] : null;
 
     if (!file) {
+        if (inputId === 'expenseAttachment') clearExpenseAttachmentState();
+        if (inputId === 'sAttachment') clearSavingsAttachmentState();
         return { attachmentId: null, status: "none", error: null, mime: null, filename: null };
     }
 
     try {
         const attachmentId = await storeAttachmentFromInput(inputId);
         if (attachmentId) {
+            if (inputId === 'expenseAttachment') {
+                window.__expenseAttachmentState = {
+                    ...(window.__expenseAttachmentState || {}),
+                    inputId,
+                    attachmentId,
+                    status: 'linked',
+                    error: null,
+                    metadata: {
+                        ...(window.__expenseAttachmentState && window.__expenseAttachmentState.metadata ? window.__expenseAttachmentState.metadata : {}),
+                        storedAt: new Date().toISOString()
+                    }
+                };
+            }
+
+            if (inputId === 'sAttachment') {
+                window.__savingsAttachmentState = {
+                    ...(window.__savingsAttachmentState || {}),
+                    inputId,
+                    attachmentId,
+                    status: 'linked',
+                    error: null,
+                    metadata: {
+                        ...(window.__savingsAttachmentState && window.__savingsAttachmentState.metadata ? window.__savingsAttachmentState.metadata : {}),
+                        storedAt: new Date().toISOString()
+                    }
+                };
+            }
+
             return {
                 attachmentId,
                 status: "linked",
@@ -4332,6 +4568,27 @@ async function storeAttachmentWithStatus(inputId) {
                 filename: file.name || null
             };
         }
+
+        if (inputId === 'expenseAttachment') {
+            window.__expenseAttachmentState = {
+                ...(window.__expenseAttachmentState || {}),
+                inputId,
+                attachmentId: null,
+                status: 'failed',
+                error: 'Attachment store returned no id'
+            };
+        }
+
+        if (inputId === 'sAttachment') {
+            window.__savingsAttachmentState = {
+                ...(window.__savingsAttachmentState || {}),
+                inputId,
+                attachmentId: null,
+                status: 'failed',
+                error: 'Attachment store returned no id'
+            };
+        }
+
         return {
             attachmentId: null,
             status: "failed",
@@ -4340,6 +4597,26 @@ async function storeAttachmentWithStatus(inputId) {
             filename: file.name || null
         };
     } catch (err) {
+        if (inputId === 'expenseAttachment') {
+            window.__expenseAttachmentState = {
+                ...(window.__expenseAttachmentState || {}),
+                inputId,
+                attachmentId: null,
+                status: 'failed',
+                error: err && err.message ? err.message : "Attachment store failed"
+            };
+        }
+
+        if (inputId === 'sAttachment') {
+            window.__savingsAttachmentState = {
+                ...(window.__savingsAttachmentState || {}),
+                inputId,
+                attachmentId: null,
+                status: 'failed',
+                error: err && err.message ? err.message : "Attachment store failed"
+            };
+        }
+
         return {
             attachmentId: null,
             status: "failed",
@@ -4527,7 +4804,7 @@ function loadBudgetOptions() {
 
     select.innerHTML = "";
 
-    let filtered = filterBudgetsByActivePeriod(budgets);
+    let filtered = getSelectableBudgetEntries(budgets);
 
     if (!filtered.length) {
         let opt = document.createElement("option");
@@ -4570,6 +4847,16 @@ function loadBudgetOptions() {
         select.appendChild(opt);
     });
 }
+
+function getSelectableBudgetEntries(budgets) {
+    let list = Array.isArray(budgets) ? budgets : [];
+
+    return list.filter(b => {
+        if (!b || typeof b !== "object") return false;
+        return !!String(b.budgetId || "").trim();
+    });
+}
+
 function formatDateShort(date) {
     return new Date(date).toLocaleDateString("en-IN", {
         day: "numeric",
@@ -6333,14 +6620,15 @@ function renderBudgetEntries() {
     list.forEach(g => {
 
         // 🔥 Use periodKey/monthKey-aware matching
-        let relatedBudgetIds = budgets
+        let relatedBudgets = budgets
             .filter(b =>
                 b.sourceId === g.sourceId && (
                     (g.periodKey && b.periodKey === g.periodKey) ||
                     (!g.periodKey && b.monthKey === g.monthKey)
                 )
-            )
-            .map(b => b.budgetId);
+            );
+
+        let relatedBudgetIds = relatedBudgets.map(b => b.budgetId);
 
         let used = relatedBudgetIds.reduce((sum, budgetId) => {
             return sum + getNetSpentForBudget(budgetId, expenses);
@@ -6361,30 +6649,56 @@ function renderBudgetEntries() {
 
         let period = derivePeriodBounds(g);
 
+        let createdCandidates = relatedBudgets
+            .map(b => new Date(b.createdAt || b.date || 0).getTime())
+            .filter(ts => Number.isFinite(ts) && ts > 0)
+            .sort((a, b) => a - b);
+
+        let createdDate = createdCandidates.length
+            ? new Date(createdCandidates[0]).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })
+            : "-";
+
         let div = document.createElement("div");
-        div.className = "budget-period-card";
+        div.className = "budget-period-card entry-card";
 
         div.innerHTML = `
-            <div class="budget-period-head">
-                <div>
-                    <h4>${escapeHtml(name)}</h4>
-                    <small>From ${escapeHtml(period.from === "-" ? "-" : formatDateShort(period.from))} • To ${escapeHtml(period.to === "-" ? "-" : formatDateShort(period.to))}</small>
+            <div class="entry-card-head">
+                <div class="entry-title-wrap">
+                    <h4 class="entry-title">${escapeHtml(name)}</h4>
+                    <small class="entry-subtitle">From ${escapeHtml(period.from === "-" ? "-" : formatDateShort(period.from))} • To ${escapeHtml(period.to === "-" ? "-" : formatDateShort(period.to))}</small>
                 </div>
-                <span class="budget-status-pill ${remaining <= 0 ? "is-exhausted" : "is-active"}">
-                    ${remaining <= 0 ? "Exhausted" : "Healthy"}
-                </span>
+                <span class="entry-status-pill ${remaining <= 0 ? "is-exhausted" : "is-active"}">${remaining <= 0 ? "Exhausted" : "Active"}</span>
             </div>
 
-            <div class="budget-period-metrics">
-                <div><small>Assigned</small><strong>${escapeHtml(formatCurrency(g.totalAllocated))}</strong></div>
-                <div><small>Spent</small><strong>${escapeHtml(formatCurrency(used))}</strong></div>
-                <div><small>Remaining</small><strong>${escapeHtml(formatCurrency(remaining))}</strong></div>
-                <div><small>Transactions</small><strong>${escapeHtml(String(transactionCount))}</strong></div>
+            <div class="entry-details-grid">
+                <span class="entry-label">Budget Amount</span>
+                <span class="entry-value">${escapeHtml(formatCurrency(g.totalAllocated))}</span>
+                <span class="entry-label">Spent</span>
+                <span class="entry-value">${escapeHtml(formatCurrency(used))}</span>
+                <span class="entry-label">Remaining</span>
+                <span class="entry-value">${escapeHtml(formatCurrency(remaining))}</span>
+                <span class="entry-label">Transactions</span>
+                <span class="entry-value">${escapeHtml(String(transactionCount))}</span>
+                <span class="entry-label">Created Date</span>
+                <span class="entry-value">${escapeHtml(createdDate)}</span>
+            </div>
+
+            <div class="entry-actions">
+                <button type="button" class="entry-action-btn" data-action="view">View Transactions</button>
+                <button type="button" class="entry-action-btn is-muted" disabled>Edit</button>
+                <button type="button" class="entry-action-btn is-muted" disabled>Delete</button>
             </div>
         `;
 
         div.style.cursor = "pointer";
         div.onclick = () => openBudgetDetails(g);
+        let viewBtn = div.querySelector('[data-action="view"]');
+        if (viewBtn) {
+            viewBtn.addEventListener("click", (event) => {
+                event.stopPropagation();
+                openBudgetDetails(g);
+            });
+        }
 
         container.appendChild(div);
     });
@@ -6467,7 +6781,6 @@ function openBudgetDetails(group) {
         entriesHtml = "<p>No entries</p>";
     } else {
         related.forEach(e => {
-            let color = e.amount < 0 ? "#ff5252" : "#4caf50";
             let compactDate = new Date(e.date || Date.now()).toLocaleDateString("en-GB", {
                 day: "2-digit",
                 month: "short",
@@ -6480,19 +6793,29 @@ function openBudgetDetails(group) {
                 : (e.attachmentStatus === "failed" ? "Failed" : "None");
 
             entriesHtml += `
-                <div class="expense-item" style="display:block;">
-                    <div style="display:grid;grid-template-columns:1fr auto;gap:10px;align-items:start;">
-                        <div>
-                            <strong>${escapeHtml(e.category || e.type || "Entry")}</strong><br>
-                            <small>${escapeHtml(compactDate)}</small><br>
-                            <small>Balance: ${escapeHtml(formatCurrency(runningBalance))}</small>
+                <div class="expense-item transaction-card">
+                    <div class="transaction-card-head">
+                        <div class="history-type">${escapeHtml(String(e.type || "entry").replace(/_/g, " ").replace(/\b\w/g, ch => ch.toUpperCase()))}</div>
+                        <div class="transaction-title">${escapeHtml(e.purpose || e.category || "Entry")}</div>
+                    </div>
+
+                    <div class="transaction-meta-grid">
+                        <span class="entry-label">Date</span>
+                        <span class="entry-value">${escapeHtml(compactDate)}</span>
+                        <span class="entry-label">Notes</span>
+                        <span class="entry-value">${escapeHtml(e.purpose || "-")}</span>
+                        <span class="entry-label">Running Balance</span>
+                        <span class="entry-value">${escapeHtml(formatCurrency(runningBalance))}</span>
+                    </div>
+
+                    <div class="transaction-card-foot">
+                        <div class="history-amount ${Number(e.amount || 0) < 0 ? "negative" : "positive"}">${escapeHtml(formatCurrency(Math.abs(Number(e.amount || 0))))}</div>
+                        <div class="history-actions">
+                            <button class="entry-action-btn" type="button" onclick="toggleBudgetEntryDetails('${escapeHtml(e.id)}')">View Details</button>
                         </div>
-                        <div style="color:${color};font-weight:700;">${escapeHtml(formatCurrency(Math.abs(Number(e.amount || 0))))}</div>
                     </div>
-                    <div style="margin-top:8px;">
-                        <button class="secondary" type="button" onclick="toggleBudgetEntryDetails('${escapeHtml(e.id)}')">View Details</button>
-                    </div>
-                    <div id="budgetEntryDetails_${escapeHtml(e.id)}" style="display:none;margin-top:10px;padding:10px;border:1px solid #ececec;border-radius:10px;background:#fafafa;">
+
+                    <div id="budgetEntryDetails_${escapeHtml(e.id)}" class="entry-extra-details" style="display:none;">
                         <small><strong>Transaction ID:</strong> ${escapeHtml(e.id || "-")}</small><br>
                         <small><strong>Created At:</strong> ${escapeHtml(new Date(e.createdAt || e.date || Date.now()).toLocaleString("en-IN"))}</small><br>
                         <small><strong>Linked Transaction:</strong> ${escapeHtml(e.linkedTransactionId || "-")}</small><br>
@@ -6505,10 +6828,10 @@ function openBudgetDetails(group) {
                         <small><strong>Attachment:</strong> ${escapeHtml(attachmentText)}</small><br>
                         <small><strong>Audit Information:</strong> ${escapeHtml(e.type || "-")} | ${escapeHtml(e.paymentType || "-")} | ${escapeHtml(e.entity || "-")}</small>
                         ${e.attachmentId ? `
-                        <div style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap;">
-                            <button class="secondary" type="button" onclick="viewAttachmentById('${escapeHtml(e.attachmentId)}')">View</button>
-                            <button class="secondary" type="button" onclick="downloadAttachmentById('${escapeHtml(e.attachmentId)}')">Download</button>
-                            <button class="secondary" type="button" onclick="deleteTransactionAttachment('expense','${escapeHtml(e.id)}','${escapeHtml(e.attachmentId)}')">Delete</button>
+                        <div class="entry-attachment-actions">
+                            <button class="entry-action-btn" type="button" onclick="viewAttachmentById('${escapeHtml(e.attachmentId)}')">View</button>
+                            <button class="entry-action-btn" type="button" onclick="downloadAttachmentById('${escapeHtml(e.attachmentId)}')">Download</button>
+                            <button class="entry-action-btn is-danger" type="button" onclick="deleteTransactionAttachment('expense','${escapeHtml(e.id)}','${escapeHtml(e.attachmentId)}')">Delete</button>
                         </div>` : ""}
                     </div>
                 </div>
@@ -6519,62 +6842,39 @@ function openBudgetDetails(group) {
     showScreen("budgetDetails");
 
     container.innerHTML = `
-    
-    <div class="card" style="
-        border-radius:16px;
-        padding:16px;
-        background:#f7f7f7;
-        box-shadow: 0 8px 20px rgba(0,0,0,0.08);
-    ">
-
-        <div style="display:flex; justify-content:space-between; align-items:center;">
-            <div>
-                <h3 style="margin:0;">${name}</h3>
-                <small style="color:#666;">${label}</small>
+        <div class="entry-details-shell">
+            <div class="entry-details-header">
+                <div>
+                    <h3>${escapeHtml(name)}</h3>
+                    <small>${escapeHtml(label)}</small>
+                </div>
+                <button class="entry-action-btn" type="button" onclick="goBackToBudgets()">Back</button>
             </div>
 
-            <button onclick="goBackToBudgets()" style="
-                background:#eee;
-                border:none;
-                padding:6px 12px;
-                border-radius:8px;
-                cursor:pointer;
-            ">
-                ← Back
-            </button>
+            <div class="entry-summary-grid">
+                <div>
+                    <small>Allocated</small>
+                    <strong>${escapeHtml(formatCurrency(group.totalAllocated))}</strong>
+                </div>
+                <div>
+                    <small>Used</small>
+                    <strong>${escapeHtml(formatCurrency(used))}</strong>
+                </div>
+                <div>
+                    <small>Credited</small>
+                    <strong>${escapeHtml(formatCurrency(credited))}</strong>
+                </div>
+                <div>
+                    <small>Remaining</small>
+                    <strong>${escapeHtml(formatCurrency(remaining))}</strong>
+                </div>
+            </div>
+
+            <h4>Entries</h4>
+            <div class="entry-details-transactions">
+                ${entriesHtml}
+            </div>
         </div>
-
-        <div style="margin-top:14px; display:grid; grid-template-columns:1fr 1fr; gap:10px;">
-            
-            <div style="background:white; padding:10px; border-radius:10px;">
-                <small>Allocated</small>
-                <div>${formatCurrency(group.totalAllocated)}</div>
-            </div>
-
-            <div style="background:white; padding:10px; border-radius:10px;">
-                <small>Used</small>
-                <div style="color:#ff5252;">${formatCurrency(used)}</div>
-            </div>
-
-            <div style="background:white; padding:10px; border-radius:10px;">
-                <small>Credited</small>
-                <div style="color:#4caf50;">${formatCurrency(credited)}</div>
-            </div>
-
-            <div style="background:white; padding:10px; border-radius:10px;">
-                <small>Remaining</small>
-                <div style="color:#4caf50;">${formatCurrency(remaining)}</div>
-            </div>
-
-        </div>
-
-        <hr style="margin:16px 0;">
-
-        <h4>Entries</h4>
-
-        ${entriesHtml}
-
-    </div>
     `;
 }
 
@@ -8761,17 +9061,6 @@ function handleExpenseSave(amount, attachmentMeta = null) {
     }
 
     // =========================
-    // ✅ ACTIVE PERIOD CHECK
-    // =========================
-    let activePeriod = getActiveBudgetPeriod();
-
-    if (!activePeriod) {
-
-        showToast("No active budget period");
-        return;
-    }
-
-    // =========================
     // ✅ FORM VALUES
     // =========================
     let category =
@@ -8821,10 +9110,10 @@ function handleExpenseSave(amount, attachmentMeta = null) {
     let date = dateObj.toISOString();
 
     // =========================
-    // ✅ GET ACTIVE BUDGETS
+    // ✅ GET SELECTABLE BUDGETS
     // =========================
     let budgets =
-        filterBudgetsByActivePeriod(getBudgets());
+        getSelectableBudgetEntries(getBudgets());
 
     if (!budgets.length) {
 
@@ -8908,6 +9197,7 @@ function handleExpenseSave(amount, attachmentMeta = null) {
 
         showToast("Expense added");
 
+        clearExpenseAttachmentState();
         resetForm();
 
         return;
@@ -9010,6 +9300,7 @@ function confirmSplit() {
 
     showToast("Split expense added");
 
+    clearExpenseAttachmentState();
     resetForm();
 }
 

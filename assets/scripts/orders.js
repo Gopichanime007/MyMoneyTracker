@@ -1,25 +1,70 @@
-// =========================
-// 📦 GET ORDERS
-// =========================
 function getOrders() {
-  return JSON.parse(localStorage.getItem("orders")) || [];
+  return JSON.parse(localStorage.getItem("orders") || "[]");
 }
 
+function saveOrders(rows) {
+  localStorage.setItem("orders", JSON.stringify(Array.isArray(rows) ? rows : []));
+}
 
-// =========================
-// 🎯 RENDER ORDERS
-// =========================
+function showOrdersNotice(message, variant) {
+  if (typeof showToast === "function") {
+    showToast(message, variant || "info");
+    return;
+  }
+  alert(message);
+}
+
+function createOrderEntryId() {
+  return `ord_evt_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+}
+
+function formatOrderStatus(status) {
+  const map = {
+    draft: "Draft",
+    confirmed: "Confirmed",
+    processing: "Processing",
+    completed: "Completed",
+    cancelled: "Cancelled"
+  };
+  return map[status] || "Draft";
+}
+
+function getAllowedOrderTransitions(status) {
+  const map = {
+    draft: ["confirmed", "cancelled"],
+    confirmed: ["processing", "cancelled"],
+    processing: ["completed", "cancelled"],
+    completed: [],
+    cancelled: []
+  };
+  return map[status] || [];
+}
+
+function getPaymentIcon(type) {
+  if (type === "UPI") return "📱";
+  if (type === "Cash") return "💵";
+  if (type === "Card") return "💳";
+  return "💰";
+}
+
 function renderOrders() {
-  const orders = getOrders();
-  // guard: only run on orders page
+  const allOrders = getOrders();
   if (!document.getElementById || !document.getElementById("ordersList")) return;
+
   const container = document.getElementById("ordersList");
+  const filter = document.getElementById("ordersStatusFilter");
+  const selectedStatus = filter ? filter.value : "all";
+
+  let orders = allOrders;
+  if (selectedStatus && selectedStatus !== "all") {
+    orders = allOrders.filter(o => String(o.status || "draft") === selectedStatus);
+  }
 
   if (!orders.length) {
     container.innerHTML = `
       <div class="empty">
-        📦 No orders yet<br>
-        <small>Start by creating a purchase</small>
+        📦 No orders in this state<br>
+        <small>Try another filter or create a new order</small>
       </div>
     `;
     return;
@@ -28,50 +73,60 @@ function renderOrders() {
   container.innerHTML = "";
 
   [...orders].reverse().forEach(order => {
-
     const div = document.createElement("div");
     div.className = "order-card";
 
-    const date = order.date
-      ? new Date(order.date).toLocaleString("en-IN")
+    const date = order.updatedAt || order.date || order.createdAt
+      ? new Date(order.updatedAt || order.date || order.createdAt).toLocaleString("en-IN")
       : "-";
 
     const itemsHTML = (order.items || []).map(i => `
       <div class="item-row">
-        <span>${i.name || "-"}</span>
-        <span>${i.qty || 0} × ${formatCurrency(i.price || 0)}</span>
+        <span>${String(i.name || "-").replace(/</g, "&lt;").replace(/>/g, "&gt;")}</span>
+        <span>${Number(i.qty || 0)} × ${formatCurrency(Number(i.price || 0))}</span>
       </div>
     `).join("");
 
+    const allowed = getAllowedOrderTransitions(String(order.status || "draft"));
+
+    const transitionButtons = allowed
+      .filter(state => state !== "cancelled")
+      .map(state => `<button type="button" class="secondary tiny-btn" onclick="event.stopPropagation(); transitionOrderStatus('${order.id}','${state}')">${formatOrderStatus(state)}</button>`)
+      .join("");
+
+    const cancelBtn = allowed.includes("cancelled")
+      ? `<button type="button" class="danger tiny-btn" onclick="event.stopPropagation(); openDeleteModal('${order.id}')">Cancel</button>`
+      : "";
+
     div.innerHTML = `
       <div class="order-header" onclick="toggleOrder('${order.id}')">
-
         <div>
-          <strong>${formatCurrency(order.total || 0)}</strong>
+          <strong>${formatCurrency(Number(order.total || 0))}</strong>
           <small>${date}</small>
         </div>
 
         <div class="header-right">
-          <span class="badge">${order.sourceType || "-"}</span>
+          <span class="badge status-${String(order.status || "draft")}">${formatOrderStatus(order.status || "draft")}</span>
           <span class="arrow">▼</span>
         </div>
-
       </div>
 
       <div class="order-items" id="items-${order.id}">
+        <div class="order-meta">
+          ${String(order.sourceName || order.note || "-").replace(/</g, "&lt;").replace(/>/g, "&gt;")} •
+          ${getPaymentIcon(order.paymentType)} ${String(order.paymentType || "-").replace(/</g, "&lt;").replace(/>/g, "&gt;")}
+        </div>
 
         <div class="order-meta">
-          ${(order.sourceName || order.note || "-")} • 
-          ${getPaymentIcon(order.paymentType)} ${order.paymentType || "-"}
+          Order ID: ${String(order.id || "-").replace(/</g, "&lt;").replace(/>/g, "&gt;")}
         </div>
 
         ${itemsHTML}
 
-        <button class="delete-btn" 
-          onclick="event.stopPropagation(); openDeleteModal('${order.id}')">
-          🗑 Delete
-        </button>
-
+        <div class="order-actions-row">
+          ${transitionButtons}
+          ${cancelBtn}
+        </div>
       </div>
     `;
 
@@ -79,14 +134,6 @@ function renderOrders() {
   });
 }
 
-// =========================
-// 🚀 INIT
-// =========================
-document.addEventListener("DOMContentLoaded", renderOrders);
-
-// =========================
-// 🔽 TOGGLE EXPAND
-// =========================
 function toggleOrder(id) {
   const el = document.getElementById("items-" + id);
   if (!el) return;
@@ -95,171 +142,128 @@ function toggleOrder(id) {
   const arrow = header ? header.querySelector(".arrow") : null;
 
   el.classList.toggle("open");
-
-  if (arrow) {
-    arrow.classList.toggle("rotate");
-  }
+  if (arrow) arrow.classList.toggle("rotate");
 }
 
+function transitionOrderStatus(orderId, nextStatus) {
+  let orders = getOrders();
+  const idx = orders.findIndex(o => String(o.id) === String(orderId));
+  if (idx === -1) {
+    showOrdersNotice("Order not found.", "error");
+    return;
+  }
 
-// =========================
-// 🗑 DELETE ORDER
-// =========================
+  const row = { ...orders[idx] };
+  const current = String(row.status || "draft");
+  const allowed = getAllowedOrderTransitions(current);
+
+  if (!allowed.includes(nextStatus)) {
+    showOrdersNotice(`Invalid status transition: ${formatOrderStatus(current)} → ${formatOrderStatus(nextStatus)}`, "warning");
+    return;
+  }
+
+  const now = new Date().toISOString();
+  if (!Array.isArray(row.statusHistory)) row.statusHistory = [];
+  row.statusHistory.push({ at: now, from: current, to: nextStatus, note: `Status moved to ${formatOrderStatus(nextStatus)}` });
+
+  row.status = nextStatus;
+  row.updatedAt = now;
+
+  orders[idx] = row;
+  saveOrders(orders);
+  renderOrders();
+  showOrdersNotice(`Order moved to ${formatOrderStatus(nextStatus)}.`, "success");
+}
+
 let deleteTargetId = null;
 
-// =========================
-// 🗑 OPEN MODAL
-// =========================
 function openDeleteModal(id) {
   deleteTargetId = id;
   if (document.getElementById("deleteReason")) document.getElementById("deleteReason").value = "";
   if (document.getElementById("deleteModal")) document.getElementById("deleteModal").classList.remove("hidden");
 }
 
-// =========================
-// ❌ CLOSE MODAL
-// =========================
 function closeDeleteModal() {
   deleteTargetId = null;
   if (document.getElementById("deleteModal")) document.getElementById("deleteModal").classList.add("hidden");
 }
 
-// =========================
-// ✅ CONFIRM DELETE
-// =========================
 function confirmDelete() {
-
   if (!deleteTargetId) return;
-  let reason = "Order deleted";
+
+  let reason = "Order cancelled";
   if (document.getElementById("deleteReason") && document.getElementById("deleteReason").value) {
     reason = document.getElementById("deleteReason").value.trim() || reason;
   }
-  if (!reason) reason = "Order deleted";
 
-  let orders = JSON.parse(localStorage.getItem("orders")) || [];
-  let order = orders.find(o => o.id == deleteTargetId);
+  let orders = getOrders();
+  let idx = orders.findIndex(o => String(o.id) === String(deleteTargetId));
 
-  if (!order) {
-    alert("Order not found ❌");
+  if (idx === -1) {
+    showOrdersNotice("Order not found.", "error");
     closeDeleteModal();
     return;
   }
 
-  if (!order.sourceId) {
-    alert("Invalid source ❌");
+  let order = { ...orders[idx] };
+  const current = String(order.status || "draft");
+  const allowed = getAllowedOrderTransitions(current);
+
+  if (!allowed.includes("cancelled")) {
+    showOrdersNotice("This order cannot be cancelled anymore.", "warning");
     closeDeleteModal();
     return;
   }
 
-  const sourceId = Number(order.sourceId);
+  const now = new Date().toISOString();
 
-  // =========================
-  // 🔁 REFUND TO SAVINGS
-  // =========================
-  if (order.sourceType === "savings") {
-
-    let savings = JSON.parse(localStorage.getItem("savingsTransactions")) || [];
-
-    savings.push({
-      id: Date.now(),
-      amount: Math.abs(order.total) || 0,
-
+  if (order.financialPosted) {
+    let expenses = JSON.parse(localStorage.getItem("expenses") || "[]");
+    expenses.push({
+      id: createOrderEntryId(),
+      amount: Math.abs(Number(order.total || 0)),
       type: "refund",
-      note: order.sourceName || "Refund",
+      category: "Orders",
       purpose: reason,
-
-      sourceId: sourceId,
+      sourceId: order.sourceId,
+      sourceName: order.sourceName || "-",
+      sourceType: order.sourceType,
       paymentType: order.paymentType || "Unknown",
-      date: new Date().toISOString()
+      date: now,
+      linkedOrderId: order.id
     });
+    localStorage.setItem("expenses", JSON.stringify(expenses));
 
-    localStorage.setItem("savingsTransactions", JSON.stringify(savings));
+    if (order.sourceType === "savings" && order.sourceId) {
+      let savings = JSON.parse(localStorage.getItem("savingsTransactions") || "[]");
+      savings.push({
+        id: createOrderEntryId(),
+        amount: Math.abs(Number(order.total || 0)),
+        type: "refund",
+        note: order.sourceName || "Order Refund",
+        purpose: reason,
+        sourceId: order.sourceId,
+        paymentType: order.paymentType || "Unknown",
+        date: now,
+        linkedOrderId: order.id
+      });
+      localStorage.setItem("savingsTransactions", JSON.stringify(savings));
+    }
   }
 
-  // =========================
-  // 🔵 UPDATE BUDGET
-  // =========================
-  //  if(order.sourceType === "budget") {
+  if (!Array.isArray(order.statusHistory)) order.statusHistory = [];
+  order.statusHistory.push({ at: now, from: current, to: "cancelled", note: reason });
+  order.status = "cancelled";
+  order.updatedAt = now;
+  order.cancelledAt = now;
+  order.cancellationReason = reason;
 
-  //     let budgets = JSON.parse(localStorage.getItem("budgets")) || [];
-
-  //     let b = budgets.find(x => Number(x.id) === sourceId);
-
-  //     if (b) {
-  //       b.used = (b.used || 0) - Math.abs(order.total || 0);
-  //       if (b.used < 0) b.used = 0;
-  //     }
-
-  //     localStorage.setItem("budgets", JSON.stringify(budgets));
-  //   } i
-
-  // =========================
-  // 🧾 LOG REFUND
-  // =========================
-  let expenses = JSON.parse(localStorage.getItem("expenses")) || [];
-
-  expenses.push({
-    id: Date.now(),
-    amount: Math.abs(order.total) || 0,
-
-    type: "refund",
-    purpose: reason,
-
-    sourceId: sourceId,
-    sourceName: order.sourceName || "-",
-    sourceType: order.sourceType,
-
-    budgetId: order.budgetId,   // 🔥 CRITICAL FIX
-
-    paymentType: order.paymentType || "Unknown",
-    date: new Date().toISOString()
-  });
-
-  localStorage.setItem("expenses", JSON.stringify(expenses));
-
-  // =========================
-  // 🗑 REMOVE ORDER
-  // =========================
-  orders = orders.filter(o => o.id != deleteTargetId);
-  localStorage.setItem("orders", JSON.stringify(orders));
+  orders[idx] = order;
+  saveOrders(orders);
 
   closeDeleteModal();
   renderOrders();
+  showOrdersNotice("Order cancelled and audit logged.", "success");
 }
 
-
-// =========================
-// 💳 PAYMENT ICON
-// =========================
-function getPaymentIcon(type) {
-  if (type === "UPI") return "📱";
-  if (type === "Cash") return "💵";
-  if (type === "Card") return "💳";
-  return "💰";
-}
-
-/*
-   ██████╗  ██████╗ ██████╗ ██╗ ██████╗██╗  ██╗  █████╗ ███╗   ██╗██╗███╗   ███╗███████╗
-  ██╔════╝ ██╔═══██╗██╔══██╗██║██╔════╝██║  ██╔╝██╔══██╗████╗  ██║██║████╗ ████║██╔════╝
-  ██║  ███╗██║   ██║██████╔╝██║██║     █████╔╝  ███████║██╔██╗ ██║██║██╔████╔██║█████╗
-  ██║   ██║██║   ██║██╔═══╝ ██║██║     ██╔═ ██╗ ██╔══██║██║╚██╗██║██║██║╚██╔╝██║██╔══╝
-  ╚██████╔╝╚██████╔╝██║     ██║╚██████╗██║  ██╗ ██║  ██║██║ ╚████║██║██║ ╚═╝ ██║███████╗
-   ╚═════╝  ╚═════╝ ╚═╝     ╚═╝ ╚═════╝╚═╝  ╚═╝╚═╝  ╚═╝╚═╝  ╚═══╝╚═╝╚═╝     ╚═╝╚══════╝
-
-   Signed by: Gopichanime
-*/
-
-// =====================================
-// Author: Gopichanime
-// Created: 2026
-// Description: Money Tracker Core Logic
-// =====================================
-/*
-   ____   ___  ____  ___ ____ _   _    _    _   _ ___ __  __ _____ 
-  / ___| / _ \|  _ \|_ _/ ___| | | |  / \  | \ | |_ _|  \/  | ____|
- | |  _ | | | | |_) || | |   | |_| | / _ \ |  \| || || |\/| |  _|  
- | |_| || |_| |  __/ | | |___|  _  |/ ___ \| |\  || || |  | | |___ 
-  \____| \___/|_|   |___\____|_| |_/_/   \_\_| \_|___|_|  |_|_____|
-
-   Signed by: GOPICHANIME 🐉
-*/
+document.addEventListener("DOMContentLoaded", renderOrders);
