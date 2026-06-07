@@ -414,7 +414,6 @@ function getSavings() {
 
 function resolveSavingsWalletKey(entry) {
     if (!entry || typeof entry !== "object") return "global";
-    if (entry.periodKey) return `period:${String(entry.periodKey)}`;
     if (entry.monthKey) return `month:${String(entry.monthKey)}`;
     if (entry.date) {
         let d = new Date(entry.date);
@@ -490,6 +489,7 @@ if (typeof window !== 'undefined') {
     window.selectActiveBudgetPeriod = window.selectActiveBudgetPeriod || selectActiveBudgetPeriod;
     window.getBudgetPeriodEffectiveEndDate = window.getBudgetPeriodEffectiveEndDate || getBudgetPeriodEffectiveEndDate;
     window.normalizeBudgetPeriods = window.normalizeBudgetPeriods || normalizeBudgetPeriods;
+    window.reactivateBudgetPeriodLifecycle = window.reactivateBudgetPeriodLifecycle || reactivateBudgetPeriodLifecycle;
     window.calculateGraphAverageExpense = window.calculateGraphAverageExpense || calculateGraphAverageExpense;
     window.calculateAverageSpendingByType = window.calculateAverageSpendingByType || calculateAverageSpendingByType;
     window.loadGraph = window.loadGraph || loadGraph;
@@ -8851,6 +8851,140 @@ function normalizeBudgetPeriods(periods, referenceDate = new Date()) {
     return {
         periods: normalized,
         changed
+    };
+}
+
+function buildBudgetPeriodKey(startDate, endDate) {
+    if (!startDate || !endDate) return null;
+    return `${formatPeriodDateKey(startDate)}_to_${formatPeriodDateKey(endDate)}`;
+}
+
+function refreshFinancialViewsAfterPeriodUpdate() {
+    if (typeof loadDashboard === "function") loadDashboard();
+    if (typeof loadBudgetScreen === "function") loadBudgetScreen();
+    if (typeof renderBudgetEntries === "function") renderBudgetEntries();
+    if (typeof loadSavings === "function") loadSavings();
+    if (typeof loadHistory === "function") loadHistory();
+    if (typeof loadGraph === "function") loadGraph();
+    if (typeof updateBudgetEfficiency === "function") updateBudgetEfficiency();
+}
+
+function rebindPeriodReferencesAcrossData(oldPeriodKey, newPeriodKey, startKey) {
+    let rebound = {
+        budgets: 0,
+        expenses: 0,
+        savings: 0
+    };
+
+    if (!newPeriodKey) return rebound;
+
+    let keyMatcher = key => {
+        let current = String(key || "");
+        if (!current) return false;
+        if (oldPeriodKey && current === oldPeriodKey) return true;
+        if (startKey && current.startsWith(`${startKey}_to_`)) return true;
+        return false;
+    };
+
+    let budgets = getBudgets();
+    let expenses = getExpenses();
+    budgets.forEach(row => {
+        if (!row || typeof row !== "object") return;
+        if (!keyMatcher(row.periodKey)) return;
+        if (row.periodKey === newPeriodKey) return;
+        row.periodKey = newPeriodKey;
+        row.updatedAt = new Date().toISOString();
+        rebound.budgets += 1;
+    });
+
+    expenses.forEach(row => {
+        if (!row || typeof row !== "object") return;
+        if (!keyMatcher(row.periodKey)) return;
+        if (row.periodKey === newPeriodKey) return;
+        row.periodKey = newPeriodKey;
+        row.updatedAt = new Date().toISOString();
+        rebound.expenses += 1;
+    });
+
+    saveBudgets(budgets);
+    saveExpenses(expenses);
+
+    return rebound;
+}
+
+function reactivateBudgetPeriodLifecycle(periodId, referenceDate = new Date()) {
+    let periods = JSON.parse(localStorage.getItem("bp")) || [];
+    let index = periods.findIndex(p => String(p && p.id) === String(periodId));
+
+    if (index < 0) {
+        return {
+            ok: false,
+            error: "Budget period not found"
+        };
+    }
+
+    let base = periods[index] && typeof periods[index] === "object"
+        ? { ...periods[index] }
+        : null;
+
+    if (!base || !base.start) {
+        return {
+            ok: false,
+            error: "Invalid budget period"
+        };
+    }
+
+    let now = new Date(referenceDate);
+    now.setHours(0, 0, 0, 0);
+
+    let oldEffectiveEnd = getBudgetPeriodEffectiveEndDate(base, now);
+    let oldKey = buildBudgetPeriodKey(base.start, oldEffectiveEnd);
+
+    let endDate = base.end ? new Date(base.end) : null;
+    if (endDate) endDate.setHours(0, 0, 0, 0);
+
+    let next = { ...base };
+    next.status = "active";
+
+    // Reactivation extends an expired period to "today" so keying remains stable.
+    if (!endDate || endDate < now) {
+        next.end = formatPeriodDateKey(now);
+    }
+
+    let nowIso = new Date().toISOString();
+    next.updatedAt = nowIso;
+    next.reactivatedAt = nowIso;
+
+    periods = periods.map((p, i) => {
+        if (!p || typeof p !== "object") return p;
+
+        if (i === index) return next;
+
+        if (p.status === "active") {
+            let closed = { ...p, status: "closed", updatedAt: nowIso };
+            if (!closed.end) closed.end = formatPeriodDateKey(now);
+            return closed;
+        }
+
+        return p;
+    });
+
+    localStorage.setItem("bp", JSON.stringify(periods));
+
+    let newEffectiveEnd = getBudgetPeriodEffectiveEndDate(next, now);
+    let newKey = buildBudgetPeriodKey(next.start, newEffectiveEnd);
+    let startKey = formatPeriodDateKey(next.start);
+
+    let rebound = rebindPeriodReferencesAcrossData(oldKey, newKey, startKey);
+
+    refreshFinancialViewsAfterPeriodUpdate();
+
+    return {
+        ok: true,
+        periodId: next.id,
+        oldPeriodKey: oldKey,
+        newPeriodKey: newKey,
+        rebound
     };
 }
 

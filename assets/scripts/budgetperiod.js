@@ -988,6 +988,23 @@ function toggleStatus() {
     d.status = "closed";
     d.end = new Date().toISOString().split("T")[0];
   } else {
+    if (typeof reactivateBudgetPeriodLifecycle === "function") {
+      let result = reactivateBudgetPeriodLifecycle(selectedId, new Date());
+
+      if (!result || result.ok !== true) {
+        alert((result && result.error) || "Reactivation failed");
+        return;
+      }
+
+      if (typeof showToast === "function") {
+        showToast("Budget period reactivated and data links refreshed");
+      }
+
+      closeDetails();
+      render();
+      return;
+    }
+
     d.status = "active";
     let today = toDateOnly(new Date());
     let end = d.end ? toDateOnly(d.end) : null;

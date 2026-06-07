@@ -636,8 +636,6 @@ function createSavingsEntry({
     lossAmount = 0
 }) {
 
-    let periodKey = (typeof getActivePeriodKey === 'function') ? getActivePeriodKey() : null; // safe call
-
     return {
         id: Date.now(),
 
@@ -653,8 +651,9 @@ function createSavingsEntry({
         note,
         date,
 
-        monthKey: date.slice(0, 7),      // fallback
-        periodKey: periodKey || null,    // new system
+        monthKey: date.slice(0, 7),
+        // Savings is intentionally independent from budget period scope.
+        periodKey: null,
 
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
@@ -1287,29 +1286,14 @@ function setTextById(id, value) {
 
 function getPeriodEntriesForSavingsDashboard(allRows, activePeriod, periodKey) {
     if (!Array.isArray(allRows)) return [];
-    if (periodKey) return allRows.filter(r => r && r.periodKey === periodKey);
-    if (!activePeriod || !activePeriod.start || !activePeriod.end) return allRows;
-
-    const startTs = new Date(activePeriod.start).getTime();
-    const endRaw = (typeof getBudgetPeriodEffectiveEndDate === "function")
-        ? getBudgetPeriodEffectiveEndDate(activePeriod, new Date())
-        : new Date(activePeriod.end);
-    const endTs = new Date(endRaw).getTime();
-
-    if (!Number.isFinite(startTs) || !Number.isFinite(endTs)) return allRows;
-    return allRows.filter(r => {
-        const ts = new Date(r && r.date ? r.date : 0).getTime();
-        return Number.isFinite(ts) && ts >= startTs && ts <= endTs;
-    });
+    return allRows;
 }
 
 // Calculates totals and updates savings dashboard UI
 function loadSavings() {
     let scoped = (typeof getScopedSavings === "function") ? getScopedSavings() : (getSavings() || []);
     let allRows = (typeof getSavings === "function") ? (getSavings() || []) : scoped;
-    let periodKey = (typeof getActivePeriodKey === "function") ? getActivePeriodKey() : null;
-    let activePeriod = (typeof getActiveBudgetPeriod === "function") ? getActiveBudgetPeriod() : null;
-    let periodRows = getPeriodEntriesForSavingsDashboard(allRows, activePeriod, periodKey);
+    let periodRows = getPeriodEntriesForSavingsDashboard(allRows, null, null);
 
     let daily = getDailyBudget();
     let dailyEl = document.getElementById("dailyBudget");
@@ -1334,28 +1318,10 @@ function loadSavings() {
         .filter(t => t && t.type === "refund")
         .reduce((mx, t) => Math.max(mx, Math.abs(Number(t.amount || 0))), 0);
 
-    let periodLabel = "No Active Period";
+    let periodLabel = "Independent Savings";
     let periodStart = "-";
     let periodEnd = "-";
     let daysRemaining = "-";
-
-    if (activePeriod) {
-        let effectiveEnd = (typeof getBudgetPeriodEffectiveEndDate === "function")
-            ? getBudgetPeriodEffectiveEndDate(activePeriod, new Date())
-            : new Date(activePeriod.end || activePeriod.start || Date.now());
-        let endDate = new Date(effectiveEnd);
-        let startDate = new Date(activePeriod.start || activePeriod.end || Date.now());
-
-        periodLabel = activePeriod.periodKey || [activePeriod.start || "-", activePeriod.end || "-"].join(" to ");
-        periodStart = Number.isFinite(startDate.getTime()) ? startDate.toLocaleDateString("en-IN") : "-";
-        periodEnd = Number.isFinite(endDate.getTime()) ? endDate.toLocaleDateString("en-IN") : "-";
-
-        if (Number.isFinite(endDate.getTime())) {
-            let now = new Date();
-            let diff = Math.ceil((endDate.setHours(23, 59, 59, 999) - now.getTime()) / (24 * 60 * 60 * 1000));
-            daysRemaining = diff >= 0 ? `${diff}` : "Closed";
-        }
-    }
 
     setTextById("savingsBalance", formatSavingsAmount(totalBalance));
     setTextById("totalDeposits", formatSavingsAmount(totalDeposits));
@@ -1732,43 +1698,9 @@ function handleSavingsFilter(type) {
 
     let data = getSavings() || [];
 
-    // =========================
-    // 🧠 ACTIVE PERIOD CONTEXT
-    // =========================
-    let period = typeof getActiveBudgetPeriod === "function"
-        ? getActiveBudgetPeriod()
-        : null;
-
-    let periodKey = typeof getActivePeriodKey === "function"
-        ? getActivePeriodKey()
-        : null;
-
     let now = new Date();
 
-    // =========================
-    // 🧱 BASE DATA (PERIOD FIRST)
-    // =========================
-    let baseData;
-
-    // 🔥 TRUE ALL DATA
-    if (type === "all") {
-
-        baseData = [...data];
-
-    } else {
-
-        // normal scoped filtering
-        baseData = data.filter(t => {
-
-            if (periodKey) {
-                return t.periodKey === periodKey;
-            }
-
-            let currentMonth = now.toISOString().slice(0, 7);
-
-            return t.monthKey === currentMonth;
-        });
-    }
+    let baseData = [...data];
 
     // =========================
     // 🧠 SAFE DATE PARSER
@@ -1818,24 +1750,20 @@ function handleSavingsFilter(type) {
         let end = new Date(now);
         end.setHours(23, 59, 59, 999);
 
-        // 🧠 CLAMP TO PERIOD
-        if (period) {
-            let pStart = getSafeDate(period.start);
-            let pEnd = getSafeDate(period.end) || new Date();
-
-            if (pStart && start < pStart) start = pStart;
-            if (pEnd && end > pEnd) end = pEnd;
-        }
-
         result = baseData.filter(t => {
             let d = getSafeDate(t.date);
             return d && d >= start && d <= end;
         });
     }
 
-    // 🔥 MONTH / FULL PERIOD
+    // 🔥 MONTH
     else if (type === "month") {
-        result = [...baseData];
+        let monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+        let monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
+        result = baseData.filter(t => {
+            let d = getSafeDate(t.date);
+            return d && d >= monthStart && d <= monthEnd;
+        });
     }
 
     // 🔥 ALL
@@ -1859,22 +1787,10 @@ function loadSavingsGraph(data) {
         return;
     }
 
-    let periodKey = typeof getActivePeriodKey === "function"
-        ? getActivePeriodKey()
-        : null;
-
-    let now = new Date();
-    let currentMonth = now.toISOString().slice(0, 7);
-
     let d = data;
 
     if (!d) {
-        let all = getSavings() || [];
-
-        d = all.filter(t => {
-            if (periodKey) return t.periodKey === periodKey;
-            return t.monthKey === currentMonth;
-        });
+        d = getSavings() || [];
     }
 
     let income = 0;
@@ -2297,20 +2213,7 @@ function applySavingsDateFilter() {
 
     let data = getSavings() || [];
 
-    let periodKey = typeof getActivePeriodKey === "function"
-        ? getActivePeriodKey()
-        : null;
-
-    let now = new Date();
-    let currentMonth = now.toISOString().slice(0, 7);
-
-    // 🔥 BASE FILTER
-    let base = data.filter(t => {
-        if (periodKey) return t.periodKey === periodKey;
-        return t.monthKey === currentMonth;
-    });
-
-    filteredSavingsData = base.filter(t => {
+    filteredSavingsData = data.filter(t => {
         let d = new Date(t.date).toISOString().slice(0, 10);
 
         if (from && !to) return d === from;
@@ -3002,40 +2905,28 @@ function getScopedSavings() {
 }
 
 function getActiveBudgetPeriodFull() {
-    let data = JSON.parse(localStorage.getItem("bp")) || [];
-    return data.find(d => d.status === "active") || null;
+    return null;
 }
 
 function getEffectiveDays() {
-
-    let period = getActiveBudgetPeriodFull();
-    if (!period) return 0;
-
-    let start = new Date(period.start);
-    let end = new Date(period.end);
-
-    let diff = end - start;
-
-    let days = Math.floor(diff / (1000 * 60 * 60 * 24)) + 1;
-
-    let extra = period.extraDays || 0;
-
-    return days + extra;
+    let now = new Date();
+    return new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
 }
 
 function getDailyBudget() {
 
     let budgets = JSON.parse(localStorage.getItem("budgets")) || [];
 
-    let periodKey = typeof getActivePeriodKey === "function"
-        ? getActivePeriodKey()
-        : null;
+    let currentMonth = new Date().toISOString().slice(0, 7);
 
-    if (!periodKey) return 0;
-
-    let periodBudgets = budgets.filter(b => b.periodKey === periodKey);
-
-    let total = periodBudgets.reduce((sum, b) => sum + (b.totalAllocated || 0), 0);
+    let total = budgets
+        .filter(b => {
+            if (!b || typeof b !== "object") return false;
+            if (String(b.monthKey || "") === currentMonth) return true;
+            let dateKey = String(b.date || "").slice(0, 7);
+            return dateKey === currentMonth;
+        })
+        .reduce((sum, b) => sum + (b.totalAllocated || 0), 0);
 
     let days = getEffectiveDays();
 
