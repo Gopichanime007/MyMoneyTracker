@@ -1776,14 +1776,18 @@ function resolveBudgetSourceIdForTransferBack(budget, savingsEntries) {
     return null;
 }
 
-function buildTransferBackPlan(requestAmount) {
+function buildTransferBackPlan(requestAmount, selectedBudgetId = null) {
     let amount = Math.abs(Number(requestAmount) || 0);
     if (!amount) {
         return { amount: 0, allocations: [], remaining: 0, totalAvailable: 0 };
     }
 
-    let budgets = filterBudgetsByActivePeriod(getBudgets())
-        .filter(b => b && b.budgetId);
+    let budgets = getSelectableBudgetEntries(getBudgets());
+    let selectedId = String(selectedBudgetId || "").trim();
+    if (selectedId) {
+        budgets = budgets.filter(b => String(b.budgetId || "") === selectedId);
+    }
+
     let savingsEntries = (typeof getSavings === "function") ? getSavings() : [];
 
     let expenses = getExpenses();
@@ -1799,28 +1803,35 @@ function buildTransferBackPlan(requestAmount) {
         };
     }).filter(c => c.available > 0 && !!c.sourceId);
 
-    candidates.sort((a, b) => b.available - a.available);
-
-    let allocations = [];
-    let remaining = amount;
-
-    for (let c of candidates) {
-        if (remaining <= 0) break;
-        let use = Math.min(c.available, remaining);
-        if (use <= 0) continue;
-        allocations.push({
-            budgetId: c.budgetId,
-            sourceId: c.sourceId,
-            amount: use
-        });
-        remaining -= use;
+    if (!candidates.length) {
+        return {
+            amount,
+            allocations: [],
+            remaining: amount,
+            totalAvailable: 0,
+            selectedBudgetId: selectedId || null,
+            selectedSourceId: null
+        };
     }
+
+    let chosen = candidates[0];
+    let use = Math.min(chosen.available, amount);
+    let allocations = use > 0
+        ? [{
+            budgetId: chosen.budgetId,
+            sourceId: chosen.sourceId,
+            amount: use
+        }]
+        : [];
+    let remaining = Math.max(0, amount - use);
 
     return {
         amount,
         allocations,
         remaining,
-        totalAvailable: candidates.reduce((sum, c) => sum + c.available, 0)
+        totalAvailable: candidates.reduce((sum, c) => sum + c.available, 0),
+        selectedBudgetId: chosen.budgetId,
+        selectedSourceId: chosen.sourceId
     };
 }
 
@@ -1931,6 +1942,11 @@ function handleEntryTypeUIChange() {
     }
 
     if (type === "transfer_back") {
+        if (budgetWrapper) budgetWrapper.style.display = "block";
+        if (paymentWrapper) paymentWrapper.style.display = "block";
+        if (typeof loadBudgetOptions === "function") {
+            loadBudgetOptions({ mode: "transfer_back" });
+        }
         return;
     }
 
@@ -2038,7 +2054,7 @@ async function handleAddExpense() {
 
     if (type === "expense") {
         const attachmentMeta = await storeAttachmentWithStatus('expenseAttachment');
-        await handleExpenseSave(Math.abs(amount), attachmentMeta);
+        await handleExpenseSave(Math.abs(amount), budgetId, attachmentMeta);
         return;
     }
     // non-expense flows (income, transfer, refund, transfer_back) may still have attachments
@@ -2054,7 +2070,12 @@ async function handleAddExpense() {
     }
 
     if (type === "transfer_back") {
-        let plan = buildTransferBackPlan(amount);
+        if (!budgetId) {
+            showToast("Select budget");
+            return;
+        }
+
+        let plan = buildTransferBackPlan(amount, budgetId);
         if (!plan.allocations.length || plan.remaining > 0) {
             showToast(`Only ${formatCurrency(plan.totalAvailable)} can be transferred back now`);
             return;
@@ -2067,6 +2088,12 @@ async function handleAddExpense() {
         }));
 
         let uniqueSources = [...new Set(transferBackTrail.map(a => a.sourceId))];
+        let resolvedSourceId = uniqueSources.length === 1 ? uniqueSources[0] : null;
+
+        if (!resolvedSourceId) {
+            showToast("Unable to resolve source for selected budget");
+            return;
+        }
 
         let created = addExpense({
             amount: -Math.abs(amount),
@@ -2076,9 +2103,10 @@ async function handleAddExpense() {
             type,
             paymentType,
             person,
+            budgetId,
             allocationTrail: transferBackTrail.map(a => ({ budgetId: a.budgetId, amount: a.amount })),
             transferBackTrail,
-            linkedSourceSavingsId: uniqueSources.length === 1 ? uniqueSources[0] : null,
+            linkedSourceSavingsId: resolvedSourceId,
             linkedSourceSavingsIds: uniqueSources,
             attachmentId: nonExpAttachment.attachmentId,
             attachmentStatus: nonExpAttachment.status,
@@ -4217,6 +4245,39 @@ async function openTransactionAuditDetails(scope, transaction) {
         }
     }
 
+    let budgets = (typeof getBudgets === "function") ? getBudgets() : [];
+    let budgetMap = new Map((Array.isArray(budgets) ? budgets : []).map(b => [String(b && b.budgetId || ""), b]));
+    let savingsEntries = (typeof getSavings === "function") ? getSavings() : [];
+    let savingsMap = new Map((Array.isArray(savingsEntries) ? savingsEntries : []).map(s => [String(s && s.id || ""), s]));
+
+    let allocationRows = Array.isArray(transaction.allocationTrail) && transaction.allocationTrail.length
+        ? transaction.allocationTrail
+        : (transaction.budgetId ? [{ budgetId: transaction.budgetId, amount: Math.abs(Number(transaction.amount || 0)) }] : []);
+
+    let budgetIds = [...new Set(allocationRows.map(row => String(row && row.budgetId || "")).filter(Boolean))];
+    let budgetNames = budgetIds.map(id => {
+        let row = budgetMap.get(String(id));
+        if (!row) return id;
+        return `${formatBudgetName(row)} (${row.entity || "Budget"})`;
+    });
+
+    let sourceIds = [...new Set(
+        (Array.isArray(transaction.transferBackTrail) ? transaction.transferBackTrail : [])
+            .map(row => String(row && row.sourceId || ""))
+            .concat(Array.isArray(transaction.linkedSourceSavingsIds) ? transaction.linkedSourceSavingsIds.map(String) : [])
+            .concat(transaction.linkedSourceSavingsId ? [String(transaction.linkedSourceSavingsId)] : [])
+            .filter(Boolean)
+    )];
+
+    let sourceNames = sourceIds.map(id => {
+        let row = savingsMap.get(String(id));
+        return row ? (row.note || row.entity || id) : id;
+    });
+
+    let allocationDetails = allocationRows.length
+        ? allocationRows.map(row => `${String(row.budgetId || "-")} : ${formatCurrency(Math.abs(Number(row.amount || 0)))}`).join(" | ")
+        : "-";
+
     body.innerHTML = `
       <div><small>Transaction ID</small><div>${escapeHtml(transaction.id || "-")}</div></div>
       <div><small>Date</small><div>${escapeHtml(new Date(transaction.date || Date.now()).toLocaleString("en-IN"))}</div></div>
@@ -4224,6 +4285,11 @@ async function openTransactionAuditDetails(scope, transaction) {
       <div><small>Amount</small><div>${escapeHtml(formatCurrency(Number(transaction.amount || 0)))}</div></div>
       <div><small>Running Balance</small><div>${escapeHtml(runningBalanceText)}</div></div>
       <div><small>Notes</small><div>${escapeHtml(transaction.purpose || transaction.note || "-")}</div></div>
+      <div><small>Budget ID</small><div>${escapeHtml(budgetIds.join(", ") || "-")}</div></div>
+      <div><small>Budget Name</small><div>${escapeHtml(budgetNames.join(", ") || "-")}</div></div>
+      <div><small>Source ID</small><div>${escapeHtml(sourceIds.join(", ") || "-")}</div></div>
+      <div><small>Source Name</small><div>${escapeHtml(sourceNames.join(", ") || "-")}</div></div>
+      <div><small>Allocation Details</small><div>${escapeHtml(allocationDetails)}</div></div>
     <div><small>Refund Type</small><div>${escapeHtml(transaction.type === "refund" ? formatRefundType(transaction.refundType) : "-")}</div></div>
     <div><small>Resolution Type</small><div>${escapeHtml(transaction.resolutionType ? (RESOLUTION_TYPE_LABELS[normalizeResolutionType(transaction.resolutionType)] || transaction.resolutionType) : "-")}</div></div>
     <div><small>Resolved Amount</small><div>${escapeHtml(formatCurrency(Number(transaction.resolvedAmount || 0)))}</div></div>
@@ -4716,6 +4782,8 @@ function saveExpense() {
 try {
     window.saveExpense = saveExpense;
     window.handleAddExpense = handleAddExpense;
+    window.handleEntryTypeUIChange = handleEntryTypeUIChange;
+    window.buildTransferBackPlan = buildTransferBackPlan;
 } catch (_err) {
     // ignore non-browser contexts
 }
@@ -4794,17 +4862,33 @@ function applyPeriodFromModal() {
     closePeriod();
 }
 
-function loadBudgetOptions() {
+function loadBudgetOptions(options = null) {
+
+    let mode = options && typeof options === "object" && options.mode
+        ? String(options.mode)
+        : "expense";
 
     let select = document.getElementById("budgetSelect");
     if (!select) return;
 
-    let budgets = getBudgets();
+    let budgets = getSelectableBudgetEntries(getBudgets());
     let expenses = getExpenses();
+    let savingsEntries = (typeof getSavings === "function") ? getSavings() : [];
 
     select.innerHTML = "";
 
-    let filtered = getSelectableBudgetEntries(budgets);
+    let filtered = budgets;
+
+    if (mode === "transfer_back") {
+        filtered = budgets.filter(b => {
+            if (!b || !b.budgetId) return false;
+            let spent = Math.max(0, getNetSpentForBudget(b.budgetId, expenses));
+            let allocated = Math.max(0, Number(b.totalAllocated || 0));
+            let available = Math.max(0, allocated - spent);
+            let sourceId = resolveBudgetSourceIdForTransferBack(b, savingsEntries);
+            return available > 0 && !!sourceId;
+        });
+    }
 
     if (!filtered.length) {
         let opt = document.createElement("option");
@@ -4842,7 +4926,11 @@ function loadBudgetOptions() {
 
         }
 
-        opt.textContent = `${label} (${b.entity}) — ${formatCurrency(remaining)} left`;
+        let suffix = mode === "transfer_back"
+            ? `${formatCurrency(remaining)} available for return`
+            : `${formatCurrency(remaining)} left`;
+
+        opt.textContent = `${label} (${b.entity}) — ${suffix}`;
 
         select.appendChild(opt);
     });
@@ -9183,7 +9271,7 @@ function prepareSplit(amount, budgets) {
     return remaining > 0 ? null : result;
 }
 
-function handleExpenseSave(amount, attachmentMeta = null) {
+function handleExpenseSave(amount, selectedBudgetId = null, attachmentMeta = null) {
 
     // =========================
     // ✅ VALIDATE
@@ -9243,15 +9331,23 @@ function handleExpenseSave(amount, attachmentMeta = null) {
 
     let date = dateObj.toISOString();
 
-    // =========================
-    // ✅ GET SELECTABLE BUDGETS
-    // =========================
-    let budgets =
-        getSelectableBudgetEntries(getBudgets());
+    let selectedId = String(selectedBudgetId || document.getElementById("budgetSelect")?.value || "").trim();
 
+    if (!selectedId) {
+        showToast("Select budget");
+        return;
+    }
+
+    let budgets = getSelectableBudgetEntries(getBudgets());
     if (!budgets.length) {
 
         showToast("No budgets available");
+        return;
+    }
+
+    let selectedBudget = budgets.find(b => String(b && b.budgetId || "") === selectedId);
+    if (!selectedBudget) {
+        showToast("Selected budget not found");
         return;
     }
 
@@ -9260,101 +9356,39 @@ function handleExpenseSave(amount, attachmentMeta = null) {
     // =========================
     let expenses = getExpenses();
 
-    // =========================
-    // ✅ SORT BY AVAILABLE
-    // =========================
-    budgets.sort((a, b) => {
-        // Use net-spent helper to respect allocationTrail & recoveries
-        let spentA = getNetSpentForBudget(a.budgetId, expenses);
-        let spentB = getNetSpentForBudget(b.budgetId, expenses);
+    let spent = getNetSpentForBudget(selectedBudget.budgetId, expenses);
+    let available = (selectedBudget.totalAllocated || 0) - spent;
 
-        let availableA = (a.totalAllocated || 0) - spentA;
-        let availableB = (b.totalAllocated || 0) - spentB;
+    if (available < amount) {
+        showToast(`Selected budget has only ${formatCurrency(Math.max(0, available))} available`);
+        return;
+    }
 
-        return availableB - availableA;
+    addExpense({
+        amount: -Math.abs(amount),
+        budgetId: selectedBudget.budgetId,
+        allocationTrail: [{ budgetId: selectedBudget.budgetId, amount: Math.abs(amount) }],
+        category,
+        purpose,
+        paymentType,
+        date,
+        attachmentId: attachmentMeta && attachmentMeta.attachmentId ? attachmentMeta.attachmentId : null,
+        attachmentStatus: attachmentMeta ? attachmentMeta.status : "none",
+        attachmentError: attachmentMeta ? attachmentMeta.error : null,
+        type: "expense"
     });
 
-    // =========================
-    // ✅ CHECK SINGLE BUDGET
-    // =========================
-    let single = budgets.find(b => {
+    loadDashboard();
+    loadHistory();
+    loadGraph();
+    updateBudgetEfficiency();
+    renderBudgetEntries();
+    loadBudgetOptions();
 
-        let spent = getNetSpentForBudget(b.budgetId, expenses);
+    showToast("Expense added");
 
-        let available = (b.totalAllocated || 0) - spent;
-
-        return available >= amount;
-    });
-
-    // =========================
-    // ✅ DIRECT SAVE
-    // =========================
-    let split =
-        prepareSplit(amount, budgets);
-
-    // =========================
-    // ❌ NOT ENOUGH BUDGET
-    // =========================
-    if (!split) {
-
-        showToast("Not enough total budget");
-        return;
-    }
-
-    // =========================
-    // ✅ SINGLE DIRECT ENTRY
-    // =========================
-    if (split.length === 1) {
-
-        let s = split[0];
-
-        addExpense({
-            amount: -Math.abs(s.amount), // ensure expenses are stored as negative amounts
-            budgetId: s.budget.budgetId,
-            allocationTrail: [{ budgetId: s.budget.budgetId, amount: s.amount }],
-            category,
-            purpose,
-            paymentType,
-            date,
-            attachmentId: attachmentMeta && attachmentMeta.attachmentId ? attachmentMeta.attachmentId : null,
-            attachmentStatus: attachmentMeta ? attachmentMeta.status : "none",
-            attachmentError: attachmentMeta ? attachmentMeta.error : null,
-            type: "expense"
-        });
-
-        loadDashboard();
-        loadHistory();
-        loadGraph();
-        updateBudgetEfficiency();
-        renderBudgetEntries();
-        loadBudgetOptions();
-
-        showToast("Expense added");
-
-        clearExpenseAttachmentState();
-        resetForm();
-
-        return;
-    }
-
-    // =========================
-    // ✅ PREPARE SPLIT
-    // =========================
-    //let split =prepareSplit(amount, budgets);
-
-    // =========================
-    // ❌ NOT ENOUGH BUDGET
-    // =========================
-    if (!split) {
-
-        showToast("Not enough total budget");
-        return;
-    }
-
-    // =========================
-    // 🔥 OPEN SPLIT MODAL
-    // =========================
-    openSplitModal(split);
+    clearExpenseAttachmentState();
+    resetForm();
 }
 
 let pendingSplit = null;
