@@ -1430,6 +1430,20 @@ function loadSavings() {
 //         container.appendChild(div);
 //     });
 // }
+
+function escapeSavingsHtml(value) {
+    if (typeof escapeHtml === "function") {
+        return escapeHtml(value);
+    }
+
+    return String(value == null ? "" : value)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/\"/g, "&quot;")
+        .replace(/'/g, "&#39;");
+}
+
 function renderSavingsHistory(data) {
     let container = document.getElementById("savingsHistory");
     if (!container) return;
@@ -1465,7 +1479,7 @@ function renderSavingsHistory(data) {
     withRunning.slice().reverse().forEach((t) => {
 
         let div = document.createElement("div");
-        div.className = "expense-item";
+        div.className = "expense-item transaction-card";
 
         let labelMap = {
             income: "💰 Deposit",
@@ -1476,32 +1490,39 @@ function renderSavingsHistory(data) {
             expense_resolution: "🧾 Closure"
         };
 
-                let label = labelMap[t.type] || t.type;
-                let amountClass = t.amount < 0 ? "negative" : "positive";
-                let date = new Date(t.date).toLocaleString("en-IN");
-                let runningBalance = formatCurrency(Number(t.runningBalance || 0));
-                let meta = [];
-                if (t.type === "refund" && typeof formatRefundType === "function") meta.push(`Refund Type: ${formatRefundType(t.refundType)}`);
-                if (t.resolutionType && typeof normalizeResolutionType === "function") {
-                    const key = normalizeResolutionType(t.resolutionType);
-                    meta.push(`Resolution: ${(typeof RESOLUTION_TYPE_LABELS === "object" && RESOLUTION_TYPE_LABELS[key]) ? RESOLUTION_TYPE_LABELS[key] : key}`);
-                }
+        let label = labelMap[t.type] || t.type;
+        let amountClass = t.amount < 0 ? "negative" : "positive";
+        let date = new Date(t.date).toLocaleString("en-IN");
+        let runningBalance = formatCurrency(Number(t.runningBalance || 0));
+        let meta = [];
+        if (t.type === "refund" && typeof formatRefundType === "function") meta.push(`Refund Type: ${formatRefundType(t.refundType)}`);
+        if (t.resolutionType && typeof normalizeResolutionType === "function") {
+            const key = normalizeResolutionType(t.resolutionType);
+            meta.push(`Resolution: ${(typeof RESOLUTION_TYPE_LABELS === "object" && RESOLUTION_TYPE_LABELS[key]) ? RESOLUTION_TYPE_LABELS[key] : key}`);
+        }
 
         div.innerHTML = `
-        <div class="history-main">
-            <div class="history-type">${label}</div>
-            ${meta.length ? `<div class="history-note">${meta.join(" • ")}</div>` : ""}
-            <div class="history-meta">${date}</div>
-            <div class="history-running">Running Balance: ${runningBalance}</div>
-    </div>
+            <div class="transaction-card-head">
+                <div class="history-type">${escapeSavingsHtml(label)}</div>
+                ${meta.length ? `<div class="transaction-title">${escapeSavingsHtml(meta.join(" • "))}</div>` : ""}
+            </div>
 
-        <div>
-                <div class="history-amount ${amountClass}">${formatCurrency(Math.abs(Number(t.amount || 0)))}</div>
+            <div class="transaction-meta-grid">
+                <span class="entry-label">Source</span>
+                <span class="entry-value">${escapeSavingsHtml(t.entity || t.paymentType || "Wallet")}</span>
+                <span class="entry-label">Date</span>
+                <span class="entry-value">${escapeSavingsHtml(date)}</span>
+                <span class="entry-label">Running Balance</span>
+                <span class="entry-value">${escapeSavingsHtml(runningBalance)}</span>
+            </div>
+
+            <div class="transaction-card-foot">
+                <div class="history-amount ${amountClass}">${escapeSavingsHtml(formatCurrency(Math.abs(Number(t.amount || 0))))}</div>
                 <div class="history-actions">
                     <button class="delete-btn" title="Delete">🗑</button>
                 </div>
-    </div>
-`;
+            </div>
+        `;
 
         div.addEventListener("click", () => {
             if (typeof openTransactionAuditDetails === "function") {
@@ -1666,18 +1687,22 @@ function resetSavingsForm() {
         document.getElementById("sAmount").disabled = false;
         document.getElementById("sAmount").placeholder = "Amount";
     }
-    let sInput = document.getElementById("sAttachment");
-    let sPreview = document.getElementById("sAttachmentPreview");
-    let sWrapper = document.getElementById("sAttachmentPreviewWrapper");
-    let sRemove = document.getElementById("sAttachmentRemove");
-    if (sInput) sInput.value = "";
-    if (sPreview && sPreview.dataset && sPreview.dataset._previewUrl) {
-        try { URL.revokeObjectURL(sPreview.dataset._previewUrl); } catch (e) { }
-        sPreview.dataset._previewUrl = "";
+    if (typeof window.clearSavingsAttachmentState === "function") {
+        window.clearSavingsAttachmentState();
+    } else {
+        let sInput = document.getElementById("sAttachment");
+        let sPreview = document.getElementById("sAttachmentPreview");
+        let sWrapper = document.getElementById("sAttachmentPreviewWrapper");
+        let sRemove = document.getElementById("sAttachmentRemove");
+        if (sInput) sInput.value = "";
+        if (sPreview && sPreview.dataset && sPreview.dataset._previewUrl) {
+            try { URL.revokeObjectURL(sPreview.dataset._previewUrl); } catch (e) { }
+            sPreview.dataset._previewUrl = "";
+        }
+        if (sPreview) sPreview.src = "";
+        if (sWrapper) sWrapper.style.display = "none";
+        if (sRemove) sRemove.style.display = "none";
     }
-    if (sPreview) sPreview.src = "";
-    if (sWrapper) sWrapper.style.display = "none";
-    if (sRemove) sRemove.style.display = "none";
     document.getElementById("sType").value = "deposit";
 
     setTodayDate();
@@ -1979,11 +2004,7 @@ function renderSourceDetails(sourceId) {
 
     // ❌ NOT FOUND
     if (!income) {
-        container.innerHTML = `
-            <div style="padding:16px;">
-                <p style="color:#888;">No data found for this source ❌</p>
-            </div>
-        `;
+        container.innerHTML = `<p class="empty-state">No data found for this source</p>`;
         return;
     }
 
@@ -2005,11 +2026,9 @@ function renderSourceDetails(sourceId) {
     let entriesHTML = "";
 
     if (!related.length) {
-        entriesHTML = `<p style="color:#888;">No transactions yet</p>`;
+        entriesHTML = `<p class="empty-state">No transactions yet</p>`;
     } else {
         related.slice().reverse().forEach(t => {
-
-            let color = t.amount < 0 ? "#ff5252" : "#4caf50";
 
             let labelMap = {
                 transfer: "🔁 Transfer",
@@ -2022,22 +2041,27 @@ function renderSourceDetails(sourceId) {
 
             let label = labelMap[t.type] || t.type;
 
+            let amountClass = Number(t.amount || 0) < 0 ? "negative" : "positive";
+            let dateText = new Date(t.date).toLocaleString("en-IN");
+
             entriesHTML += `
-                <div style="
-                    display:flex;
-                    justify-content:space-between;
-                    padding:8px 0;
-                    border-bottom:1px solid #eee;
-                ">
-                    <div>
-                        <strong>${t.note || t.person || "Entry"}</strong><br>
-                        <small style="color:#777;">
-                            ${label} • ${new Date(t.date).toLocaleString()}
-                        </small>
+                <div class="expense-item transaction-card">
+                    <div class="transaction-card-head">
+                        <div class="history-type">${escapeSavingsHtml(label)}</div>
+                        <div class="transaction-title">${escapeSavingsHtml(t.note || t.person || "Entry")}</div>
                     </div>
 
-                    <div style="color:${color}; font-weight:600;">
-                        ₹${Math.abs(t.amount)}
+                    <div class="transaction-meta-grid">
+                        <span class="entry-label">Source</span>
+                        <span class="entry-value">${escapeSavingsHtml(income.note || income.entity || "Savings Source")}</span>
+                        <span class="entry-label">Date</span>
+                        <span class="entry-value">${escapeSavingsHtml(dateText)}</span>
+                        <span class="entry-label">Notes</span>
+                        <span class="entry-value">${escapeSavingsHtml(t.note || "-")}</span>
+                    </div>
+
+                    <div class="transaction-card-foot">
+                        <div class="history-amount ${amountClass}">${escapeSavingsHtml(formatCurrency(Math.abs(Number(t.amount || 0))))}</div>
                     </div>
                 </div>
             `;
@@ -2046,44 +2070,37 @@ function renderSourceDetails(sourceId) {
 
     // 📦 FINAL UI
     container.innerHTML = `
+        <div class="entry-details-shell">
+            <div class="entry-details-header">
+                <div>
+                    <h3>${escapeSavingsHtml(income.note || "Income Source")}</h3>
+                    <small>${escapeSavingsHtml(new Date(income.date || Date.now()).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }))}</small>
+                </div>
+            </div>
 
-    <h3 style="margin-bottom:8px;">
-        ${income.note || "Income"}
-    </h3>
+            <div class="entry-summary-grid">
+                <div>
+                    <small>Total</small>
+                    <strong>${escapeSavingsHtml(formatCurrency(income.amount))}</strong>
+                </div>
+                <div>
+                    <small>Used</small>
+                    <strong>${escapeSavingsHtml(formatCurrency(used))}</strong>
+                </div>
+                <div>
+                    <small>Credited</small>
+                    <strong>${escapeSavingsHtml(formatCurrency(credited))}</strong>
+                </div>
+                <div>
+                    <small>Remaining</small>
+                    <strong>${escapeSavingsHtml(formatCurrency(remaining))}</strong>
+                </div>
+            </div>
 
-    <div class="summary">
-
-        <div class="box">
-            <small>Total</small>
-            <div>${formatCurrency(income.amount)}</div>
+            <h4>Transactions</h4>
+            <div class="entry-details-transactions">${entriesHTML}</div>
         </div>
-
-        <div class="box">
-            <small>Used</small>
-            <div class="red">${formatCurrency(used)}</div>
-        </div>
-
-    </div>
-
-    <div class="summary">
-
-        <div class="box success">
-            <small>Credited</small>
-            <div>${formatCurrency(credited)}</div>
-        </div>
-
-        <div class="box success">
-            <small>Remaining</small>
-            <div>${formatCurrency(remaining)}</div>
-        </div>
-
-    </div>
-
-    <hr style="margin:12px 0;">
-
-    <h4>Transactions</h4>
-    ${entriesHTML}
-`;
+    `;
 }
 
 // Renders all income entries and allows navigation to detailed view
@@ -2103,7 +2120,7 @@ function renderIncomeList() {
     container.innerHTML = "";
 
     if (!sources.length) {
-        container.innerHTML = `<p style="color:#888;">No savings sources yet</p>`;
+        container.innerHTML = `<p class="empty-state">No savings sources yet</p>`;
         return;
     }
 
@@ -2120,7 +2137,7 @@ function renderIncomeList() {
         let remaining = Number(i.amount || 0) - used + credited;
 
         let div = document.createElement("div");
-        div.className = "income-card";
+        div.className = "income-card entry-card";
 
         let date = new Date(i.date);
 
@@ -2132,27 +2149,49 @@ function renderIncomeList() {
         let name = i.note || `${monthYear} Source`;
 
         let statusText = remaining <= 0
-            ? "❌ All used"
-            : `₹${remaining} left`;
+            ? "Exhausted"
+            : "Active";
 
-        let statusClass = remaining <= 0 ? "red" : "green";
+        let statusClass = remaining <= 0 ? "is-exhausted" : "is-active";
+
+        let txCount = scoped.filter(t => String(t.sourceId) === String(i.id)).length;
+        let createdDate = new Date(i.createdAt || i.date || Date.now()).toLocaleDateString("en-GB", {
+            day: "2-digit",
+            month: "short",
+            year: "numeric"
+        });
 
         div.innerHTML = `
-            <div class="income-left">
-                <strong>${name}</strong>
-                <small>${monthYear}</small>
+            <div class="entry-card-head">
+                <div class="entry-title-wrap">
+                    <h4 class="entry-title">${escapeSavingsHtml(name)}</h4>
+                    <small class="entry-subtitle">${escapeSavingsHtml(monthYear)}</small>
+                </div>
+                <span class="entry-status-pill ${statusClass}">${statusText}</span>
             </div>
 
-            <div class="income-right">
-                <span class="amount">₹${i.amount}</span>
-                <span class="remaining ${statusClass}">
-                    ${statusText}
-                </span>
+            <div class="entry-details-grid">
+                <span class="entry-label">Target Amount</span>
+                <span class="entry-value">${escapeSavingsHtml(formatCurrency(i.amount))}</span>
+                <span class="entry-label">Saved Amount</span>
+                <span class="entry-value">${escapeSavingsHtml(formatCurrency(Number(i.amount || 0) - Math.max(0, remaining)))}</span>
+                <span class="entry-label">Remaining</span>
+                <span class="entry-value">${escapeSavingsHtml(formatCurrency(remaining))}</span>
+                <span class="entry-label">Transactions</span>
+                <span class="entry-value">${escapeSavingsHtml(String(txCount))}</span>
+                <span class="entry-label">Created Date</span>
+                <span class="entry-value">${escapeSavingsHtml(createdDate)}</span>
+            </div>
+
+            <div class="entry-actions">
+                <button type="button" class="entry-action-btn" data-action="view">View Transactions</button>
+                <button type="button" class="entry-action-btn is-muted" disabled>Edit</button>
+                <button type="button" class="entry-action-btn is-danger" data-action="delete">Delete</button>
             </div>
         `;
 
         // 🔥 CLEAN CLICK FLOW (NO RACE CONDITION)
-        div.addEventListener("click", () => {
+        let viewDetails = () => {
             let id = String(i.id);
 
             showSavingsScreen("details");
@@ -2160,7 +2199,25 @@ function renderIncomeList() {
             requestAnimationFrame(() => {
                 renderSourceDetails(id);
             });
-        });
+        };
+
+        div.addEventListener("click", viewDetails);
+
+        let viewBtn = div.querySelector('[data-action="view"]');
+        if (viewBtn) {
+            viewBtn.addEventListener("click", (event) => {
+                event.stopPropagation();
+                viewDetails();
+            });
+        }
+
+        let deleteBtn = div.querySelector('[data-action="delete"]');
+        if (deleteBtn) {
+            deleteBtn.addEventListener("click", async (event) => {
+                event.stopPropagation();
+                await deleteSavings(i.id);
+            });
+        }
 
         container.appendChild(div);
     });
