@@ -1,0 +1,1545 @@
+
+> money-tracker-tests@1.0.0 release:gate
+> node scripts/release-gate.js
+
+
+> money-tracker-tests@1.0.0 lint
+> node scripts/lint.js
+
+Lint checks passed. JS files: 29, JSON files: 5
+
+> money-tracker-tests@1.0.0 test
+> jest --runInBand --coverage --coverageReporters=text --coverageReporters=json-summary
+
+FAIL tests/financial-integrity.test.js
+  ΓùÅ business flow reconciles savings, budget spend, and refund reporting
+
+    expect(received).toBeCloseTo(expected, precision)
+
+    Expected: 4000
+    Received: 1500
+
+    Expected precision:    2
+    Expected difference: < 0.005
+    Received difference:   2500
+
+      429 |
+      430 |     const remainingPeriod = parseCurrency(document.getElementById('savedPeriod').innerText);
+    > 431 |     expect(remainingPeriod).toBeCloseTo(4000, 2);
+          |                             ^
+      432 |
+      433 |     const savings = window.getSavings().sort((a, b) => new Date(a.date) - new Date(b.date));
+      434 |     expect(savings[savings.length - 1].BalanceAfterTransaction).toBe(6000);
+
+      at Object.toBeCloseTo (tests/financial-integrity.test.js:431:29)
+
+FAIL tests/risk-hardening.test.js
+  ΓùÅ Console
+
+    console.log
+      manual_text
+
+      at log (assets/scripts/script.js:5678:13)
+
+    console.log
+      0
+
+      at log (assets/scripts/script.js:5679:13)
+
+    console.log
+      891
+
+      at log (assets/scripts/script.js:5680:13)
+
+    console.log
+
+
+      at log (assets/scripts/script.js:5681:13)
+
+    console.log
+      hashDisk n/a
+
+      at log (assets/scripts/script.js:5682:13)
+
+    console.log
+      hashBeforeParse 891:4624dd96
+
+      at log (assets/scripts/script.js:5683:13)
+
+    console.info
+      Import raw diagnostics {
+        fileName: 'manual_text',
+        fileSize: 0,
+        typeofContent: 'string',
+        contentLength: 891,
+        signature: { length: 891, hash32: '4624dd96' },
+        normalization: null,
+        hashBeforeParse: '891:4624dd96',
+        pipeline: null
+      }
+
+      at info (assets/scripts/script.js:5685:13)
+
+    console.log
+
+
+      at log (assets/scripts/script.js:5697:13)
+
+    console.info
+      Import normalization keys {
+        rootBefore: [
+          'expenses',
+          'budgets',
+          'savings',
+          'budgetPeriods',
+          'categories',
+          'persons',
+          'settings',
+          'orders',
+          'quotations',
+          'meta'
+        ],
+        rootAfter: [
+          'expenses',
+          'budgets',
+          'savings',
+          'budgetPeriods',
+          'categories',
+          'persons',
+          'settings',
+          'orders',
+          'quotations',
+          'meta'
+        ],
+        expenseBefore: [
+          'id',
+          'type',
+          'amount',
+          'budgetId',
+          'date',
+          'BalanceBeforeTransaction',
+          'BalanceAfterTransaction',
+          'runningBalance',
+          'linkedBudgetId'
+        ],
+        expenseAfter: [
+          'id',
+          'type',
+          'amount',
+          'budgetId',
+          'date',
+          'BalanceBeforeTransaction',
+          'BalanceAfterTransaction',
+          'runningBalance'
+        ],
+        savingsBefore: [
+          'id',
+          'type',
+          'amount',
+          'date',
+          'BalanceBeforeTransaction',
+          'BalanceAfterTransaction',
+          'runningBalance'
+        ],
+        savingsAfter: [
+          'id',
+          'type',
+          'amount',
+          'date',
+          'BalanceBeforeTransaction',
+          'BalanceAfterTransaction',
+          'runningBalance'
+        ]
+      }
+
+      at info (assets/scripts/script.js:5486:13)
+
+    console.info
+      Import parse diagnostics {
+        typeofImportedData: 'object',
+        keys: [
+          'expenses',
+          'budgets',
+          'savings',
+          'budgetPeriods',
+          'categories',
+          'persons',
+          'settings',
+          'orders',
+          'quotations',
+          'meta'
+        ],
+        meta: { exportedAt: '2026-06-06T18:32:58.624Z', version: '2.0.0' },
+        settings: {
+          appearanceMode: 'matte',
+          accentColor: '#ef4444',
+          theme: '#ef4444',
+          currencyCode: 'INR',
+          autoBackupEnabled: true,
+          autoBackupFrequency: 'weekly',
+          autoBackupTarget: 'local_download'
+        },
+        expensesCount: 1,
+        savingsCount: 1,
+        budgetsCount: 1,
+        budgetPeriodsCount: 0
+      }
+
+      at info (assets/scripts/script.js:5753:13)
+
+    console.info
+      Import Validation Report {
+        version: '2.0.0',
+        found: { expenses: 1, savings: 1, budgets: 1, budgetPeriods: 0 },
+        imported: { expenses: 1, savings: 1, budgets: 1, budgetPeriods: 0 },
+        warnings: [ 'Unknown Fields Removed: 1', 'Missing Fields Recovered: 1' ],
+        normalization: {
+          fieldsRemoved: [ 'expenses[0].linkedBudgetId' ],
+          fieldsAdded: [],
+          defaultsApplied: [ 'categories=default(fallback)' ],
+          warnings: [ 'Unknown Fields Removed: 1', 'Missing Fields Recovered: 1' ],
+          unknownFieldsRemoved: 1,
+          missingFieldsRecovered: 1
+        },
+        errors: []
+      }
+
+      at info (assets/scripts/script.js:5015:13)
+
+    console.log
+      manual_text
+
+      at log (assets/scripts/script.js:5678:13)
+
+    console.log
+      0
+
+      at log (assets/scripts/script.js:5679:13)
+
+    console.log
+      12
+
+      at log (assets/scripts/script.js:5680:13)
+
+    console.log
+
+
+      at log (assets/scripts/script.js:5681:13)
+
+    console.log
+      hashDisk n/a
+
+      at log (assets/scripts/script.js:5682:13)
+
+    console.log
+      hashBeforeParse 12:6d5a1efa
+
+      at log (assets/scripts/script.js:5683:13)
+
+    console.info
+      Import raw diagnostics {
+        fileName: 'manual_text',
+        fileSize: 0,
+        typeofContent: 'string',
+        contentLength: 12,
+        signature: { length: 12, hash32: '6d5a1efa' },
+        normalization: null,
+        hashBeforeParse: '12:6d5a1efa',
+        pipeline: null
+      }
+
+      at info (assets/scripts/script.js:5685:13)
+
+    console.log
+
+
+      at log (assets/scripts/script.js:5697:13)
+
+    console.error
+      Import parse fragment {
+        parsePosition: null,
+        fragment: '{"expenses":',
+        parseWindowCodes: [
+          { index: 0, code: 123 },
+          { index: 1, code: 34 },
+          { index: 2, code: 101 },
+          { index: 3, code: 120 },
+          { index: 4, code: 112 },
+          { index: 5, code: 101 },
+          { index: 6, code: 110 },
+          { index: 7, code: 115 },
+          { index: 8, code: 101 },
+          { index: 9, code: 115 },
+          { index: 10, code: 34 },
+          { index: 11, code: 58 }
+        ],
+        signature: { length: 12, hash32: '6d5a1efa' },
+        normalization: null
+      }
+
+      5720 |         window.__lastImportCorruptFragment = fragment;
+      5721 |         window.__lastImportParseWindowCodes = parseWindowCodes;
+    > 5722 |         console.error("Import parse fragment", {
+           |                 ^
+      5723 |             parsePosition,
+      5724 |             fragment,
+      5725 |             parseWindowCodes,
+
+      at error (assets/scripts/script.js:5722:17)
+      at Object.importData (tests/risk-hardening.test.js:658:12)
+
+    console.info
+      Import Validation Report {
+        version: 'unknown',
+        found: { expenses: 0, savings: 0, budgets: 0, budgetPeriods: 0 },
+        imported: { expenses: 0, savings: 0, budgets: 0, budgetPeriods: 0 },
+        warnings: [],
+        errors: [ 'JSON Parse Error: Unexpected end of JSON input' ]
+      }
+
+      at info (assets/scripts/script.js:5015:13)
+
+    console.log
+      manual_text
+
+      at log (assets/scripts/script.js:5678:13)
+
+    console.log
+      0
+
+      at log (assets/scripts/script.js:5679:13)
+
+    console.log
+      7106
+
+      at log (assets/scripts/script.js:5680:13)
+
+    console.log
+      xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"broken_fragmentxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+
+      at log (assets/scripts/script.js:5681:13)
+
+    console.log
+      hashDisk n/a
+
+      at log (assets/scripts/script.js:5682:13)
+
+    console.log
+      hashBeforeParse 7106:04afd2b8
+
+      at log (assets/scripts/script.js:5683:13)
+
+    console.info
+      Import raw diagnostics {
+        fileName: 'manual_text',
+        fileSize: 0,
+        typeofContent: 'string',
+        contentLength: 7106,
+        signature: { length: 7106, hash32: '04afd2b8' },
+        normalization: null,
+        hashBeforeParse: '7106:04afd2b8',
+        pipeline: null
+      }
+
+      at info (assets/scripts/script.js:5685:13)
+
+    console.log
+      xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"broken_fragmentxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+
+      at log (assets/scripts/script.js:5697:13)
+
+    console.error
+      Import parse fragment {
+        parsePosition: 7056,
+        fragment: 'xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"broken_fragmentxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx',
+        parseWindowCodes: [
+          { index: 7041, code: 120 },
+          { index: 7042, code: 120 },
+          { index: 7043, code: 120 },
+          { index: 7044, code: 120 },
+          { index: 7045, code: 120 },
+          { index: 7046, code: 120 },
+          { index: 7047, code: 120 },
+          { index: 7048, code: 120 },
+          { index: 7049, code: 120 },
+          { index: 7050, code: 120 },
+          { index: 7051, code: 120 },
+          { index: 7052, code: 120 },
+          { index: 7053, code: 120 },
+          { index: 7054, code: 120 },
+          { index: 7055, code: 34 },
+          { index: 7056, code: 98 },
+          { index: 7057, code: 114 },
+          { index: 7058, code: 111 },
+          { index: 7059, code: 107 },
+          { index: 7060, code: 101 },
+          { index: 7061, code: 110 },
+          { index: 7062, code: 95 },
+          { index: 7063, code: 102 },
+          { index: 7064, code: 114 },
+          { index: 7065, code: 97 },
+          { index: 7066, code: 103 },
+          { index: 7067, code: 109 },
+          { index: 7068, code: 101 },
+          { index: 7069, code: 110 },
+          { index: 7070, code: 116 }
+        ],
+        signature: { length: 7106, hash32: '04afd2b8' },
+        normalization: null
+      }
+
+      5720 |         window.__lastImportCorruptFragment = fragment;
+      5721 |         window.__lastImportParseWindowCodes = parseWindowCodes;
+    > 5722 |         console.error("Import parse fragment", {
+           |                 ^
+      5723 |             parsePosition,
+      5724 |             fragment,
+      5725 |             parseWindowCodes,
+
+      at error (assets/scripts/script.js:5722:17)
+      at Object.importData (tests/risk-hardening.test.js:691:12)
+
+    console.info
+      Import Validation Report {
+        version: 'unknown',
+        found: { expenses: 0, savings: 0, budgets: 0, budgetPeriods: 0 },
+        imported: { expenses: 0, savings: 0, budgets: 0, budgetPeriods: 0 },
+        warnings: [],
+        errors: [
+          "JSON Parse Error: Expected ',' or '}' after property value in JSON at position 7056 (line 8 column 6934)"
+        ]
+      }
+
+      at info (assets/scripts/script.js:5015:13)
+
+    console.log
+      manual_text
+
+      at log (assets/scripts/script.js:5678:13)
+
+    console.log
+      0
+
+      at log (assets/scripts/script.js:5679:13)
+
+    console.log
+      422
+
+      at log (assets/scripts/script.js:5680:13)
+
+    console.log
+
+
+      at log (assets/scripts/script.js:5681:13)
+
+    console.log
+      hashDisk n/a
+
+      at log (assets/scripts/script.js:5682:13)
+
+    console.log
+      hashBeforeParse 422:0d063795
+
+      at log (assets/scripts/script.js:5683:13)
+
+    console.info
+      Import raw diagnostics {
+        fileName: 'manual_text',
+        fileSize: 0,
+        typeofContent: 'string',
+        contentLength: 422,
+        signature: { length: 422, hash32: '0d063795' },
+        normalization: null,
+        hashBeforeParse: '422:0d063795',
+        pipeline: null
+      }
+
+      at info (assets/scripts/script.js:5685:13)
+
+    console.log
+
+
+      at log (assets/scripts/script.js:5697:13)
+
+    console.info
+      Import normalization keys {
+        rootBefore: [
+          'expenses',
+          'savings',
+          'budgets',
+          'budgetPeriods',
+          'settings',
+          'categories',
+          'persons',
+          'meta'
+        ],
+        rootAfter: [
+          'expenses',
+          'savings',
+          'budgets',
+          'budgetPeriods',
+          'settings',
+          'categories',
+          'persons',
+          'meta',
+          'orders',
+          'quotations'
+        ],
+        expenseBefore: [ 'id', 'type', 'amount', 'budgetId', 'date' ],
+        expenseAfter: [ 'id', 'type', 'amount', 'budgetId', 'date' ],
+        savingsBefore: [ 'id', 'type', 'amount', 'date' ],
+        savingsAfter: [ 'id', 'type', 'amount', 'date' ]
+      }
+
+      at info (assets/scripts/script.js:5486:13)
+
+    console.info
+      Import parse diagnostics {
+        typeofImportedData: 'object',
+        keys: [
+          'expenses',
+          'budgets',
+          'savings',
+          'budgetPeriods',
+          'categories',
+          'persons',
+          'settings',
+          'orders',
+          'quotations',
+          'meta'
+        ],
+        meta: { version: '2.0.0', exportedAt: '2026-06-06T18:32:58.753Z' },
+        settings: {
+          theme: '#4caf50',
+          currencyCode: 'INR',
+          accentColor: '#4caf50',
+          autoBackupTarget: 'local_download',
+          autoBackupEnabled: false,
+          autoBackupFrequency: 'weekly'
+        },
+        expensesCount: 1,
+        savingsCount: 1,
+        budgetsCount: 1,
+        budgetPeriodsCount: 0
+      }
+
+      at info (assets/scripts/script.js:5753:13)
+
+    console.info
+      Import Validation Report {
+        version: '2.0.0',
+        found: { expenses: 1, savings: 1, budgets: 1, budgetPeriods: 0 },
+        imported: { expenses: 1, savings: 1, budgets: 1, budgetPeriods: 0 },
+        warnings: [ 'Unknown Fields Removed: 0', 'Missing Fields Recovered: 3' ],
+        normalization: {
+          fieldsRemoved: [],
+          fieldsAdded: [ 'orders', 'quotations' ],
+          defaultsApplied: [
+            'orders=[]',
+            'quotations=default',
+            'categories=default(fallback)'
+          ],
+          warnings: [ 'Unknown Fields Removed: 0', 'Missing Fields Recovered: 3' ],
+          unknownFieldsRemoved: 0,
+          missingFieldsRecovered: 3
+        },
+        errors: []
+      }
+
+      at info (assets/scripts/script.js:5015:13)
+
+    console.log
+      manual_text
+
+      at log (assets/scripts/script.js:5678:13)
+
+    console.log
+      0
+
+      at log (assets/scripts/script.js:5679:13)
+
+    console.log
+      65
+
+      at log (assets/scripts/script.js:5680:13)
+
+    console.log
+
+
+      at log (assets/scripts/script.js:5681:13)
+
+    console.log
+      hashDisk n/a
+
+      at log (assets/scripts/script.js:5682:13)
+
+    console.log
+      hashBeforeParse 65:0ead9722
+
+      at log (assets/scripts/script.js:5683:13)
+
+    console.info
+      Import raw diagnostics {
+        fileName: 'manual_text',
+        fileSize: 0,
+        typeofContent: 'string',
+        contentLength: 65,
+        signature: { length: 65, hash32: '0ead9722' },
+        normalization: null,
+        hashBeforeParse: '65:0ead9722',
+        pipeline: null
+      }
+
+      at info (assets/scripts/script.js:5685:13)
+
+    console.log
+
+
+      at log (assets/scripts/script.js:5697:13)
+
+    console.info
+      Import normalization keys {
+        rootBefore: [ 'meta', 'expenses', 'savings', 'budgets' ],
+        rootAfter: [
+          'meta',
+          'expenses',
+          'savings',
+          'budgets',
+          'budgetPeriods',
+          'categories',
+          'persons',
+          'orders',
+          'quotations',
+          'settings'
+        ],
+        expenseBefore: [],
+        expenseAfter: [],
+        savingsBefore: [],
+        savingsAfter: []
+      }
+
+      at info (assets/scripts/script.js:5486:13)
+
+    console.info
+      Import parse diagnostics {
+        typeofImportedData: 'object',
+        keys: [
+          'expenses',
+          'budgets',
+          'savings',
+          'budgetPeriods',
+          'categories',
+          'persons',
+          'settings',
+          'orders',
+          'quotations',
+          'meta'
+        ],
+        meta: { version: '2.0.0', exportedAt: '2026-06-06T18:32:58.765Z' },
+        settings: {
+          theme: '',
+          currencyCode: 'INR',
+          accentColor: '',
+          autoBackupTarget: 'local_download',
+          autoBackupEnabled: false,
+          autoBackupFrequency: 'weekly'
+        },
+        expensesCount: 0,
+        savingsCount: 0,
+        budgetsCount: 0,
+        budgetPeriodsCount: 0
+      }
+
+      at info (assets/scripts/script.js:5753:13)
+
+    console.info
+      Import Validation Report {
+        version: '2.0.0',
+        found: { expenses: 0, savings: 0, budgets: 0, budgetPeriods: 0 },
+        imported: { expenses: 0, savings: 0, budgets: 0, budgetPeriods: 0 },
+        warnings: [
+          'Unknown Fields Removed: 0',
+          'Missing Fields Recovered: 7',
+          'Schema migration applied from v9 to 2.0.0'
+        ],
+        normalization: {
+          fieldsRemoved: [],
+          fieldsAdded: [
+            'expenses',
+            'budgetPeriods',
+            'categories',
+            'persons',
+            'orders',
+            'quotations',
+            'settings'
+          ],
+          defaultsApplied: [
+            'expenses=[]',
+            'budgetPeriods=[]',
+            'categories=default',
+            'persons=[]',
+            'orders=[]',
+            'quotations=default',
+            'settings=default'
+          ],
+          warnings: [
+            'Unknown Fields Removed: 0',
+            'Missing Fields Recovered: 7',
+            'Schema migration applied from v9 to 2.0.0'
+          ],
+          unknownFieldsRemoved: 0,
+          missingFieldsRecovered: 7
+        },
+        errors: []
+      }
+
+      at info (assets/scripts/script.js:5015:13)
+
+    console.log
+      manual_text
+
+      at log (assets/scripts/script.js:5678:13)
+
+    console.log
+      0
+
+      at log (assets/scripts/script.js:5679:13)
+
+    console.log
+      434
+
+      at log (assets/scripts/script.js:5680:13)
+
+    console.log
+
+
+      at log (assets/scripts/script.js:5681:13)
+
+    console.log
+      hashDisk n/a
+
+      at log (assets/scripts/script.js:5682:13)
+
+    console.log
+      hashBeforeParse 434:b99be388
+
+      at log (assets/scripts/script.js:5683:13)
+
+    console.info
+      Import raw diagnostics {
+        fileName: 'manual_text',
+        fileSize: 0,
+        typeofContent: 'string',
+        contentLength: 434,
+        signature: { length: 434, hash32: 'b99be388' },
+        normalization: null,
+        hashBeforeParse: '434:b99be388',
+        pipeline: null
+      }
+
+      at info (assets/scripts/script.js:5685:13)
+
+    console.log
+
+
+      at log (assets/scripts/script.js:5697:13)
+
+    console.info
+      Import normalization keys {
+        rootBefore: [ 'meta', 'expenses', 'savings', 'budgets', 'settings' ],
+        rootAfter: [
+          'meta',
+          'expenses',
+          'savings',
+          'budgets',
+          'settings',
+          'budgetPeriods',
+          'categories',
+          'persons',
+          'orders',
+          'quotations'
+        ],
+        expenseBefore: [
+          'id',
+          'type',
+          'amount',
+          'budgetId',
+          'date',
+          'runningBalance',
+          'BalanceBeforeTransaction',
+          'BalanceAfterTransaction',
+          'futureField'
+        ],
+        expenseAfter: [
+          'id',
+          'type',
+          'amount',
+          'budgetId',
+          'date',
+          'runningBalance',
+          'BalanceBeforeTransaction',
+          'BalanceAfterTransaction'
+        ],
+        savingsBefore: [],
+        savingsAfter: []
+      }
+
+      at info (assets/scripts/script.js:5486:13)
+
+    console.info
+      Import parse diagnostics {
+        typeofImportedData: 'object',
+        keys: [
+          'expenses',
+          'budgets',
+          'savings',
+          'budgetPeriods',
+          'categories',
+          'persons',
+          'settings',
+          'orders',
+          'quotations',
+          'meta'
+        ],
+        meta: { version: '2.0.0', exportedAt: '2026-06-06T18:32:58.792Z' },
+        settings: {
+          theme: '#22c55e',
+          currencyCode: 'INR',
+          accentColor: '#22c55e',
+          autoBackupTarget: 'local_download',
+          autoBackupEnabled: false,
+          autoBackupFrequency: 'weekly'
+        },
+        expensesCount: 1,
+        savingsCount: 0,
+        budgetsCount: 1,
+        budgetPeriodsCount: 0
+      }
+
+      at info (assets/scripts/script.js:5753:13)
+
+    console.info
+      Import Validation Report {
+        version: '2.0.0',
+        found: { expenses: 1, savings: 0, budgets: 1, budgetPeriods: 0 },
+        imported: { expenses: 1, savings: 0, budgets: 1, budgetPeriods: 0 },
+        warnings: [ 'Unknown Fields Removed: 4', 'Missing Fields Recovered: 5' ],
+        normalization: {
+          fieldsRemoved: [
+            'settings.temporaryFlag',
+            'meta.debugMeta',
+            'expenses[0].futureField',
+            'budgets[0].uiOnly'
+          ],
+          fieldsAdded: [
+            'budgetPeriods',
+            'categories',
+            'persons',
+            'orders',
+            'quotations'
+          ],
+          defaultsApplied: [
+            'budgetPeriods=[]',
+            'categories=default',
+            'persons=[]',
+            'orders=[]',
+            'quotations=default'
+          ],
+          warnings: [ 'Unknown Fields Removed: 4', 'Missing Fields Recovered: 5' ],
+          unknownFieldsRemoved: 4,
+          missingFieldsRecovered: 5
+        },
+        errors: []
+      }
+
+      at info (assets/scripts/script.js:5015:13)
+
+    console.log
+      manual_text
+
+      at log (assets/scripts/script.js:5678:13)
+
+    console.log
+      0
+
+      at log (assets/scripts/script.js:5679:13)
+
+    console.log
+      765
+
+      at log (assets/scripts/script.js:5680:13)
+
+    console.log
+
+
+      at log (assets/scripts/script.js:5681:13)
+
+    console.log
+      hashDisk n/a
+
+      at log (assets/scripts/script.js:5682:13)
+
+    console.log
+      hashBeforeParse 765:8bc0e413
+
+      at log (assets/scripts/script.js:5683:13)
+
+    console.info
+      Import raw diagnostics {
+        fileName: 'manual_text',
+        fileSize: 0,
+        typeofContent: 'string',
+        contentLength: 765,
+        signature: { length: 765, hash32: '8bc0e413' },
+        normalization: null,
+        hashBeforeParse: '765:8bc0e413',
+        pipeline: null
+      }
+
+      at info (assets/scripts/script.js:5685:13)
+
+    console.log
+
+
+      at log (assets/scripts/script.js:5697:13)
+
+    console.info
+      Import normalization keys {
+        rootBefore: [
+          'expenses',
+          'savings',
+          'budgets',
+          'budgetPeriods',
+          'settings',
+          'categories',
+          'persons',
+          'meta'
+        ],
+        rootAfter: [
+          'expenses',
+          'savings',
+          'budgets',
+          'budgetPeriods',
+          'settings',
+          'categories',
+          'persons',
+          'meta',
+          'orders',
+          'quotations'
+        ],
+        expenseBefore: [
+          'id',
+          'type',
+          'amount',
+          'budgetId',
+          'person',
+          'sourceId',
+          'linkedTransactionId',
+          'date'
+        ],
+        expenseAfter: [
+          'id',
+          'type',
+          'amount',
+          'budgetId',
+          'person',
+          'sourceId',
+          'linkedTransactionId',
+          'date'
+        ],
+        savingsBefore: [
+          'id',
+          'type',
+          'amount',
+          'autoRecovered',
+          'sourceId',
+          'linkedTransactionId',
+          'date'
+        ],
+        savingsAfter: [
+          'id',
+          'type',
+          'amount',
+          'autoRecovered',
+          'sourceId',
+          'linkedTransactionId',
+          'date'
+        ]
+      }
+
+      at info (assets/scripts/script.js:5486:13)
+
+    console.info
+      Import parse diagnostics {
+        typeofImportedData: 'object',
+        keys: [
+          'expenses',
+          'budgets',
+          'savings',
+          'budgetPeriods',
+          'categories',
+          'persons',
+          'settings',
+          'orders',
+          'quotations',
+          'meta'
+        ],
+        meta: { version: '2.0.0', exportedAt: '2026-06-06T18:32:58.801Z' },
+        settings: {
+          theme: '#2196f3',
+          currencyCode: 'INR',
+          accentColor: '#2196f3',
+          autoBackupTarget: 'local_download',
+          autoBackupEnabled: false,
+          autoBackupFrequency: 'weekly'
+        },
+        expensesCount: 2,
+        savingsCount: 1,
+        budgetsCount: 1,
+        budgetPeriodsCount: 1
+      }
+
+      at info (assets/scripts/script.js:5753:13)
+
+    console.info
+      Import Validation Report {
+        version: '2.0.0',
+        found: { expenses: 2, savings: 1, budgets: 1, budgetPeriods: 1 },
+        imported: { expenses: 2, savings: 1, budgets: 1, budgetPeriods: 1 },
+        warnings: [ 'Unknown Fields Removed: 0', 'Missing Fields Recovered: 3' ],
+        normalization: {
+          fieldsRemoved: [],
+          fieldsAdded: [ 'orders', 'quotations' ],
+          defaultsApplied: [
+            'orders=[]',
+            'quotations=default',
+            'categories=default(fallback)'
+          ],
+          warnings: [ 'Unknown Fields Removed: 0', 'Missing Fields Recovered: 3' ],
+          unknownFieldsRemoved: 0,
+          missingFieldsRecovered: 3
+        },
+        errors: []
+      }
+
+      at info (assets/scripts/script.js:5015:13)
+
+    console.log
+      manual_text
+
+      at log (assets/scripts/script.js:5678:13)
+
+    console.log
+      0
+
+      at log (assets/scripts/script.js:5679:13)
+
+    console.log
+      352
+
+      at log (assets/scripts/script.js:5680:13)
+
+    console.log
+
+
+      at log (assets/scripts/script.js:5681:13)
+
+    console.log
+      hashDisk n/a
+
+      at log (assets/scripts/script.js:5682:13)
+
+    console.log
+      hashBeforeParse 352:53473b91
+
+      at log (assets/scripts/script.js:5683:13)
+
+    console.info
+      Import raw diagnostics {
+        fileName: 'manual_text',
+        fileSize: 0,
+        typeofContent: 'string',
+        contentLength: 352,
+        signature: { length: 352, hash32: '53473b91' },
+        normalization: null,
+        hashBeforeParse: '352:53473b91',
+        pipeline: null
+      }
+
+      at info (assets/scripts/script.js:5685:13)
+
+    console.log
+
+
+      at log (assets/scripts/script.js:5697:13)
+
+    console.info
+      Import normalization keys {
+        rootBefore: [ 'expenses', 'savings', 'budgets', 'settings', 'meta' ],
+        rootAfter: [
+          'expenses',
+          'savings',
+          'budgets',
+          'settings',
+          'meta',
+          'budgetPeriods',
+          'categories',
+          'persons',
+          'orders',
+          'quotations'
+        ],
+        expenseBefore: [ 'id', 'type', 'amount', 'budgetId', 'date' ],
+        expenseAfter: [ 'id', 'type', 'amount', 'budgetId', 'date' ],
+        savingsBefore: [ 'id', 'type', 'amount', 'date' ],
+        savingsAfter: [ 'id', 'type', 'amount', 'date' ]
+      }
+
+      at info (assets/scripts/script.js:5486:13)
+
+    console.info
+      Import parse diagnostics {
+        typeofImportedData: 'object',
+        keys: [
+          'expenses',
+          'budgets',
+          'savings',
+          'budgetPeriods',
+          'categories',
+          'persons',
+          'settings',
+          'orders',
+          'quotations',
+          'meta'
+        ],
+        meta: { version: '2.0.0', exportedAt: '2026-06-06T18:32:58.812Z' },
+        settings: {
+          theme: '#22c55e',
+          currencyCode: 'INR',
+          accentColor: '#22c55e',
+          autoBackupTarget: 'local_download',
+          autoBackupEnabled: false,
+          autoBackupFrequency: 'weekly'
+        },
+        expensesCount: 1,
+        savingsCount: 1,
+        budgetsCount: 1,
+        budgetPeriodsCount: 0
+      }
+
+      at info (assets/scripts/script.js:5753:13)
+
+    console.info
+      Import Validation Report {
+        version: '2.0.0',
+        found: { expenses: 1, savings: 1, budgets: 1, budgetPeriods: 0 },
+        imported: { expenses: 1, savings: 1, budgets: 1, budgetPeriods: 0 },
+        warnings: [
+          'Unknown Fields Removed: 0',
+          'Missing Fields Recovered: 5',
+          'Schema migration applied from 1.0.0 to 2.0.0'
+        ],
+        normalization: {
+          fieldsRemoved: [],
+          fieldsAdded: [
+            'budgetPeriods',
+            'categories',
+            'persons',
+            'orders',
+            'quotations'
+          ],
+          defaultsApplied: [
+            'budgetPeriods=[]',
+            'categories=default',
+            'persons=[]',
+            'orders=[]',
+            'quotations=default'
+          ],
+          warnings: [
+            'Unknown Fields Removed: 0',
+            'Missing Fields Recovered: 5',
+            'Schema migration applied from 1.0.0 to 2.0.0'
+          ],
+          unknownFieldsRemoved: 0,
+          missingFieldsRecovered: 5
+        },
+        errors: []
+      }
+
+      at info (assets/scripts/script.js:5015:13)
+
+    console.log
+      manual_text
+
+      at log (assets/scripts/script.js:5678:13)
+
+    console.log
+      0
+
+      at log (assets/scripts/script.js:5679:13)
+
+    console.log
+      489
+
+      at log (assets/scripts/script.js:5680:13)
+
+    console.log
+
+
+      at log (assets/scripts/script.js:5681:13)
+
+    console.log
+      hashDisk n/a
+
+      at log (assets/scripts/script.js:5682:13)
+
+    console.log
+      hashBeforeParse 489:dc5673d9
+
+      at log (assets/scripts/script.js:5683:13)
+
+    console.info
+      Import raw diagnostics {
+        fileName: 'manual_text',
+        fileSize: 0,
+        typeofContent: 'string',
+        contentLength: 489,
+        signature: { length: 489, hash32: 'dc5673d9' },
+        normalization: null,
+        hashBeforeParse: '489:dc5673d9',
+        pipeline: null
+      }
+
+      at info (assets/scripts/script.js:5685:13)
+
+    console.log
+
+
+      at log (assets/scripts/script.js:5697:13)
+
+    console.info
+      Import normalization keys {
+        rootBefore: [ 'expenses', 'savings', 'budgets', 'settings', 'meta' ],
+        rootAfter: [
+          'expenses',
+          'savings',
+          'budgets',
+          'settings',
+          'meta',
+          'budgetPeriods',
+          'categories',
+          'persons',
+          'orders',
+          'quotations'
+        ],
+        expenseBefore: [ 'id', 'type', 'amount', 'budgetId', 'date' ],
+        expenseAfter: [ 'id', 'type', 'amount', 'budgetId', 'date' ],
+        savingsBefore: [],
+        savingsAfter: []
+      }
+
+      at info (assets/scripts/script.js:5486:13)
+
+    console.info
+      Import parse diagnostics {
+        typeofImportedData: 'object',
+        keys: [
+          'expenses',
+          'budgets',
+          'savings',
+          'budgetPeriods',
+          'categories',
+          'persons',
+          'settings',
+          'orders',
+          'quotations',
+          'meta'
+        ],
+        meta: { version: '2.0.0', exportedAt: '2026-06-06T18:32:58.821Z' },
+        settings: {
+          theme: '',
+          currencyCode: 'INR',
+          accentColor: '',
+          autoBackupTarget: 'local_download',
+          autoBackupEnabled: false,
+          autoBackupFrequency: 'weekly'
+        },
+        expensesCount: 3,
+        savingsCount: 0,
+        budgetsCount: 1,
+        budgetPeriodsCount: 0
+      }
+
+      at info (assets/scripts/script.js:5753:13)
+
+    console.info
+      Import Validation Report {
+        version: '2.0.0',
+        found: { expenses: 3, savings: 0, budgets: 1, budgetPeriods: 0 },
+        imported: { expenses: 3, savings: 0, budgets: 1, budgetPeriods: 0 },
+        warnings: [ 'Unknown Fields Removed: 0', 'Missing Fields Recovered: 7' ],
+        normalization: {
+          fieldsRemoved: [],
+          fieldsAdded: [
+            'budgetPeriods',
+            'categories',
+            'persons',
+            'orders',
+            'quotations',
+            'settings.theme',
+            'settings.currencyCode'
+          ],
+          defaultsApplied: [
+            'budgetPeriods=[]',
+            'categories=default',
+            'persons=[]',
+            'orders=[]',
+            'quotations=default',
+            'settings.theme=',
+            'settings.currencyCode=INR'
+          ],
+          warnings: [ 'Unknown Fields Removed: 0', 'Missing Fields Recovered: 7' ],
+          unknownFieldsRemoved: 0,
+          missingFieldsRecovered: 7
+        },
+        errors: []
+      }
+
+      at info (assets/scripts/script.js:5015:13)
+
+    console.log
+      Γ£à Manual export completed
+
+      at log (assets/scripts/script.js:9588:17)
+
+    console.log
+      Γ£à Manual export completed
+
+      at log (assets/scripts/script.js:9588:17)
+
+    console.log
+      [DEBUG SCREEN SIZE] applyResponsiveLayout | Current Width: 390 | Current Height: 768 | Detected Layout: mobile
+
+      at log (assets/scripts/script.js:2474:17)
+
+    console.log
+      Γ£à Manual export completed
+
+      at log (assets/scripts/script.js:9588:17)
+
+    console.log
+      manual_text
+
+      at log (assets/scripts/script.js:5678:13)
+
+    console.log
+      0
+
+      at log (assets/scripts/script.js:5679:13)
+
+    console.log
+      1288
+
+      at log (assets/scripts/script.js:5680:13)
+
+    console.log
+
+
+      at log (assets/scripts/script.js:5681:13)
+
+    console.log
+      hashDisk n/a
+
+      at log (assets/scripts/script.js:5682:13)
+
+    console.log
+      hashBeforeParse 1288:b419fa27
+
+      at log (assets/scripts/script.js:5683:13)
+
+    console.info
+      Import raw diagnostics {
+        fileName: 'manual_text',
+        fileSize: 0,
+        typeofContent: 'string',
+        contentLength: 1288,
+        signature: { length: 1288, hash32: 'b419fa27' },
+        normalization: null,
+        hashBeforeParse: '1288:b419fa27',
+        pipeline: null
+      }
+
+      at info (assets/scripts/script.js:5685:13)
+
+    console.log
+
+
+      at log (assets/scripts/script.js:5697:13)
+
+    console.info
+      Import normalization keys {
+        rootBefore: [
+          'expenses',
+          'budgets',
+          'savings',
+          'budgetPeriods',
+          'categories',
+          'persons',
+          'settings',
+          'orders',
+          'quotations',
+          'meta'
+        ],
+        rootAfter: [
+          'expenses',
+          'budgets',
+          'savings',
+          'budgetPeriods',
+          'categories',
+          'persons',
+          'settings',
+          'orders',
+          'quotations',
+          'meta'
+        ],
+        expenseBefore: [
+          'id',
+          'type',
+          'amount',
+          'budgetId',
+          'date',
+          'BalanceBeforeTransaction',
+          'BalanceAfterTransaction',
+          'runningBalance',
+          'linkedBudgetId'
+        ],
+        expenseAfter: [
+          'id',
+          'type',
+          'amount',
+          'budgetId',
+          'date',
+          'BalanceBeforeTransaction',
+          'BalanceAfterTransaction',
+          'runningBalance'
+        ],
+        savingsBefore: [
+          'id',
+          'type',
+          'amount',
+          'date',
+          'BalanceBeforeTransaction',
+          'BalanceAfterTransaction',
+          'runningBalance'
+        ],
+        savingsAfter: [
+          'id',
+          'type',
+          'amount',
+          'date',
+          'BalanceBeforeTransaction',
+          'BalanceAfterTransaction',
+          'runningBalance'
+        ]
+      }
+
+      at info (assets/scripts/script.js:5486:13)
+
+    console.info
+      Import parse diagnostics {
+        typeofImportedData: 'object',
+        keys: [
+          'expenses',
+          'budgets',
+          'savings',
+          'budgetPeriods',
+          'categories',
+          'persons',
+          'settings',
+          'orders',
+          'quotations',
+          'meta'
+        ],
+        meta: { exportedAt: '2026-06-06T18:32:58.865Z', version: '2.0.0' },
+        settings: {
+          theme: '',
+          appearanceMode: 'metallic',
+          accentColor: '#4caf50',
+          currencyCode: 'INR',
+          autoBackup: false,
+          backupFrequency: 'weekly',
+          autoBackupEnabled: false,
+          autoBackupFrequency: 'weekly',
+          autoBackupTarget: 'local_download'
+        },
+        expensesCount: 1,
+        savingsCount: 1,
+        budgetsCount: 1,
+        budgetPeriodsCount: 0
+      }
+
+      at info (assets/scripts/script.js:5753:13)
+
+    console.info
+      Import Validation Report {
+        version: '2.0.0',
+        found: { expenses: 1, savings: 1, budgets: 1, budgetPeriods: 0 },
+        imported: { expenses: 1, savings: 1, budgets: 1, budgetPeriods: 0 },
+        warnings: [ 'Unknown Fields Removed: 1', 'Missing Fields Recovered: 1' ],
+        normalization: {
+          fieldsRemoved: [ 'expenses[0].linkedBudgetId' ],
+          fieldsAdded: [],
+          defaultsApplied: [ 'categories=default(fallback)' ],
+          warnings: [ 'Unknown Fields Removed: 1', 'Missing Fields Recovered: 1' ],
+          unknownFieldsRemoved: 1,
+          missingFieldsRecovered: 1
+        },
+        errors: []
+      }
+
+      at info (assets/scripts/script.js:5015:13)
+
+  ΓùÅ import rejects unsupported version and recovers invalid root collections via normalization
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: true
+    Received: false
+
+      767 |
+      768 |     const report = window.__lastImportValidationReport;
+    > 769 |     expect(report.errors.some(e => e.includes('Unsupported Version'))).toBe(true);
+          |                                                                        ^
+      770 |     expect((report.normalization && report.normalization.missingFieldsRecovered) || 0).toBeGreaterThan(0);
+      771 | });
+      772 |
+
+      at Object.toBe (tests/risk-hardening.test.js:769:72)
+
+PASS tests/workflow-simulation.test.js
+PASS tests/schema-migration.test.js
+PASS tests/finance.test.js
+------------|---------|----------|---------|---------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+File        | % Stmts | % Branch | % Funcs | % Lines | Uncovered Line #s                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      
+------------|---------|----------|---------|---------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+All files   |   43.04 |    35.74 |   40.53 |   45.17 |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        
+ savings.js |   11.67 |     8.02 |    8.47 |   12.18 | 511-514,522-523,529-530,540-567,575-597,607-608,613-735,745-751,755-764,786-1394,1440-1441,1448,1486-1487,1507-1508,1516-1517,1527-1671,1730-2202,2222-2226,2230-2232,2236-2242,2253-2704,2708-2709,2715-2919,2923-2949,2993-3038,3054-3061,3068-3100                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  
+ script.js  |   52.44 |    44.33 |   49.75 |   54.97 | 36-37,45,61-62,74-75,95-115,129,142,195-232,244,281,331-337,372,380,395,401,425,467,512-529,562-563,570-571,577-625,638-645,651-664,667-668,693-797,853-897,910-912,919,926,934,938-940,961-970,987-1003,1012-1013,1020-1023,1038-1039,1182-1219,1254-1255,1284,1317,1356-1362,1439-1516,1598,1619,1627,1629,1631,1633,1670-1696,1706,1710-1740,1749,1759,1765,1771,1817-1871,1901-1907,1911-1919,1927-1928,1949-1950,1954-1955,1959-1960,1964-1992,2009,2029-2031,2037-2038,2040,2048-2049,2125-2211,2251,2265-2293,2304-2433,2443,2453-2454,2489-2490,2495-2509,2518-2564,2570-2744,2799,2808-2972,2994-2995,3002,3014-3015,3055-3056,3060-3061,3129-3130,3206,3524,3535-3550,3557,3660-3806,3836-3837,3842-3857,3862,3867,3876-3897,3925,3934,3957-3958,4040,4060,4094,4117-4118,4122,4131,4158,4174,4209-4246,4256-4265,4276-4283,4303-4304,4316-4335,4355,4363,4396-4413,4438-4509,4556,4574-4689,4834-4847,4882-4885,4919,4945,5121,5135,5139,5200-5238,5277,5341-5343,5356-5359,5363-5366,5409-5412,5416-5419,5440-5443,5447-5450,5482-5483,5515-5516,5525,5531-5533,5537-5542,5548-5549,5551,5555-5556,5558,5564,5570,5576,5585-5586,5590,5595,5623-5624,5629,5637-5638,5644,5651,5655,5659,5702-5703,5764-5774,5801,5810-5811,5856-5866,5879-5913,6163-6185,6201-6499,6804,6822,6860,6944-6970,7029-7116,7135,7240,7336-7337,7501-7508,7520,7645-7766,7784-7785,7794-7939,8043-8347,8401-8405,8557-8849,8856-8934,9058-9142,9403,9407-9421,9431-9439,9459,9463,9484,9491,9499,9594,9621,9630-9632,9637-9639,9644-9645,9686-9687,9691-9692,9696-9697,9704-9818 
+------------|---------|----------|---------|---------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+Test Suites: 2 failed, 3 passed, 5 total
+Tests:       2 failed, 69 passed, 71 total
+Snapshots:   0 total
+Time:        3.439 s
+Ran all test suites.
+
+> money-tracker-tests@1.0.0 build
+> node scripts/build.js
+
+Build validation passed for static web app.
+--- Release Gate Summary ---
+Coverage % (lines): 45.17
+Critical Issues: 1
+High Issues: 0
+Medium Issues: 1
+Low Issues: 0
+NOT READY FOR PRODUCTION

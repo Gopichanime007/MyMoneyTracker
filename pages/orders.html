@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <title>Orders Workspace</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <link rel="stylesheet" href="../assets/styles/style.css">
+  <link rel="stylesheet" href="../assets/styles/orders.css">
+</head>
+
+<body>
+  <!-- =========================
+   🗑 DELETE MODAL
+========================= -->
+  <div id="deleteModal" class="modal hidden">
+
+    <div class="modal-box">
+
+      <h3>Cancel Order</h3>
+
+      <p class="modal-sub">Enter cancellation reason (optional)</p>
+
+      <input type="text" id="deleteReason" placeholder="Ex: Cancelled / Wrong order">
+
+      <div class="modal-actions">
+        <button class="secondary" onclick="closeDeleteModal()">Cancel</button>
+        <button class="danger" onclick="confirmDelete()">Confirm Cancel</button>
+      </div>
+
+    </div>
+
+  </div>
+
+  <div class="app">
+
+    <!-- 🔙 HEADER -->
+    <header class="header header-row">
+      <button class="back-btn" onclick="window.location.href='../index.html'">←</button>
+      <h2>📦 Orders Workspace</h2>
+    </header>
+
+    <!-- 📦 CONTENT CARD -->
+    <div class="card">
+
+      <div class="orders-toolbar">
+        <h4>Order Execution Records</h4>
+        <select id="ordersStatusFilter" onchange="renderOrders()">
+          <option value="all">All Statuses</option>
+          <option value="draft">Draft</option>
+          <option value="open">Open</option>
+          <option value="completed">Completed</option>
+          <option value="cancelled">Cancelled</option>
+        </select>
+      </div>
+
+      <!-- Orders will be injected here -->
+      <div id="ordersList"></div>
+
+    </div>
+
+  </div>
+
+  <!-- 📜 SCRIPT -->
+  <script src="../assets/scripts/script.js"></script>
+  <script src="../assets/scripts/orders.js"></script>
+</body>
+
+</html>

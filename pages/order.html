@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <title>Order</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <link rel="stylesheet" href="../assets/styles/style.css">
+  <link rel="stylesheet" href="../assets/styles/order.css">
+</head>
+
+<body>
+
+  <div class="app">
+
+    <header class="header">
+      <div class="header-row">
+        <button class="back-btn" type="button" onclick="goBackToQuotation()" aria-label="Back to quotation">←</button>
+        <div>
+          <h2>Order</h2>
+          <p class="header-subtitle">Execute accepted purchase plan</p>
+        </div>
+      </div>
+    </header>
+
+    <div class="card">
+
+      <div class="section-heading">
+        <h3>Order Overview</h3>
+      </div>
+
+      <div class="lifecycle-strip">
+        <div class="meta-block">
+          <small>Status</small>
+          <strong id="orderStatusLabel" class="status-pill status-draft">Draft</strong>
+        </div>
+        <div class="meta-block">
+          <small>Order ID</small>
+          <strong id="orderIdLabel">-</strong>
+        </div>
+        <div class="meta-block">
+          <small>Order No.</small>
+          <strong id="orderNoLabel">-</strong>
+        </div>
+        <div class="meta-block">
+          <small>Created</small>
+          <strong id="orderCreatedLabel">-</strong>
+        </div>
+        <div class="meta-block">
+          <small>Total Amount</small>
+          <strong id="orderTotalAmount">0</strong>
+        </div>
+      </div>
+
+      <div class="order-context">
+        <p><strong>Purpose:</strong> <span id="orderPurposeLabel">-</span></p>
+        <p><strong>Quotation:</strong> <span id="orderQuotationLabel">-</span></p>
+        <p><strong>Funding Source:</strong> <span id="orderSourceLabel">Not selected</span></p>
+      </div>
+
+      <div class="section-heading">
+        <h4>Items</h4>
+      </div>
+
+      <div class="table-wrapper">
+        <div class="table-scroll">
+
+          <div class="table-header">
+            <span>Name</span>
+            <span>Price</span>
+            <span>Qty</span>
+            <span>Source</span>
+            <span>Link</span>
+            <span>Total</span>
+          </div>
+
+          <div id="orderItems"></div>
+
+        </div>
+      </div>
+
+      <div class="summary">
+        <p>Subtotal: <span id="oSubtotal">0</span></p>
+        <p>GST: <span id="oGSTAmount">0</span></p>
+        <h3>Total: <span id="oFinalTotal">0</span></h3>
+      </div>
+
+      <div class="section-heading">
+        <h4>Status Timeline</h4>
+      </div>
+      <div class="status-timeline" id="orderStatusTimeline" aria-label="Order status timeline">
+        <span class="status-step" data-order-step="draft">Draft</span>
+        <span class="status-step" data-order-step="confirmed">Confirmed</span>
+        <span class="status-step" data-order-step="processing">Processing</span>
+        <span class="status-step" data-order-step="completed">Completed</span>
+      </div>
+
+      <div class="section-heading">
+        <h4>Funding Details</h4>
+      </div>
+      <div id="sourcePreview"></div>
+
+      <div class="section-heading">
+        <h4>Payment</h4>
+      </div>
+      <select id="oPaymentType">
+        <option value="">Payment Type</option>
+        <option>UPI</option>
+        <option>Cash</option>
+        <option>Card</option>
+      </select>
+
+      <div class="section-heading">
+        <h4>Actions</h4>
+      </div>
+      <div class="workflow-actions" id="orderWorkflowActions">
+        <button class="primary" type="button" data-order-action="confirmed" onclick="completePurchase()">Confirm</button>
+        <button class="secondary" type="button" data-order-action="processing" onclick="advanceOrderStatus('processing')">Process</button>
+        <button class="secondary" type="button" data-order-action="completed" onclick="advanceOrderStatus('completed')">Complete</button>
+        <button class="secondary danger" type="button" data-order-action="cancelled" onclick="cancelOrder()">Cancel</button>
+      </div>
+
+      <div class="section-heading">
+        <h4>Audit Trail</h4>
+      </div>
+      <div id="orderAuditTrail" class="audit-trail"></div>
+
+    </div>
+
+  </div>
+  <script src="../assets/scripts/storage.js"></script>
+  <script src="../assets/scripts/script.js"></script>
+  <script src="../assets/scripts/order.js"></script>
+</body>
+
+</html>

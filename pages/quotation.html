@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <title>Purchase Plan</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <link rel="stylesheet" href="../assets/styles/style.css">
+  <link rel="stylesheet" href="../assets/styles/quotation.css">
+</head>
+
+<body>
+
+  <div class="app">
+
+    <header class="header">
+      <div class="header-row">
+        <button onclick="goBack()" class="back-btn" type="button" aria-label="Go back">←</button>
+        <div>
+          <h2>Purchase Plan</h2>
+          <p class="header-subtitle">Plan purpose, choose funding, then create execution order</p>
+        </div>
+      </div>
+    </header>
+
+    <div class="card">
+
+      <div class="section-heading">
+        <h3>Purchase Plan Overview</h3>
+      </div>
+
+      <div class="meta-block">
+        <label for="quotationPurpose">Purpose / Title</label>
+        <input type="text" id="quotationPurpose" placeholder="Ex: New Laptop Purchase" />
+      </div>
+
+      <div class="lifecycle-strip">
+        <div class="meta-block">
+          <small>Status</small>
+          <strong id="quotationStatusLabel" class="status-pill status-draft">Draft</strong>
+        </div>
+        <div class="meta-block">
+          <small>Quotation No.</small>
+          <strong id="quotationNoLabel">-</strong>
+        </div>
+        <div class="meta-block">
+          <label for="quotationValidityDate">Valid Until</label>
+          <input type="date" id="quotationValidityDate" />
+        </div>
+      </div>
+
+      <div class="status-timeline" id="quotationStatusTimeline" aria-label="Quotation status timeline">
+        <span class="status-step" data-status-step="draft">Draft</span>
+        <span class="status-step" data-status-step="accepted">Accepted</span>
+        <span class="status-step" data-status-step="converted">Converted</span>
+      </div>
+
+      <div class="status-actions" id="quotationStatusActions">
+        <button class="secondary" type="button" data-quote-action="accepted" onclick="setQuotationStatus('accepted')">Accept Plan</button>
+        <button class="secondary" type="button" data-quote-action="draft" onclick="setQuotationStatus('draft')">Reopen Draft</button>
+      </div>
+
+      <div class="section-heading">
+        <h4>Funding Source</h4>
+      </div>
+
+      <select id="qSourceType" onchange="loadQuotationFundingOptions()">
+        <option value="">Select Source Type</option>
+        <option value="savings">Savings</option>
+        <option value="budget">Budget</option>
+      </select>
+
+      <select id="qSourceValue" onchange="renderQuotationFundingPreview()">
+        <option value="">Select Funding Account</option>
+      </select>
+
+      <div id="qFundingPreview" class="audit-trail"></div>
+
+      <div class="section-heading">
+        <h4>Expense Plan Items</h4>
+        <div class="row compact-actions">
+          <button id="addQuotationItemBtn" class="primary" type="button" onclick="openItemModal()">Add Item</button>
+          <button id="addQuotationChargeBtn" class="secondary" type="button" onclick="openChargeModal()">Add Charge</button>
+        </div>
+      </div>
+
+      <div class="table-wrapper">
+        <div class="table-scroll">
+
+          <div class="table-header">
+            <span>Name</span>
+            <span>Price</span>
+            <span>Qty</span>
+            <span>Source</span>
+            <span>Link</span>
+            <span>Total</span>
+            <span>Action</span>
+          </div>
+
+          <div id="quotationItems"></div>
+
+        </div>
+      </div>
+
+      <div class="section-heading">
+        <h4>Charges</h4>
+      </div>
+      <div id="chargesList"></div>
+
+      <div class="summary">
+        <p>Subtotal: <span id="qSubtotal">0</span></p>
+        <p>GST: <span id="qGSTAmount">0</span></p>
+        <h3>Total: <span id="qFinalTotal">0</span></h3>
+      </div>
+
+      <div class="section-heading">
+        <h4>Recent Activity</h4>
+      </div>
+      <div id="quotationAuditTrail" class="audit-trail"></div>
+
+      <div class="footer-actions">
+        <button id="saveDraftBtn" class="secondary" type="button" onclick="savePurchasePlanDraft()">Save Draft</button>
+        <button id="convertQuotationBtn" class="primary" type="button" onclick="convertToOrder()">Create Order</button>
+        <button id="clearQuotationBtn" class="secondary" type="button" onclick="clearQuotation()">Delete Draft</button>
+      </div>
+
+    </div>
+
+  </div>
+
+  <!-- ================= ITEM MODAL ================= -->
+  <div id="itemModal" class="modal">
+    <div class="modal-content">
+
+      <h3>Add Expense Plan Item</h3>
+
+      <!-- PRODUCT -->
+      <div class="form-group">
+        <label>Product Name</label>
+        <input type="text" id="mName" placeholder="Enter product name">
+      </div>
+
+      <!-- PRICE + QTY + UNIT -->
+      <div class="form-row">
+
+        <div class="form-field">
+          <label>Price</label>
+          <input type="number" id="mPrice" placeholder="Price">
+        </div>
+
+        <div class="form-field">
+          <label>Qty</label>
+          <input type="number" id="mQty" step="0.01" placeholder="Qty">
+        </div>
+
+        <div class="form-field">
+          <label>Unit</label>
+          <select id="mUnit">
+            <option value="pcs">pcs</option>
+            <option value="kg">kg</option>
+            <option value="g">g</option>
+            <option value="ltr">ltr</option>
+            <option value="hrs">hrs</option>
+            <option value="pack">pack</option>
+          </select>
+        </div>
+
+      </div>
+
+      <!-- SOURCE -->
+      <div class="form-group">
+        <label>Source</label>
+        <select id="mSource" onchange="handleSourceChange(this.value)">
+          <option value="">Select source</option>
+        </select>
+
+        <input type="text" id="newSourceInput" placeholder="Enter new source" style="display:none; margin-top:8px;">
+      </div>
+
+      <!-- LINK -->
+      <div class="form-group">
+        <label>Product Link</label>
+
+        <div class="link-row">
+          <input type="text" id="mLink" placeholder="Paste product link">
+          <button class="secondary" onclick="openProductLink()">🔍</button>
+        </div>
+      </div>
+
+      <!-- ACTIONS -->
+      <div class="modal-actions">
+        <button class="secondary" onclick="closeItemModal()">Cancel</button>
+        <button class="primary" onclick="addItemFromModal()">Add Item</button>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ================= CHARGE MODAL ================= -->
+  <div id="chargeModal" class="modal">
+    <div class="modal-content">
+
+      <h3>Add Charge</h3>
+
+      <select id="cType">
+        <option value="delivery">Delivery</option>
+        <option value="gst">GST</option>
+        <option value="discount">Discount</option>
+        <option value="custom">Custom</option>
+      </select>
+
+      <input type="text" id="cCustomLabel" placeholder="Custom charge name" style="display:none;">
+
+      <input type="number" id="cValue" placeholder="Value">
+
+      <select id="cMode">
+        <option value="fixed" id="fixedCurrencyOption">Fixed</option>
+        <option value="percent">Percentage %</option>
+      </select>
+      <label>Apply To</label>
+      <select id="cApplyTo">
+        <option value="all">All Items</option>
+      </select>
+
+      <div class="modal-actions">
+        <button class="secondary" onclick="closeChargeModal()">Cancel</button>
+        <button class="primary" onclick="addCharge()">Add</button>
+      </div>
+
+    </div>
+  </div>
+
+  <script src="../assets/scripts/storage.js"></script>
+  <script src="../assets/scripts/script.js"></script>
+  <script src="../assets/scripts/quotation.js"></script>
+</body>
+
+</html>
