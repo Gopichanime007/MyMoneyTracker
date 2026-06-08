@@ -161,6 +161,38 @@
             return next;
         }
 
+        function setFilters(moduleName, filters) {
+            var key = normalizeModuleName(moduleName);
+            var current = store.getState(key);
+            var next = store.setState(key, {
+                version: 'v1',
+                module: key,
+                search: current.search || { text: '', fields: [] },
+                filters: Array.isArray(filters) ? filters : [],
+                sort: Array.isArray(current.sort) ? current.sort : []
+            });
+            persist();
+            return next;
+        }
+
+        function clearFilters(moduleName) {
+            return setFilters(moduleName, []);
+        }
+
+        function buildPeriodFilterDescriptor(field, periodType, from, to, now) {
+            return {
+                version: 'v1',
+                field: typeof field === 'string' && field ? field : 'date',
+                op: 'period',
+                value: {
+                    type: periodType || 'all',
+                    from: from || null,
+                    to: to || null,
+                    now: now || null
+                }
+            };
+        }
+
         function applyModuleSearch(moduleName, rows, overrides) {
             var key = normalizeModuleName(moduleName);
             var list = Array.isArray(rows) ? rows : [];
@@ -199,6 +231,39 @@
             });
         }
 
+        function applyLegacyDateFilter(moduleName, rows, periodType, from, to, now, fieldName) {
+            var key = normalizeModuleName(moduleName);
+            var current = store.getState(key);
+            var period = periodType || 'all';
+            var filterList = [];
+
+            if (period !== 'all') {
+                filterList.push(buildPeriodFilterDescriptor(fieldName || 'date', period, from, to, now));
+            }
+
+            var descriptor = {
+                version: 'v1',
+                module: key,
+                search: current.search || { text: '', fields: (getAdapter(key).searchFields || []).slice() },
+                filters: filterList,
+                sort: Array.isArray(current.sort) ? current.sort : []
+            };
+
+            if (!hasQueryEngine() || typeof globalScope.QueryEngine.runQueryPipeline !== 'function') {
+                return {
+                    descriptor: descriptor,
+                    totalCount: Array.isArray(rows) ? rows.length : 0,
+                    normalizedCount: Array.isArray(rows) ? rows.length : 0,
+                    resultCount: Array.isArray(rows) ? rows.length : 0,
+                    results: Array.isArray(rows) ? rows : []
+                };
+            }
+
+            return globalScope.QueryEngine.runQueryPipeline(Array.isArray(rows) ? rows : [], descriptor, {
+                normalizeItem: function identity(item) { return item; }
+            });
+        }
+
         function getState(moduleName) {
             return store.getState(normalizeModuleName(moduleName));
         }
@@ -217,7 +282,11 @@
             setState: setState,
             setSearchText: setSearchText,
             clearSearch: clearSearch,
+            setFilters: setFilters,
+            clearFilters: clearFilters,
+            buildPeriodFilterDescriptor: buildPeriodFilterDescriptor,
             applyModuleSearch: applyModuleSearch,
+            applyLegacyDateFilter: applyLegacyDateFilter,
             persist: persist
         };
     }

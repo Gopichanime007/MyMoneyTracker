@@ -58,6 +58,23 @@
         };
     }
 
+    function createFilterDescriptorV1(input) {
+        var source = input || {};
+        return {
+            version: QUERY_DESCRIPTOR_VERSION,
+            field: typeof source.field === 'string' ? source.field : '',
+            op: typeof source.op === 'string' ? source.op : 'eq',
+            value: source.value,
+            values: normalizeArray(source.values),
+            from: source.from,
+            to: source.to,
+            logic: source.logic === 'or' ? 'or' : 'and',
+            conditions: normalizeArray(source.conditions).map(function (condition) {
+                return createFilterDescriptorV1(condition);
+            })
+        };
+    }
+
     function createQueryStateStore(initialStateByModule) {
         var state = {};
         var subscribers = {};
@@ -162,6 +179,59 @@
         });
     }
 
+    function toComparableDate(value) {
+        var parsed = new Date(value);
+        var time = parsed.getTime();
+        return Number.isFinite(time) ? time : null;
+    }
+
+    function evaluatePeriodValue(value, periodDef) {
+        var period = periodDef || {};
+        var now = period.now ? new Date(period.now) : new Date();
+        var target = toComparableDate(value);
+        if (target === null) {
+            return false;
+        }
+
+        var start = null;
+        var end = null;
+
+        if (period.type === 'today') {
+            start = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0).getTime();
+            end = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999).getTime();
+        } else if (period.type === 'week') {
+            var weekStart = new Date(now);
+            weekStart.setDate(now.getDate() - 6);
+            weekStart.setHours(0, 0, 0, 0);
+            start = weekStart.getTime();
+            end = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999).getTime();
+        } else if (period.type === 'month') {
+            start = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0).getTime();
+            end = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999).getTime();
+        } else {
+            start = period.from ? toComparableDate(period.from) : null;
+            end = period.to ? toComparableDate(period.to) : null;
+            if (start !== null) {
+                var startDay = new Date(start);
+                startDay.setHours(0, 0, 0, 0);
+                start = startDay.getTime();
+            }
+            if (end !== null) {
+                var endDay = new Date(end);
+                endDay.setHours(23, 59, 59, 999);
+                end = endDay.getTime();
+            }
+        }
+
+        if (start !== null && target < start) {
+            return false;
+        }
+        if (end !== null && target > end) {
+            return false;
+        }
+        return true;
+    }
+
     function evaluateFilter(row, filter) {
         if (!filter || typeof filter !== 'object') {
             return true;
@@ -171,30 +241,72 @@
             return Boolean(filter.predicate(row));
         }
 
-        if (!filter.field || !filter.op) {
+        var descriptor = createFilterDescriptorV1(filter);
+
+        if (descriptor.conditions.length) {
+            if (descriptor.logic === 'or') {
+                return descriptor.conditions.some(function (condition) {
+                    return evaluateFilter(row, condition);
+                });
+            }
+
+            return descriptor.conditions.every(function (condition) {
+                return evaluateFilter(row, condition);
+            });
+        }
+
+        if (!descriptor.field || !descriptor.op) {
             return true;
         }
 
-        var value = row[filter.field];
-        var target = filter.value;
+        var value = row[descriptor.field];
+        var target = descriptor.value;
 
-        if (filter.op === 'eq') {
+        if (descriptor.op === 'eq') {
             return value === target;
         }
-        if (filter.op === 'neq') {
+        if (descriptor.op === 'neq') {
             return value !== target;
         }
-        if (filter.op === 'gte') {
+        if (descriptor.op === 'gt') {
+            return value > target;
+        }
+        if (descriptor.op === 'gte') {
             return value >= target;
         }
-        if (filter.op === 'lte') {
+        if (descriptor.op === 'lt') {
+            return value < target;
+        }
+        if (descriptor.op === 'lte') {
             return value <= target;
         }
-        if (filter.op === 'contains') {
+        if (descriptor.op === 'contains') {
             return normalizeString(value).indexOf(normalizeString(target)) !== -1;
         }
-        if (filter.op === 'in' && Array.isArray(target)) {
+        if (descriptor.op === 'starts_with') {
+            return normalizeString(value).indexOf(normalizeString(target)) === 0;
+        }
+        if (descriptor.op === 'ends_with') {
+            var left = normalizeString(value);
+            var right = normalizeString(target);
+            return right ? left.slice(-right.length) === right : false;
+        }
+        if (descriptor.op === 'in' && Array.isArray(target)) {
             return target.indexOf(value) !== -1;
+        }
+        if (descriptor.op === 'between') {
+            var min = descriptor.from !== undefined ? descriptor.from : target;
+            var max = descriptor.to !== undefined ? descriptor.to : target;
+            if (min !== undefined && value < min) {
+                return false;
+            }
+            if (max !== undefined && value > max) {
+                return false;
+            }
+            return true;
+        }
+        if (descriptor.op === 'period') {
+            return evaluatePeriodValue(value, target || descriptor);
         }
 
         return true;
@@ -302,8 +414,10 @@
     var api = {
         QUERY_DESCRIPTOR_VERSION: QUERY_DESCRIPTOR_VERSION,
         createQueryDescriptorV1: createQueryDescriptorV1,
+        createFilterDescriptorV1: createFilterDescriptorV1,
         createSortDescriptorV1: createSortDescriptorV1,
         createQueryStateStore: createQueryStateStore,
+        evaluateFilterDescriptorV1: evaluateFilter,
         runQueryPipeline: runQueryPipeline
     };
 
