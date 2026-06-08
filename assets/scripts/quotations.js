@@ -88,21 +88,77 @@ function renderWorkspaceSection(containerId, list) {
 }
 
 function openQuotationsFilterModal() {
+  initializeQuotationsFilterBuilder();
+  if (window.SearchService && typeof window.SearchService.getState === "function" && quotationsFilterBuilderInstance) {
+    const state = window.SearchService.getState("quotations");
+    quotationsFilterBuilderInstance.setFromFilters(Array.isArray(state.filters) ? state.filters : []);
+  }
   const modal = document.getElementById("quotationsFilterModal");
-  if (modal) modal.classList.remove("hidden");
+  if (modal) {
+    modal.classList.remove("hidden");
+    modal.style.display = "flex";
+  }
 }
 
 function closeQuotationsFilterModal() {
   const modal = document.getElementById("quotationsFilterModal");
-  if (modal) modal.classList.add("hidden");
+  if (modal) {
+    modal.classList.add("hidden");
+    modal.style.display = "none";
+  }
 }
 
-function applyQuotationsFilterModal() {
+let quotationsFilterBuilderInstance = null;
+
+function getQuotationsFilterTemplates() {
+  return [
+    { key: "quotationNo", label: "Quotation No", field: "quotationNo", type: "text", hint: "QUO-2001" },
+    { key: "purpose", label: "Purpose", field: "purpose", type: "text", hint: "Shopping, Hardware, Travel" },
+    { key: "status", label: "Status", field: "status", type: "enum", hint: "draft, accepted, expired, converted" },
+    { key: "amount", label: "Amount", field: "total", type: "number", hint: "5000, 10000, 25000" },
+    { key: "payment", label: "Payment Type", field: "paymentType", type: "enum", hint: "UPI, Cash, Debit Card, Credit Card" },
+    { key: "source", label: "Source", field: "fundingSourceName", type: "text", hint: "Funding source name" },
+    { key: "person", label: "Person", field: "requestor", type: "text", hint: "Requester or owner" },
+    { key: "attachment", label: "Attachment", field: "attachmentName", type: "presence", hint: "Has any attachment" }
+  ];
+}
+
+function initializeQuotationsFilterBuilder() {
+  const root = document.getElementById("quotationsFilterBuilderRoot");
+  if (!root || quotationsFilterBuilderInstance || !window.FilterBuilder || typeof window.FilterBuilder.create !== "function") {
+    return;
+  }
+
+  quotationsFilterBuilderInstance = window.FilterBuilder.create({
+    module: "quotations",
+    dateField: "updatedAt",
+    templates: getQuotationsFilterTemplates(),
+    onApply: function (filters) {
+      applyQuotationsFilterModal(filters);
+    },
+    onClear: function () {
+      clearQuotationsFilterModal(false);
+    },
+    onSave: function () {
+      saveQuotationsCurrentView();
+      refreshQuotationsSavedViews();
+    }
+  });
+
+  quotationsFilterBuilderInstance.mount(root);
+}
+
+function buildQuotationsFilterDescriptorsFromModal() {
+  initializeQuotationsFilterBuilder();
+  if (!quotationsFilterBuilderInstance) {
+    return [];
+  }
+  return quotationsFilterBuilderInstance.getDescriptors();
+}
+
+function applyQuotationsFilterModal(explicitFilters) {
   if (window.SearchService && typeof window.SearchService.setFilters === "function") {
-    const field = document.getElementById("quotationsFilterField")?.value || "";
-    const op = document.getElementById("quotationsFilterOperator")?.value || "contains";
-    const value = document.getElementById("quotationsFilterValue")?.value || "";
-    const filters = field && value.trim() ? [{ field, op, value: value.trim() }] : [];
+    const filters = Array.isArray(explicitFilters) ? explicitFilters : buildQuotationsFilterDescriptorsFromModal();
     window.SearchService.setFilters("quotations", filters);
   }
 
@@ -110,20 +166,19 @@ function applyQuotationsFilterModal() {
   renderQuotationsWorkspace();
 }
 
-function clearQuotationsFilterModal() {
-  const fieldEl = document.getElementById("quotationsFilterField");
-  const opEl = document.getElementById("quotationsFilterOperator");
-  const valueEl = document.getElementById("quotationsFilterValue");
-
-  if (fieldEl) fieldEl.value = "quotationNo";
-  if (opEl) opEl.value = "contains";
-  if (valueEl) valueEl.value = "";
+function clearQuotationsFilterModal(closeAfterClear = true) {
+  initializeQuotationsFilterBuilder();
+  if (quotationsFilterBuilderInstance) {
+    quotationsFilterBuilderInstance.clearAll();
+  }
 
   if (window.SearchService && typeof window.SearchService.clearFilters === "function") {
     window.SearchService.clearFilters("quotations");
   }
 
-  closeQuotationsFilterModal();
+  if (closeAfterClear) {
+    closeQuotationsFilterModal();
+  }
   renderQuotationsWorkspace();
 }
 
@@ -261,12 +316,18 @@ function deleteQuotationsSavedView() {
 
 function openQuotationsSortModal() {
   const modal = document.getElementById("quotationsSortModal");
-  if (modal) modal.classList.remove("hidden");
+  if (modal) {
+    modal.classList.remove("hidden");
+    modal.style.display = "flex";
+  }
 }
 
 function closeQuotationsSortModal() {
   const modal = document.getElementById("quotationsSortModal");
-  if (modal) modal.classList.add("hidden");
+  if (modal) {
+    modal.classList.add("hidden");
+    modal.style.display = "none";
+  }
 }
 
 function applyQuotationsSortModal() {
