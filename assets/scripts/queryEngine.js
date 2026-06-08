@@ -149,12 +149,24 @@
             return 0;
         }
 
-        if (type === 'number') {
-            return Number(left) - Number(right);
+        var normalizedType = type || 'string';
+
+        if (normalizedType === 'boolean') {
+            return Number(Boolean(left)) - Number(Boolean(right));
         }
 
-        if (type === 'date') {
+        if (normalizedType === 'number' || normalizedType === 'currency') {
+            var leftNumber = Number(String(left).replace(/[^0-9+.\-]/g, ''));
+            var rightNumber = Number(String(right).replace(/[^0-9+.\-]/g, ''));
+            return leftNumber - rightNumber;
+        }
+
+        if (normalizedType === 'date') {
             return new Date(left).getTime() - new Date(right).getTime();
+        }
+
+        if (normalizedType === 'natural') {
+            return String(left).localeCompare(String(right), undefined, { numeric: true, sensitivity: 'base' });
         }
 
         return String(left).localeCompare(String(right));
@@ -354,7 +366,30 @@
             return rows;
         }
 
-        var comparators = sortList
+        function flattenDescriptors(list) {
+            var flattened = [];
+
+            function append(item) {
+                if (!item) {
+                    return;
+                }
+                var normalized = createSortDescriptorV1(item);
+                flattened.push(normalized);
+                normalized.secondary.forEach(function (nextItem) {
+                    append(nextItem);
+                });
+            }
+
+            list.forEach(function (item) {
+                append(item);
+            });
+
+            return flattened;
+        }
+
+        var flattenedSortList = flattenDescriptors(sortList);
+
+        var comparators = flattenedSortList
             .filter(function (item) {
                 return item && typeof item.field === 'string' && item.field.length > 0;
             })
