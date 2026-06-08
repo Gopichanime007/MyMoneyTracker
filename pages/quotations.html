@@ -23,7 +23,10 @@
     <div class="card">
       <div class="workspace-toolbar">
         <h3>Purchase Plan Workspace</h3>
-        <button class="primary" type="button" onclick="createNewPlan()">+ New Plan</button>
+        <div class="inline-row">
+          <button class="secondary" type="button" onclick="openQuotationsFilterModal()">Filter</button>
+          <button class="primary" type="button" onclick="createNewPlan()">+ New Plan</button>
+        </div>
       </div>
 
       <div class="workspace-section">
@@ -44,6 +47,34 @@
       <div class="workspace-section">
         <h4>Converted Plans</h4>
         <div id="convertedPlansList"></div>
+      </div>
+    </div>
+  </div>
+
+  <div id="quotationsFilterModal" class="modal hidden" onclick="closeQuotationsFilterModal()">
+    <div class="modal-content" onclick="event.stopPropagation()">
+      <h3>Quotation Filters</h3>
+
+      <label for="quotationsFilterField">Field</label>
+      <select id="quotationsFilterField">
+        <option value="quotationNo">Quotation No</option>
+        <option value="purpose">Purpose</option>
+        <option value="status">Status</option>
+        <option value="fundingSourceName">Funding Source</option>
+      </select>
+
+      <label for="quotationsFilterOperator">Operator</label>
+      <select id="quotationsFilterOperator">
+        <option value="contains">Contains</option>
+        <option value="eq">Equals</option>
+      </select>
+
+      <label for="quotationsFilterValue">Value</label>
+      <input type="text" id="quotationsFilterValue" placeholder="Optional" />
+
+      <div class="modal-actions">
+        <button class="secondary" type="button" onclick="clearQuotationsFilterModal()">Clear</button>
+        <button class="primary" type="button" onclick="applyQuotationsFilterModal()">Apply</button>
       </div>
     </div>
   </div>

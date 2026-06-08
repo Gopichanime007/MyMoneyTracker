@@ -1717,6 +1717,73 @@ function applySavingsSearch(rows) {
     return Array.isArray(queryResult.results) ? queryResult.results : list;
 }
 
+function openSavingsFilterModal() {
+    let modal = document.getElementById("savingsFilterModal");
+    if (modal) modal.classList.remove("hidden");
+}
+
+function closeSavingsFilterModal() {
+    let modal = document.getElementById("savingsFilterModal");
+    if (modal) modal.classList.add("hidden");
+}
+
+function buildSavingsFilterDescriptorsFromModal() {
+    let filters = [];
+    let preset = document.getElementById("savingsFilterPreset")?.value || "all";
+    let from = document.getElementById("savingsFilterFrom")?.value || null;
+    let to = document.getElementById("savingsFilterTo")?.value || null;
+
+    if (preset !== "all" && window.SearchService && typeof window.SearchService.buildPeriodFilterDescriptor === "function") {
+        filters.push(window.SearchService.buildPeriodFilterDescriptor("date", preset, from, to));
+    }
+
+    let field = document.getElementById("savingsFilterField")?.value || "";
+    let op = document.getElementById("savingsFilterOperator")?.value || "contains";
+    let value = document.getElementById("savingsFilterValue")?.value || "";
+    if (field && value.trim()) {
+        filters.push({ field: field, op: op, value: value.trim() });
+    }
+
+    return filters;
+}
+
+function applySavingsFilterModal() {
+    if (window.SearchService && typeof window.SearchService.setFilters === "function") {
+        window.SearchService.setFilters("savings", buildSavingsFilterDescriptorsFromModal());
+    }
+
+    closeSavingsFilterModal();
+    let base = filteredSavingsData.length ? filteredSavingsData : getScopedSavings();
+    filteredSavingsData = applySavingsSearch(base);
+    renderSavingsHistory(filteredSavingsData);
+    loadSavingsGraph(filteredSavingsData);
+}
+
+function clearSavingsFilterModal() {
+    let presetEl = document.getElementById("savingsFilterPreset");
+    let fromEl = document.getElementById("savingsFilterFrom");
+    let toEl = document.getElementById("savingsFilterTo");
+    let fieldEl = document.getElementById("savingsFilterField");
+    let opEl = document.getElementById("savingsFilterOperator");
+    let valueEl = document.getElementById("savingsFilterValue");
+
+    if (presetEl) presetEl.value = "all";
+    if (fromEl) fromEl.value = "";
+    if (toEl) toEl.value = "";
+    if (fieldEl) fieldEl.value = "type";
+    if (opEl) opEl.value = "contains";
+    if (valueEl) valueEl.value = "";
+
+    if (window.SearchService && typeof window.SearchService.clearFilters === "function") {
+        window.SearchService.clearFilters("savings");
+    }
+
+    closeSavingsFilterModal();
+    filteredSavingsData = applySavingsSearch(getScopedSavings());
+    renderSavingsHistory(filteredSavingsData);
+    loadSavingsGraph(filteredSavingsData);
+}
+
 // Filters savings data by time (today, week, month, all) and updates UI
 function handleSavingsFilter(type) {
 

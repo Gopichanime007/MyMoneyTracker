@@ -9241,6 +9241,88 @@ function injectGlobalFooter() {
 // function enableNotifications() {
 //     requestNotificationPermission();
 // }
+
+function openExpenseFilterModal() {
+    let modal = document.getElementById("expenseFilterModal");
+    if (modal) {
+        modal.classList.remove("hidden");
+    }
+}
+
+function closeExpenseFilterModal() {
+    let modal = document.getElementById("expenseFilterModal");
+    if (modal) {
+        modal.classList.add("hidden");
+    }
+}
+
+function buildExpenseFilterDescriptorsFromModal() {
+    let filters = [];
+
+    let preset = document.getElementById("expenseFilterPreset")?.value || "all";
+    let from = document.getElementById("expenseFilterFrom")?.value || null;
+    let to = document.getElementById("expenseFilterTo")?.value || null;
+
+    if (preset !== "all" && window.SearchService && typeof window.SearchService.buildPeriodFilterDescriptor === "function") {
+        filters.push(window.SearchService.buildPeriodFilterDescriptor("date", preset, from, to));
+    }
+
+    let field = document.getElementById("expenseFilterField")?.value || "";
+    let op = document.getElementById("expenseFilterOperator")?.value || "contains";
+    let value = document.getElementById("expenseFilterValue")?.value || "";
+
+    if (field && value.trim()) {
+        filters.push({ field: field, op: op, value: value.trim() });
+    }
+
+    return filters;
+}
+
+function rerenderExpenseWithQueryState() {
+    let period = document.getElementById("filterType")?.value || "all";
+    if (period && period !== "period") {
+        handleFilter(period);
+        return;
+    }
+
+    let fallback = (window.currentFilteredExpenses && window.currentFilteredExpenses.length)
+        ? window.currentFilteredExpenses
+        : getExpenses();
+    loadHistory(fallback);
+}
+
+function applyExpenseFilterModal() {
+    if (window.SearchService && typeof window.SearchService.setFilters === "function") {
+        window.SearchService.setFilters("expenses", buildExpenseFilterDescriptorsFromModal());
+    }
+
+    closeExpenseFilterModal();
+    rerenderExpenseWithQueryState();
+}
+
+function clearExpenseFilterModal() {
+    let presetEl = document.getElementById("expenseFilterPreset");
+    let fromEl = document.getElementById("expenseFilterFrom");
+    let toEl = document.getElementById("expenseFilterTo");
+    let fieldEl = document.getElementById("expenseFilterField");
+    let opEl = document.getElementById("expenseFilterOperator");
+    let valueEl = document.getElementById("expenseFilterValue");
+
+    if (presetEl) presetEl.value = "all";
+    if (fromEl) fromEl.value = "";
+    if (toEl) toEl.value = "";
+    if (fieldEl) fieldEl.value = "type";
+    if (opEl) opEl.value = "contains";
+    if (valueEl) valueEl.value = "";
+
+    if (window.SearchService && typeof window.SearchService.clearFilters === "function") {
+        window.SearchService.clearFilters("expenses");
+    }
+
+    closeExpenseFilterModal();
+    rerenderExpenseWithQueryState();
+}
+
 function handleFilter(type) {
 
     if (type === "period") {

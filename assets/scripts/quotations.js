@@ -85,6 +85,46 @@ function renderWorkspaceSection(containerId, list) {
   list.forEach((plan) => host.appendChild(renderPlanCard(plan)));
 }
 
+function openQuotationsFilterModal() {
+  const modal = document.getElementById("quotationsFilterModal");
+  if (modal) modal.classList.remove("hidden");
+}
+
+function closeQuotationsFilterModal() {
+  const modal = document.getElementById("quotationsFilterModal");
+  if (modal) modal.classList.add("hidden");
+}
+
+function applyQuotationsFilterModal() {
+  if (window.SearchService && typeof window.SearchService.setFilters === "function") {
+    const field = document.getElementById("quotationsFilterField")?.value || "";
+    const op = document.getElementById("quotationsFilterOperator")?.value || "contains";
+    const value = document.getElementById("quotationsFilterValue")?.value || "";
+    const filters = field && value.trim() ? [{ field, op, value: value.trim() }] : [];
+    window.SearchService.setFilters("quotations", filters);
+  }
+
+  closeQuotationsFilterModal();
+  renderQuotationsWorkspace();
+}
+
+function clearQuotationsFilterModal() {
+  const fieldEl = document.getElementById("quotationsFilterField");
+  const opEl = document.getElementById("quotationsFilterOperator");
+  const valueEl = document.getElementById("quotationsFilterValue");
+
+  if (fieldEl) fieldEl.value = "quotationNo";
+  if (opEl) opEl.value = "contains";
+  if (valueEl) valueEl.value = "";
+
+  if (window.SearchService && typeof window.SearchService.clearFilters === "function") {
+    window.SearchService.clearFilters("quotations");
+  }
+
+  closeQuotationsFilterModal();
+  renderQuotationsWorkspace();
+}
+
 function renderQuotationsWorkspace() {
   let rows = getQuotationRegistryRows().slice().sort((a, b) => new Date(b.updatedAt || 0) - new Date(a.updatedAt || 0));
 

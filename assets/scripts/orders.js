@@ -70,6 +70,46 @@ function openOrder(orderId) {
   window.location.href = "order.html";
 }
 
+function openOrdersFilterModal() {
+  const modal = document.getElementById("ordersFilterModal");
+  if (modal) modal.classList.remove("hidden");
+}
+
+function closeOrdersFilterModal() {
+  const modal = document.getElementById("ordersFilterModal");
+  if (modal) modal.classList.add("hidden");
+}
+
+function applyOrdersFilterModal() {
+  if (window.SearchService && typeof window.SearchService.setFilters === "function") {
+    const field = document.getElementById("ordersFilterField")?.value || "";
+    const op = document.getElementById("ordersFilterOperator")?.value || "contains";
+    const value = document.getElementById("ordersFilterValue")?.value || "";
+    const filters = field && value.trim() ? [{ field, op, value: value.trim() }] : [];
+    window.SearchService.setFilters("orders", filters);
+  }
+
+  closeOrdersFilterModal();
+  renderOrders();
+}
+
+function clearOrdersFilterModal() {
+  const fieldEl = document.getElementById("ordersFilterField");
+  const opEl = document.getElementById("ordersFilterOperator");
+  const valueEl = document.getElementById("ordersFilterValue");
+
+  if (fieldEl) fieldEl.value = "orderNo";
+  if (opEl) opEl.value = "contains";
+  if (valueEl) valueEl.value = "";
+
+  if (window.SearchService && typeof window.SearchService.clearFilters === "function") {
+    window.SearchService.clearFilters("orders");
+  }
+
+  closeOrdersFilterModal();
+  renderOrders();
+}
+
 function renderOrders() {
   const allOrders = getOrders();
   if (!document.getElementById || !document.getElementById("ordersList")) return;

@@ -46,6 +46,7 @@
 
       <div class="orders-toolbar">
         <h4>Order Execution Records</h4>
+        <button class="secondary" type="button" onclick="openOrdersFilterModal()">Filter</button>
         <select id="ordersStatusFilter" onchange="renderOrders()">
           <option value="all">All Statuses</option>
           <option value="draft">Draft</option>
@@ -60,6 +61,34 @@
 
     </div>
 
+  </div>
+
+  <div id="ordersFilterModal" class="modal hidden" onclick="closeOrdersFilterModal()">
+    <div class="modal-content" onclick="event.stopPropagation()">
+      <h3>Order Filters</h3>
+
+      <label for="ordersFilterField">Field</label>
+      <select id="ordersFilterField">
+        <option value="orderNo">Order No</option>
+        <option value="purpose">Purpose</option>
+        <option value="status">Status</option>
+        <option value="sourceName">Funding Source</option>
+      </select>
+
+      <label for="ordersFilterOperator">Operator</label>
+      <select id="ordersFilterOperator">
+        <option value="contains">Contains</option>
+        <option value="eq">Equals</option>
+      </select>
+
+      <label for="ordersFilterValue">Value</label>
+      <input type="text" id="ordersFilterValue" placeholder="Optional" />
+
+      <div class="modal-actions">
+        <button class="secondary" type="button" onclick="clearOrdersFilterModal()">Clear</button>
+        <button class="primary" type="button" onclick="applyOrdersFilterModal()">Apply</button>
+      </div>
+    </div>
   </div>
 
   <!-- 📜 SCRIPT -->
