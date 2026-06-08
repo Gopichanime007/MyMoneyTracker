@@ -211,6 +211,52 @@ function clearQuotationsQueryChips() {
   renderQuotationsWorkspace();
 }
 
+function refreshQuotationsSavedViews() {
+  const select = document.getElementById("quotationsSavedView");
+  if (!select || !window.SearchService || typeof window.SearchService.listViews !== "function") return;
+
+  const views = window.SearchService.listViews("module", "quotations")
+    .filter((view) => String(view.scope || "") === "quotations" || String(view.scope || "") === "*");
+
+  select.innerHTML = "";
+  const defaultOpt = document.createElement("option");
+  defaultOpt.value = "";
+  defaultOpt.textContent = "Saved Views";
+  select.appendChild(defaultOpt);
+
+  views.forEach((view) => {
+    const opt = document.createElement("option");
+    opt.value = String(view.id);
+    opt.textContent = String(view.name || "Untitled");
+    select.appendChild(opt);
+  });
+}
+
+function saveQuotationsCurrentView() {
+  if (!window.SearchService || typeof window.SearchService.saveView !== "function") return;
+  const name = prompt("Saved view name", "Quotations View");
+  if (!name || !name.trim()) return;
+  window.SearchService.saveView({ name: name.trim(), module: "quotations", scope: "module" });
+  refreshQuotationsSavedViews();
+}
+
+function applyQuotationsSavedView() {
+  if (!window.SearchService || typeof window.SearchService.applyView !== "function") return;
+  const id = document.getElementById("quotationsSavedView")?.value || "";
+  if (!id) return;
+  window.SearchService.applyView(id, "quotations");
+  renderQuotationsWorkspace();
+}
+
+function deleteQuotationsSavedView() {
+  if (!window.SearchService || typeof window.SearchService.deleteView !== "function") return;
+  const id = document.getElementById("quotationsSavedView")?.value || "";
+  if (!id) return;
+  window.SearchService.deleteView(id);
+  refreshQuotationsSavedViews();
+  renderQuotationsWorkspace();
+}
+
 function openQuotationsSortModal() {
   const modal = document.getElementById("quotationsSortModal");
   if (modal) modal.classList.remove("hidden");
@@ -253,6 +299,7 @@ function clearQuotationsSortModal() {
 function renderQuotationsWorkspace() {
   updateQuotationsSortIndicator();
   renderQuotationsQueryChips();
+  refreshQuotationsSavedViews();
   let rows = getQuotationRegistryRows().slice().sort((a, b) => new Date(b.updatedAt || 0) - new Date(a.updatedAt || 0));
 
   if (window.SearchService && typeof window.SearchService.applyModuleSearch === "function") {

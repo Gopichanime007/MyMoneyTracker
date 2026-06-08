@@ -33,6 +33,13 @@
 
       <div id="quotationsQueryChips" class="inline-row"></div>
 
+      <div class="inline-row">
+        <select id="quotationsSavedView"></select>
+        <button class="secondary" type="button" onclick="saveQuotationsCurrentView()">Save View</button>
+        <button class="secondary" type="button" onclick="applyQuotationsSavedView()">Apply View</button>
+        <button class="danger" type="button" onclick="deleteQuotationsSavedView()">Delete View</button>
+      </div>
+
       <div class="workspace-section">
         <h4>Draft Plans</h4>
         <div id="draftPlansList"></div>
