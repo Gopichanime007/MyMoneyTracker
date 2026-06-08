@@ -1,0 +1,315 @@
+(function (globalScope) {
+    'use strict';
+
+    var QUERY_DESCRIPTOR_VERSION = 'v1';
+
+    function cloneJsonSafe(value) {
+        if (value === undefined) {
+            return undefined;
+        }
+        return JSON.parse(JSON.stringify(value));
+    }
+
+    function normalizeString(value) {
+        if (value === null || value === undefined) {
+            return '';
+        }
+        return String(value).toLowerCase().trim();
+    }
+
+    function normalizeArray(value) {
+        if (!Array.isArray(value)) {
+            return [];
+        }
+        return value.slice();
+    }
+
+    function createSortDescriptorV1(input) {
+        var source = input || {};
+        return {
+            version: QUERY_DESCRIPTOR_VERSION,
+            field: typeof source.field === 'string' ? source.field : '',
+            direction: source.direction === 'desc' ? 'desc' : 'asc',
+            type: typeof source.type === 'string' ? source.type : 'string',
+            nulls: source.nulls === 'first' ? 'first' : 'last',
+            secondary: normalizeArray(source.secondary).map(function (item) {
+                return createSortDescriptorV1(item);
+            })
+        };
+    }
+
+    function createQueryDescriptorV1(input) {
+        var source = input || {};
+        var search = source.search || {};
+
+        return {
+            version: QUERY_DESCRIPTOR_VERSION,
+            module: typeof source.module === 'string' ? source.module : 'global',
+            search: {
+                text: typeof search.text === 'string' ? search.text : '',
+                fields: normalizeArray(search.fields).filter(function (field) {
+                    return typeof field === 'string' && field.length > 0;
+                })
+            },
+            filters: normalizeArray(source.filters),
+            sort: normalizeArray(source.sort).map(function (item) {
+                return createSortDescriptorV1(item);
+            })
+        };
+    }
+
+    function createQueryStateStore(initialStateByModule) {
+        var state = {};
+        var subscribers = {};
+        var seed = initialStateByModule || {};
+
+        Object.keys(seed).forEach(function (moduleName) {
+            state[moduleName] = createQueryDescriptorV1(seed[moduleName]);
+        });
+
+        function getState(moduleName) {
+            var key = moduleName || 'global';
+            if (!state[key]) {
+                state[key] = createQueryDescriptorV1({ module: key });
+            }
+            return cloneJsonSafe(state[key]);
+        }
+
+        function emit(moduleName) {
+            var key = moduleName || 'global';
+            var listeners = subscribers[key] || [];
+            var snapshot = getState(key);
+            listeners.forEach(function (listener) {
+                listener(snapshot);
+            });
+        }
+
+        function setState(moduleName, descriptor) {
+            var key = moduleName || 'global';
+            state[key] = createQueryDescriptorV1(descriptor || { module: key });
+            emit(key);
+            return getState(key);
+        }
+
+        function patchState(moduleName, partial) {
+            var key = moduleName || 'global';
+            var next = Object.assign({}, getState(key), partial || {});
+            return setState(key, next);
+        }
+
+        function resetState(moduleName) {
+            var key = moduleName || 'global';
+            return setState(key, { module: key });
+        }
+
+        function subscribe(moduleName, listener) {
+            var key = moduleName || 'global';
+            if (typeof listener !== 'function') {
+                return function noop() {};
+            }
+            if (!subscribers[key]) {
+                subscribers[key] = [];
+            }
+            subscribers[key].push(listener);
+            return function unsubscribe() {
+                subscribers[key] = (subscribers[key] || []).filter(function (fn) {
+                    return fn !== listener;
+                });
+            };
+        }
+
+        return {
+            getState: getState,
+            setState: setState,
+            patchState: patchState,
+            resetState: resetState,
+            subscribe: subscribe
+        };
+    }
+
+    function compareByType(left, right, type) {
+        if (left === right) {
+            return 0;
+        }
+
+        if (type === 'number') {
+            return Number(left) - Number(right);
+        }
+
+        if (type === 'date') {
+            return new Date(left).getTime() - new Date(right).getTime();
+        }
+
+        return String(left).localeCompare(String(right));
+    }
+
+    function runSearch(rows, descriptor) {
+        var search = descriptor.search || {};
+        var text = normalizeString(search.text);
+        if (!text) {
+            return rows;
+        }
+
+        var fields = normalizeArray(search.fields);
+        if (!fields.length && rows.length) {
+            fields = Object.keys(rows[0]);
+        }
+
+        return rows.filter(function (row) {
+            return fields.some(function (field) {
+                return normalizeString(row[field]).indexOf(text) !== -1;
+            });
+        });
+    }
+
+    function evaluateFilter(row, filter) {
+        if (!filter || typeof filter !== 'object') {
+            return true;
+        }
+
+        if (typeof filter.predicate === 'function') {
+            return Boolean(filter.predicate(row));
+        }
+
+        if (!filter.field || !filter.op) {
+            return true;
+        }
+
+        var value = row[filter.field];
+        var target = filter.value;
+
+        if (filter.op === 'eq') {
+            return value === target;
+        }
+        if (filter.op === 'neq') {
+            return value !== target;
+        }
+        if (filter.op === 'gte') {
+            return value >= target;
+        }
+        if (filter.op === 'lte') {
+            return value <= target;
+        }
+        if (filter.op === 'contains') {
+            return normalizeString(value).indexOf(normalizeString(target)) !== -1;
+        }
+        if (filter.op === 'in' && Array.isArray(target)) {
+            return target.indexOf(value) !== -1;
+        }
+
+        return true;
+    }
+
+    function runFilter(rows, descriptor) {
+        var filters = normalizeArray(descriptor.filters);
+        if (!filters.length) {
+            return rows;
+        }
+
+        return rows.filter(function (row) {
+            return filters.every(function (filter) {
+                return evaluateFilter(row, filter);
+            });
+        });
+    }
+
+    function buildComparator(sortDescriptor) {
+        return function (leftRow, rightRow) {
+            var left = leftRow.item[sortDescriptor.field];
+            var right = rightRow.item[sortDescriptor.field];
+
+            if (left === null || left === undefined || right === null || right === undefined) {
+                if (left === right) {
+                    return 0;
+                }
+                if (left === null || left === undefined) {
+                    return sortDescriptor.nulls === 'first' ? -1 : 1;
+                }
+                return sortDescriptor.nulls === 'first' ? 1 : -1;
+            }
+
+            var compared = compareByType(left, right, sortDescriptor.type);
+            if (sortDescriptor.direction === 'desc') {
+                compared = compared * -1;
+            }
+            return compared;
+        };
+    }
+
+    function runSort(rows, descriptor) {
+        var sortList = normalizeArray(descriptor.sort);
+        if (!sortList.length) {
+            return rows;
+        }
+
+        var comparators = sortList
+            .filter(function (item) {
+                return item && typeof item.field === 'string' && item.field.length > 0;
+            })
+            .map(function (item) {
+                return buildComparator(createSortDescriptorV1(item));
+            });
+
+        if (!comparators.length) {
+            return rows;
+        }
+
+        return rows
+            .map(function (item, index) {
+                return { item: item, index: index };
+            })
+            .sort(function (left, right) {
+                for (var i = 0; i < comparators.length; i += 1) {
+                    var compared = comparators[i](left, right);
+                    if (compared !== 0) {
+                        return compared;
+                    }
+                }
+                return left.index - right.index;
+            })
+            .map(function (entry) {
+                return entry.item;
+            });
+    }
+
+    function runQueryPipeline(items, descriptor, options) {
+        var sourceItems = Array.isArray(items) ? items : [];
+        var query = createQueryDescriptorV1(descriptor || {});
+        var opts = options || {};
+        var normalizer = typeof opts.normalizeItem === 'function' ? opts.normalizeItem : function (item) { return item; };
+
+        var normalized = sourceItems
+            .map(function (item) {
+                return normalizer(item);
+            })
+            .filter(function (item) {
+                return Boolean(item);
+            });
+
+        var searched = runSearch(normalized, query);
+        var filtered = runFilter(searched, query);
+        var sorted = runSort(filtered, query);
+
+        return {
+            descriptor: query,
+            totalCount: sourceItems.length,
+            normalizedCount: normalized.length,
+            resultCount: sorted.length,
+            results: sorted
+        };
+    }
+
+    var api = {
+        QUERY_DESCRIPTOR_VERSION: QUERY_DESCRIPTOR_VERSION,
+        createQueryDescriptorV1: createQueryDescriptorV1,
+        createSortDescriptorV1: createSortDescriptorV1,
+        createQueryStateStore: createQueryStateStore,
+        runQueryPipeline: runQueryPipeline
+    };
+
+    globalScope.QueryEngine = api;
+
+    if (typeof module !== 'undefined' && module.exports) {
+        module.exports = api;
+    }
+}(typeof window !== 'undefined' ? window : globalThis));
