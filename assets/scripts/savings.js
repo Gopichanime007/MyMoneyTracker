@@ -1720,38 +1720,78 @@ function applySavingsSearch(rows) {
 }
 
 function openSavingsFilterModal() {
+    initializeSavingsFilterBuilder();
+    if (window.SearchService && typeof window.SearchService.getState === "function" && savingsFilterBuilderInstance) {
+        let state = window.SearchService.getState("savings");
+        savingsFilterBuilderInstance.setFromFilters(Array.isArray(state.filters) ? state.filters : []);
+    }
     let modal = document.getElementById("savingsFilterModal");
-    if (modal) modal.classList.remove("hidden");
+    if (modal) {
+        modal.classList.remove("hidden");
+        modal.style.display = "flex";
+    }
 }
 
 function closeSavingsFilterModal() {
     let modal = document.getElementById("savingsFilterModal");
-    if (modal) modal.classList.add("hidden");
+    if (modal) {
+        modal.classList.add("hidden");
+        modal.style.display = "none";
+    }
+}
+
+let savingsFilterBuilderInstance = null;
+
+function getSavingsFilterTemplates() {
+    return [
+        { key: "category", label: "Category", field: "type", type: "text", hint: "Savings, reserve, emergency" },
+        { key: "type", label: "Type", field: "type", type: "text", hint: "deposit, withdrawal" },
+        { key: "amount", label: "Amount", field: "amount", type: "number", hint: "5000, 10000, 25000" },
+        { key: "payment", label: "Payment Type", field: "paymentType", type: "enum", hint: "UPI, Cash, Debit Card, Credit Card" },
+        { key: "budget", label: "Budget", field: "sourceId", type: "text", hint: "Budget or source id" },
+        { key: "savings", label: "Savings", field: "note", type: "text", hint: "Goal or note tags" },
+        { key: "source", label: "Source", field: "entity", type: "text", hint: "Bank or source entity" },
+        { key: "person", label: "Person", field: "person", type: "text", hint: "Person names" },
+        { key: "attachment", label: "Attachment", field: "attachmentName", type: "presence", hint: "Has any attachment" }
+    ];
+}
+
+function initializeSavingsFilterBuilder() {
+    let root = document.getElementById("savingsFilterBuilderRoot");
+    if (!root || savingsFilterBuilderInstance || !window.FilterBuilder || typeof window.FilterBuilder.create !== "function") {
+        return;
+    }
+
+    savingsFilterBuilderInstance = window.FilterBuilder.create({
+        module: "savings",
+        dateField: "date",
+        templates: getSavingsFilterTemplates(),
+        onApply: function (filters) {
+            applySavingsFilterModal(filters);
+        },
+        onClear: function () {
+            clearSavingsFilterModal(false);
+        },
+        onSave: function () {
+            saveSavingsFilterModal();
+        }
+    });
+
+    savingsFilterBuilderInstance.mount(root);
 }
 
 function buildSavingsFilterDescriptorsFromModal() {
-    let filters = [];
-    let preset = document.getElementById("savingsFilterPreset")?.value || "all";
-    let from = document.getElementById("savingsFilterFrom")?.value || null;
-    let to = document.getElementById("savingsFilterTo")?.value || null;
-
-    if (preset !== "all" && window.SearchService && typeof window.SearchService.buildPeriodFilterDescriptor === "function") {
-        filters.push(window.SearchService.buildPeriodFilterDescriptor("date", preset, from, to));
+    initializeSavingsFilterBuilder();
+    if (!savingsFilterBuilderInstance) {
+        return [];
     }
-
-    let field = document.getElementById("savingsFilterField")?.value || "";
-    let op = document.getElementById("savingsFilterOperator")?.value || "contains";
-    let value = document.getElementById("savingsFilterValue")?.value || "";
-    if (field && value.trim()) {
-        filters.push({ field: field, op: op, value: value.trim() });
-    }
-
-    return filters;
+    return savingsFilterBuilderInstance.getDescriptors();
 }
 
-function applySavingsFilterModal() {
+function applySavingsFilterModal(explicitFilters) {
     if (window.SearchService && typeof window.SearchService.setFilters === "function") {
-        window.SearchService.setFilters("savings", buildSavingsFilterDescriptorsFromModal());
+        let filters = Array.isArray(explicitFilters) ? explicitFilters : buildSavingsFilterDescriptorsFromModal();
+        window.SearchService.setFilters("savings", filters);
     }
 
     closeSavingsFilterModal();
@@ -1762,26 +1802,30 @@ function applySavingsFilterModal() {
     renderSavingsQueryChips();
 }
 
-function clearSavingsFilterModal() {
-    let presetEl = document.getElementById("savingsFilterPreset");
-    let fromEl = document.getElementById("savingsFilterFrom");
-    let toEl = document.getElementById("savingsFilterTo");
-    let fieldEl = document.getElementById("savingsFilterField");
-    let opEl = document.getElementById("savingsFilterOperator");
-    let valueEl = document.getElementById("savingsFilterValue");
+function saveSavingsFilterModal() {
+    if (!window.SearchService || typeof window.SearchService.saveView !== "function") {
+        return;
+    }
+    let name = prompt("Filter name", "Savings Filter");
+    if (!name || !name.trim()) {
+        return;
+    }
+    window.SearchService.saveView({ name: name.trim(), module: "savings", scope: "module" });
+}
 
-    if (presetEl) presetEl.value = "all";
-    if (fromEl) fromEl.value = "";
-    if (toEl) toEl.value = "";
-    if (fieldEl) fieldEl.value = "type";
-    if (opEl) opEl.value = "contains";
-    if (valueEl) valueEl.value = "";
+function clearSavingsFilterModal(closeAfterClear = true) {
+    initializeSavingsFilterBuilder();
+    if (savingsFilterBuilderInstance) {
+        savingsFilterBuilderInstance.clearAll();
+    }
 
     if (window.SearchService && typeof window.SearchService.clearFilters === "function") {
         window.SearchService.clearFilters("savings");
     }
 
-    closeSavingsFilterModal();
+    if (closeAfterClear) {
+        closeSavingsFilterModal();
+    }
     filteredSavingsData = applySavingsSearch(getScopedSavings());
     renderSavingsHistory(filteredSavingsData);
     loadSavingsGraph(filteredSavingsData);
@@ -1900,12 +1944,18 @@ function clearSavingsQueryChips() {
 
 function openSavingsSortModal() {
     let modal = document.getElementById("savingsSortModal");
-    if (modal) modal.classList.remove("hidden");
+    if (modal) {
+        modal.classList.remove("hidden");
+        modal.style.display = "flex";
+    }
 }
 
 function closeSavingsSortModal() {
     let modal = document.getElementById("savingsSortModal");
-    if (modal) modal.classList.add("hidden");
+    if (modal) {
+        modal.classList.add("hidden");
+        modal.style.display = "none";
+    }
 }
 
 function applySavingsSortModal() {
