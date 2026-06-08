@@ -2,6 +2,12 @@
     'use strict';
 
     var OPERATOR_LIBRARY = {
+        date: [
+            { value: 'eq', label: 'Equals' },
+            { value: 'lt', label: 'Before' },
+            { value: 'gt', label: 'After' },
+            { value: 'between', label: 'Between' }
+        ],
         text: [
             { value: 'eq', label: 'Equals' },
             { value: 'neq', label: 'Not Equals' },
@@ -24,16 +30,6 @@
             { value: 'not_exists', label: 'Does Not Exist' }
         ]
     };
-
-    var PERIOD_OPTIONS = [
-        { value: 'today', label: 'Today' },
-        { value: 'week', label: 'This Week' },
-        { value: 'month', label: 'This Month' },
-        { value: 'last_week', label: 'Last Week' },
-        { value: 'last_month', label: 'Last Month' },
-        { value: 'year', label: 'This Year' },
-        { value: 'custom', label: 'Custom' }
-    ];
 
     function normalizeString(value) {
         return String(value || '').trim();
@@ -119,9 +115,6 @@
         var templatesByField = mapTemplateByField(templates);
 
         var state = {
-            period: 'all',
-            from: '',
-            to: '',
             matchLogic: 'all',
             searchText: '',
             activeConditions: [],
@@ -201,9 +194,6 @@
         }
 
         function clearAll() {
-            state.period = 'all';
-            state.from = '';
-            state.to = '';
             state.matchLogic = 'all';
             state.searchText = '';
             state.activeConditions = [];
@@ -213,20 +203,6 @@
 
         function getDescriptors() {
             var descriptors = [];
-
-            if (state.period !== 'all') {
-                descriptors.push({
-                    version: 'v1',
-                    field: cfg.dateField || 'date',
-                    op: 'period',
-                    value: {
-                        type: state.period,
-                        from: state.from || null,
-                        to: state.to || null,
-                        now: null
-                    }
-                });
-            }
 
             var compiled = state.activeConditions
                 .map(buildDescriptorFromCondition)
@@ -316,9 +292,6 @@
 
         function getState() {
             return {
-                period: state.period,
-                from: state.from,
-                to: state.to,
                 matchLogic: state.matchLogic,
                 searchText: state.searchText,
                 activeConditions: state.activeConditions.slice(),
@@ -326,13 +299,90 @@
             };
         }
 
+        function mapLegacyPeriodDescriptorToDateCondition(descriptor) {
+            var value = descriptor && descriptor.value && typeof descriptor.value === 'object' ? descriptor.value : {};
+            var periodType = String(value.type || 'all');
+            var now = new Date();
+
+            function formatDay(dateObj) {
+                if (!(dateObj instanceof Date) || Number.isNaN(dateObj.getTime())) {
+                    return '';
+                }
+                return dateObj.toISOString().slice(0, 10);
+            }
+
+            function startOfDay(dateObj) {
+                return new Date(dateObj.getFullYear(), dateObj.getMonth(), dateObj.getDate());
+            }
+
+            function endOfDay(dateObj) {
+                return new Date(dateObj.getFullYear(), dateObj.getMonth(), dateObj.getDate());
+            }
+
+            var fromDate = '';
+            var toDate = '';
+
+            if (periodType === 'custom') {
+                fromDate = String(value.from || '');
+                toDate = String(value.to || '');
+            } else if (periodType === 'today') {
+                fromDate = formatDay(startOfDay(now));
+                toDate = formatDay(endOfDay(now));
+            } else if (periodType === 'week') {
+                var weekStart = startOfDay(now);
+                var day = weekStart.getDay();
+                weekStart.setDate(weekStart.getDate() - (day === 0 ? 6 : day - 1));
+                var weekEnd = startOfDay(weekStart);
+                weekEnd.setDate(weekEnd.getDate() + 6);
+                fromDate = formatDay(weekStart);
+                toDate = formatDay(weekEnd);
+            } else if (periodType === 'month') {
+                var monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+                var monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+                fromDate = formatDay(monthStart);
+                toDate = formatDay(monthEnd);
+            } else if (periodType === 'year') {
+                var yearStart = new Date(now.getFullYear(), 0, 1);
+                var yearEnd = new Date(now.getFullYear(), 11, 31);
+                fromDate = formatDay(yearStart);
+                toDate = formatDay(yearEnd);
+            } else if (periodType === 'last_week') {
+                var thisWeekStart = startOfDay(now);
+                var thisWeekDay = thisWeekStart.getDay();
+                thisWeekStart.setDate(thisWeekStart.getDate() - (thisWeekDay === 0 ? 6 : thisWeekDay - 1));
+                var lastWeekStart = startOfDay(thisWeekStart);
+                lastWeekStart.setDate(lastWeekStart.getDate() - 7);
+                var lastWeekEnd = startOfDay(lastWeekStart);
+                lastWeekEnd.setDate(lastWeekEnd.getDate() + 6);
+                fromDate = formatDay(lastWeekStart);
+                toDate = formatDay(lastWeekEnd);
+            } else if (periodType === 'last_month') {
+                var lastMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+                var lastMonthEnd = new Date(now.getFullYear(), now.getMonth(), 0);
+                fromDate = formatDay(lastMonthStart);
+                toDate = formatDay(lastMonthEnd);
+            }
+
+            if (!fromDate && !toDate) {
+                return null;
+            }
+
+            var dateTemplate = templatesByField[String(cfg.dateField || 'date')];
+            if (!dateTemplate) {
+                return null;
+            }
+
+            var item = createConditionFromTemplate(dateTemplate);
+            item.operator = 'between';
+            item.from = fromDate || toDate;
+            item.to = toDate || fromDate;
+            return item;
+        }
+
         function setFromFilters(filters) {
             var list = Array.isArray(filters) ? filters : [];
             var nextConditions = [];
             var passthrough = [];
-            var period = 'all';
-            var from = '';
-            var to = '';
             var matchLogic = 'all';
 
             list.forEach(function (descriptor) {
@@ -341,10 +391,10 @@
                 }
 
                 if (descriptor.op === 'period' && String(descriptor.field) === String(cfg.dateField || 'date')) {
-                    var value = descriptor.value || {};
-                    period = value.type || 'all';
-                    from = value.from || '';
-                    to = value.to || '';
+                    var mappedDate = mapLegacyPeriodDescriptorToDateCondition(descriptor);
+                    if (mappedDate) {
+                        nextConditions.push(mappedDate);
+                    }
                     return;
                 }
 
@@ -385,9 +435,6 @@
                 nextConditions.push(mappedCondition);
             });
 
-            state.period = period;
-            state.from = from;
-            state.to = to;
             state.matchLogic = matchLogic;
             state.searchText = '';
             state.activeConditions = nextConditions;
@@ -405,53 +452,6 @@
                 node.textContent = text;
             }
             return node;
-        }
-
-        function renderDateSection(container) {
-            var section = createEl('section', 'filter-builder-section');
-            section.appendChild(createEl('h4', '', 'Date Filter'));
-            section.appendChild(createEl('p', 'filter-builder-subtitle', 'Period'));
-
-            var periodWrap = createEl('div', 'filter-builder-period-grid');
-            PERIOD_OPTIONS.forEach(function (option) {
-                var label = createEl('label', 'filter-builder-radio');
-                var input = createEl('input');
-                input.type = 'radio';
-                input.name = 'fb_period_' + String(cfg.module || 'module');
-                input.value = option.value;
-                input.checked = state.period === option.value;
-                input.addEventListener('change', function () {
-                    state.period = option.value;
-                    emitChange();
-                });
-                label.appendChild(input);
-                label.appendChild(createEl('span', '', option.label));
-                periodWrap.appendChild(label);
-            });
-            section.appendChild(periodWrap);
-
-            if (state.period === 'custom') {
-                var row = createEl('div', 'inline-row');
-                var fromInput = createEl('input');
-                fromInput.type = 'date';
-                fromInput.value = state.from;
-                fromInput.placeholder = 'From Date';
-                fromInput.addEventListener('input', function () {
-                    state.from = fromInput.value;
-                });
-                var toInput = createEl('input');
-                toInput.type = 'date';
-                toInput.value = state.to;
-                toInput.placeholder = 'To Date';
-                toInput.addEventListener('input', function () {
-                    state.to = toInput.value;
-                });
-                row.appendChild(fromInput);
-                row.appendChild(toInput);
-                section.appendChild(row);
-            }
-
-            container.appendChild(section);
         }
 
         function renderAvailableSection(container) {
@@ -483,6 +483,9 @@
         }
 
         function renderMatchLogicSection(container) {
+            if (state.activeConditions.length <= 1) {
+                return;
+            }
             var section = createEl('section', 'filter-builder-section');
             section.appendChild(createEl('h4', '', 'Match Logic'));
 
@@ -539,8 +542,8 @@
             if (condition.operator === 'between') {
                 var betweenRow = createEl('div', 'inline-row');
                 var fromInput = createEl('input');
-                fromInput.type = condition.type === 'number' ? 'number' : 'text';
-                fromInput.placeholder = 'From';
+                fromInput.type = condition.type === 'number' ? 'number' : (condition.type === 'date' ? 'date' : 'text');
+                fromInput.placeholder = condition.type === 'date' ? 'From Date' : 'From';
                 fromInput.value = condition.from;
                 fromInput.addEventListener('input', function () {
                     updateCondition(condition.id, { from: fromInput.value });
@@ -548,8 +551,8 @@
                 betweenRow.appendChild(fromInput);
 
                 var toInput = createEl('input');
-                toInput.type = condition.type === 'number' ? 'number' : 'text';
-                toInput.placeholder = 'To';
+                toInput.type = condition.type === 'number' ? 'number' : (condition.type === 'date' ? 'date' : 'text');
+                toInput.placeholder = condition.type === 'date' ? 'To Date' : 'To';
                 toInput.value = condition.to;
                 toInput.addEventListener('input', function () {
                     updateCondition(condition.id, { to: toInput.value });
@@ -558,9 +561,9 @@
                 card.appendChild(betweenRow);
             } else if (condition.type !== 'presence') {
                 var valueInput = createEl('input');
-                valueInput.type = condition.type === 'number' ? 'number' : 'text';
+                valueInput.type = condition.type === 'number' ? 'number' : (condition.type === 'date' ? 'date' : 'text');
                 valueInput.value = condition.value;
-                valueInput.placeholder = 'Value';
+                valueInput.placeholder = condition.type === 'date' ? 'Date' : 'Value';
                 valueInput.addEventListener('input', function () {
                     updateCondition(condition.id, { value: valueInput.value });
                 });
@@ -596,13 +599,8 @@
             container.appendChild(section);
         }
 
-        function renderSummaryAndActions(container) {
-            var summarySection = createEl('section', 'filter-builder-section');
-            summarySection.appendChild(createEl('h4', '', 'Filter Summary'));
-            summarySection.appendChild(createEl('p', 'filter-builder-summary', summarize()));
-            container.appendChild(summarySection);
-
-            var actions = createEl('div', 'modal-actions');
+        function renderActions(container) {
+            var actions = createEl('div', 'modal-actions filter-builder-actions');
 
             var clearBtn = createEl('button', 'secondary', 'Clear');
             clearBtn.type = 'button';
@@ -640,16 +638,18 @@
                 return;
             }
             root.innerHTML = '';
-            renderDateSection(root);
             renderAvailableSection(root);
             renderMatchLogicSection(root);
             renderActiveSection(root);
-            renderSummaryAndActions(root);
+            renderActions(root);
         }
 
         return {
             mount: function (element) {
                 setRoot(element);
+                if (root && root.classList) {
+                    root.classList.add('filter-builder-root');
+                }
                 render();
             },
             render: render,

@@ -390,9 +390,15 @@ select:focus {
 .filter-builder-section {
   border: 1px solid #e5e7eb;
   border-radius: 12px;
-  padding: 12px;
-  margin-top: 10px;
+  padding: 10px;
+  margin-top: 8px;
   background: #fafafa;
+}
+
+.filter-builder-root {
+  max-height: 66vh;
+  overflow-y: auto;
+  padding-bottom: 72px;
 }
 
 .filter-builder-section h4,
@@ -453,6 +459,14 @@ select:focus {
   margin: 0;
   color: #111827;
   font-size: 13px;
+}
+
+.filter-builder-actions {
+  position: sticky;
+  bottom: 0;
+  background: #ffffff;
+  padding-top: 8px;
+  border-top: 1px solid #e5e7eb;
 }
 
 /* =========================
