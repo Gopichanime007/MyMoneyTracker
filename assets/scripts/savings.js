@@ -1426,7 +1426,8 @@ function renderSavingsHistory(data) {
     if (!container) return;
 
     let sourceData = applySavingsSearch(data);
-    updateSavingsSortIndicator();
+        renderSavingsQueryChips();
+        updateSavingsSortIndicator();
 
     container.innerHTML = "";
 
@@ -1758,6 +1759,7 @@ function applySavingsFilterModal() {
     filteredSavingsData = applySavingsSearch(base);
     renderSavingsHistory(filteredSavingsData);
     loadSavingsGraph(filteredSavingsData);
+    renderSavingsQueryChips();
 }
 
 function clearSavingsFilterModal() {
@@ -1783,6 +1785,7 @@ function clearSavingsFilterModal() {
     filteredSavingsData = applySavingsSearch(getScopedSavings());
     renderSavingsHistory(filteredSavingsData);
     loadSavingsGraph(filteredSavingsData);
+    renderSavingsQueryChips();
 }
 
 function updateSavingsSortIndicator() {
@@ -1800,6 +1803,99 @@ function updateSavingsSortIndicator() {
 
     let first = sort[0];
     indicator.textContent = `Sort: ${String(first.field || "date")} (${String(first.direction || "asc")})`;
+}
+
+function getSavingsFilterChipLabel(filter) {
+    if (!filter || typeof filter !== "object") return "Filter";
+    if (filter.op === "period" && filter.value && typeof filter.value === "object") {
+        let type = String(filter.value.type || "custom");
+        if (type === "custom") {
+            return `Period: ${filter.value.from || "-"} to ${filter.value.to || "-"}`;
+        }
+        return `Period: ${type}`;
+    }
+    return `${String(filter.field || "field")} ${String(filter.op || "eq")} ${String(filter.value || "")}`;
+}
+
+function renderSavingsQueryChips() {
+    let host = document.getElementById("savingsQueryChips");
+    if (!host || !window.SearchService || typeof window.SearchService.getState !== "function") {
+        return;
+    }
+
+    let state = window.SearchService.getState("savings");
+    let filters = Array.isArray(state.filters) ? state.filters : [];
+    let sort = Array.isArray(state.sort) ? state.sort : [];
+
+    host.innerHTML = "";
+
+    filters.forEach((filter, index) => {
+        let chip = document.createElement("button");
+        chip.className = "secondary";
+        chip.type = "button";
+        chip.textContent = `${getSavingsFilterChipLabel(filter)} ×`;
+        chip.addEventListener("click", () => removeSavingsFilterChip(index));
+        host.appendChild(chip);
+    });
+
+    if (sort.length) {
+        let first = sort[0];
+        let chip = document.createElement("button");
+        chip.className = "secondary";
+        chip.type = "button";
+        chip.textContent = `Sort: ${String(first.field || "date")} (${String(first.direction || "asc")}) ×`;
+        chip.addEventListener("click", clearSavingsSortChip);
+        host.appendChild(chip);
+    }
+
+    if (filters.length || sort.length) {
+        let clearAll = document.createElement("button");
+        clearAll.className = "secondary";
+        clearAll.type = "button";
+        clearAll.textContent = "Clear All";
+        clearAll.addEventListener("click", clearSavingsQueryChips);
+        host.appendChild(clearAll);
+    }
+}
+
+function removeSavingsFilterChip(index) {
+    if (!window.SearchService || typeof window.SearchService.getState !== "function") return;
+    let state = window.SearchService.getState("savings");
+    let filters = Array.isArray(state.filters) ? state.filters.slice() : [];
+    filters.splice(index, 1);
+    if (typeof window.SearchService.setFilters === "function") {
+        window.SearchService.setFilters("savings", filters);
+    }
+    let base = filteredSavingsData.length ? filteredSavingsData : getScopedSavings();
+    filteredSavingsData = applySavingsSearch(base);
+    renderSavingsHistory(filteredSavingsData);
+    loadSavingsGraph(filteredSavingsData);
+    renderSavingsQueryChips();
+}
+
+function clearSavingsSortChip() {
+    if (window.SearchService && typeof window.SearchService.clearSort === "function") {
+        window.SearchService.clearSort("savings");
+    }
+    let base = filteredSavingsData.length ? filteredSavingsData : getScopedSavings();
+    filteredSavingsData = applySavingsSearch(base);
+    renderSavingsHistory(filteredSavingsData);
+    loadSavingsGraph(filteredSavingsData);
+}
+
+function clearSavingsQueryChips() {
+    if (window.SearchService) {
+        if (typeof window.SearchService.clearFilters === "function") {
+            window.SearchService.clearFilters("savings");
+        }
+        if (typeof window.SearchService.clearSort === "function") {
+            window.SearchService.clearSort("savings");
+        }
+    }
+    filteredSavingsData = applySavingsSearch(getScopedSavings());
+    renderSavingsHistory(filteredSavingsData);
+    loadSavingsGraph(filteredSavingsData);
+    renderSavingsQueryChips();
 }
 
 function openSavingsSortModal() {
@@ -1827,6 +1923,7 @@ function applySavingsSortModal() {
     filteredSavingsData = applySavingsSearch(base);
     renderSavingsHistory(filteredSavingsData);
     loadSavingsGraph(filteredSavingsData);
+    renderSavingsQueryChips();
 }
 
 function clearSavingsSortModal() {
@@ -1845,6 +1942,7 @@ function clearSavingsSortModal() {
     filteredSavingsData = applySavingsSearch(base);
     renderSavingsHistory(filteredSavingsData);
     loadSavingsGraph(filteredSavingsData);
+    renderSavingsQueryChips();
 }
 
 // Filters savings data by time (today, week, month, all) and updates UI

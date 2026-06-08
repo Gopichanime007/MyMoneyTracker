@@ -137,6 +137,80 @@ function updateQuotationsSortIndicator() {
   indicator.textContent = `Sort: ${String(sort[0].field || "updatedAt")} (${String(sort[0].direction || "asc")})`;
 }
 
+function getQuotationsFilterChipLabel(filter) {
+  if (!filter || typeof filter !== "object") return "Filter";
+  return `${String(filter.field || "field")} ${String(filter.op || "eq")} ${String(filter.value || "")}`;
+}
+
+function renderQuotationsQueryChips() {
+  const host = document.getElementById("quotationsQueryChips");
+  if (!host || !window.SearchService || typeof window.SearchService.getState !== "function") return;
+
+  const state = window.SearchService.getState("quotations");
+  const filters = Array.isArray(state.filters) ? state.filters : [];
+  const sort = Array.isArray(state.sort) ? state.sort : [];
+
+  host.innerHTML = "";
+
+  filters.forEach((filter, index) => {
+    const chip = document.createElement("button");
+    chip.className = "secondary";
+    chip.type = "button";
+    chip.textContent = `${getQuotationsFilterChipLabel(filter)} ×`;
+    chip.addEventListener("click", () => removeQuotationsFilterChip(index));
+    host.appendChild(chip);
+  });
+
+  if (sort.length) {
+    const first = sort[0];
+    const chip = document.createElement("button");
+    chip.className = "secondary";
+    chip.type = "button";
+    chip.textContent = `Sort: ${String(first.field || "updatedAt")} (${String(first.direction || "asc")}) ×`;
+    chip.addEventListener("click", clearQuotationsSortChip);
+    host.appendChild(chip);
+  }
+
+  if (filters.length || sort.length) {
+    const clearAll = document.createElement("button");
+    clearAll.className = "secondary";
+    clearAll.type = "button";
+    clearAll.textContent = "Clear All";
+    clearAll.addEventListener("click", clearQuotationsQueryChips);
+    host.appendChild(clearAll);
+  }
+}
+
+function removeQuotationsFilterChip(index) {
+  if (!window.SearchService || typeof window.SearchService.getState !== "function") return;
+  const state = window.SearchService.getState("quotations");
+  const filters = Array.isArray(state.filters) ? state.filters.slice() : [];
+  filters.splice(index, 1);
+  if (typeof window.SearchService.setFilters === "function") {
+    window.SearchService.setFilters("quotations", filters);
+  }
+  renderQuotationsWorkspace();
+}
+
+function clearQuotationsSortChip() {
+  if (window.SearchService && typeof window.SearchService.clearSort === "function") {
+    window.SearchService.clearSort("quotations");
+  }
+  renderQuotationsWorkspace();
+}
+
+function clearQuotationsQueryChips() {
+  if (window.SearchService) {
+    if (typeof window.SearchService.clearFilters === "function") {
+      window.SearchService.clearFilters("quotations");
+    }
+    if (typeof window.SearchService.clearSort === "function") {
+      window.SearchService.clearSort("quotations");
+    }
+  }
+  renderQuotationsWorkspace();
+}
+
 function openQuotationsSortModal() {
   const modal = document.getElementById("quotationsSortModal");
   if (modal) modal.classList.remove("hidden");
@@ -178,6 +252,7 @@ function clearQuotationsSortModal() {
 
 function renderQuotationsWorkspace() {
   updateQuotationsSortIndicator();
+  renderQuotationsQueryChips();
   let rows = getQuotationRegistryRows().slice().sort((a, b) => new Date(b.updatedAt || 0) - new Date(a.updatedAt || 0));
 
   if (window.SearchService && typeof window.SearchService.applyModuleSearch === "function") {

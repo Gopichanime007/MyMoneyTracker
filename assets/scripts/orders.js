@@ -122,6 +122,80 @@ function updateOrdersSortIndicator() {
   indicator.textContent = `Sort: ${String(sort[0].field || "updatedAt")} (${String(sort[0].direction || "asc")})`;
 }
 
+function getOrdersFilterChipLabel(filter) {
+  if (!filter || typeof filter !== "object") return "Filter";
+  return `${String(filter.field || "field")} ${String(filter.op || "eq")} ${String(filter.value || "")}`;
+}
+
+function renderOrdersQueryChips() {
+  const host = document.getElementById("ordersQueryChips");
+  if (!host || !window.SearchService || typeof window.SearchService.getState !== "function") return;
+
+  const state = window.SearchService.getState("orders");
+  const filters = Array.isArray(state.filters) ? state.filters : [];
+  const sort = Array.isArray(state.sort) ? state.sort : [];
+
+  host.innerHTML = "";
+
+  filters.forEach((filter, index) => {
+    const chip = document.createElement("button");
+    chip.className = "secondary";
+    chip.type = "button";
+    chip.textContent = `${getOrdersFilterChipLabel(filter)} ×`;
+    chip.addEventListener("click", () => removeOrdersFilterChip(index));
+    host.appendChild(chip);
+  });
+
+  if (sort.length) {
+    const first = sort[0];
+    const chip = document.createElement("button");
+    chip.className = "secondary";
+    chip.type = "button";
+    chip.textContent = `Sort: ${String(first.field || "updatedAt")} (${String(first.direction || "asc")}) ×`;
+    chip.addEventListener("click", clearOrdersSortChip);
+    host.appendChild(chip);
+  }
+
+  if (filters.length || sort.length) {
+    const clearAll = document.createElement("button");
+    clearAll.className = "secondary";
+    clearAll.type = "button";
+    clearAll.textContent = "Clear All";
+    clearAll.addEventListener("click", clearOrdersQueryChips);
+    host.appendChild(clearAll);
+  }
+}
+
+function removeOrdersFilterChip(index) {
+  if (!window.SearchService || typeof window.SearchService.getState !== "function") return;
+  const state = window.SearchService.getState("orders");
+  const filters = Array.isArray(state.filters) ? state.filters.slice() : [];
+  filters.splice(index, 1);
+  if (typeof window.SearchService.setFilters === "function") {
+    window.SearchService.setFilters("orders", filters);
+  }
+  renderOrders();
+}
+
+function clearOrdersSortChip() {
+  if (window.SearchService && typeof window.SearchService.clearSort === "function") {
+    window.SearchService.clearSort("orders");
+  }
+  renderOrders();
+}
+
+function clearOrdersQueryChips() {
+  if (window.SearchService) {
+    if (typeof window.SearchService.clearFilters === "function") {
+      window.SearchService.clearFilters("orders");
+    }
+    if (typeof window.SearchService.clearSort === "function") {
+      window.SearchService.clearSort("orders");
+    }
+  }
+  renderOrders();
+}
+
 function openOrdersSortModal() {
   const modal = document.getElementById("ordersSortModal");
   if (modal) modal.classList.remove("hidden");
@@ -167,6 +241,7 @@ function renderOrders() {
 
   const container = document.getElementById("ordersList");
   updateOrdersSortIndicator();
+  renderOrdersQueryChips();
   const filter = document.getElementById("ordersStatusFilter");
   const selectedStatus = filter ? filter.value : "all";
 

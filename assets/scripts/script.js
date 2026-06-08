@@ -1384,6 +1384,7 @@ function loadHistory(list = getExpenses()) {
 
         currentFilteredExpenses = finalList;
         updateExpenseSortIndicator();
+        renderExpenseQueryChips();
 
         let container = document.getElementById("historyList");
         if (!container) return;
@@ -9311,6 +9312,93 @@ function updateExpenseSortIndicator() {
     indicator.textContent = `Sort: ${field} (${direction})`;
 }
 
+function getExpenseFilterChipLabel(filter) {
+    if (!filter || typeof filter !== "object") {
+        return "Filter";
+    }
+    if (filter.op === "period" && filter.value && typeof filter.value === "object") {
+        let type = String(filter.value.type || "custom");
+        if (type === "custom") {
+            return `Period: ${filter.value.from || "-"} to ${filter.value.to || "-"}`;
+        }
+        return `Period: ${type}`;
+    }
+    return `${String(filter.field || "field")} ${String(filter.op || "eq")} ${String(filter.value || "")}`;
+}
+
+function renderExpenseQueryChips() {
+    let host = document.getElementById("expenseQueryChips");
+    if (!host || !window.SearchService || typeof window.SearchService.getState !== "function") {
+        return;
+    }
+
+    let state = window.SearchService.getState("expenses");
+    let filters = Array.isArray(state.filters) ? state.filters : [];
+    let sort = Array.isArray(state.sort) ? state.sort : [];
+
+    host.innerHTML = "";
+
+    filters.forEach((filter, index) => {
+        let chip = document.createElement("button");
+        chip.className = "secondary";
+        chip.type = "button";
+        chip.textContent = `${getExpenseFilterChipLabel(filter)} ×`;
+        chip.addEventListener("click", () => removeExpenseFilterChip(index));
+        host.appendChild(chip);
+    });
+
+    if (sort.length) {
+        let first = sort[0];
+        let chip = document.createElement("button");
+        chip.className = "secondary";
+        chip.type = "button";
+        chip.textContent = `Sort: ${String(first.field || "date")} (${String(first.direction || "asc")}) ×`;
+        chip.addEventListener("click", clearExpenseSortChip);
+        host.appendChild(chip);
+    }
+
+    if (filters.length || sort.length) {
+        let clearAll = document.createElement("button");
+        clearAll.className = "secondary";
+        clearAll.type = "button";
+        clearAll.textContent = "Clear All";
+        clearAll.addEventListener("click", clearExpenseQueryChips);
+        host.appendChild(clearAll);
+    }
+}
+
+function removeExpenseFilterChip(index) {
+    if (!window.SearchService || typeof window.SearchService.getState !== "function") {
+        return;
+    }
+    let state = window.SearchService.getState("expenses");
+    let filters = Array.isArray(state.filters) ? state.filters.slice() : [];
+    filters.splice(index, 1);
+    if (typeof window.SearchService.setFilters === "function") {
+        window.SearchService.setFilters("expenses", filters);
+    }
+    rerenderExpenseWithQueryState();
+}
+
+function clearExpenseSortChip() {
+    if (window.SearchService && typeof window.SearchService.clearSort === "function") {
+        window.SearchService.clearSort("expenses");
+    }
+    rerenderExpenseWithQueryState();
+}
+
+function clearExpenseQueryChips() {
+    if (window.SearchService) {
+        if (typeof window.SearchService.clearFilters === "function") {
+            window.SearchService.clearFilters("expenses");
+        }
+        if (typeof window.SearchService.clearSort === "function") {
+            window.SearchService.clearSort("expenses");
+        }
+    }
+    rerenderExpenseWithQueryState();
+}
+
 function openExpenseSortModal() {
     let modal = document.getElementById("expenseSortModal");
     if (modal) modal.classList.remove("hidden");
@@ -9334,6 +9422,7 @@ function applyExpenseSortModal() {
     closeExpenseSortModal();
     updateExpenseSortIndicator();
     rerenderExpenseWithQueryState();
+    renderExpenseQueryChips();
 }
 
 function clearExpenseSortModal() {
@@ -9349,6 +9438,7 @@ function clearExpenseSortModal() {
     closeExpenseSortModal();
     updateExpenseSortIndicator();
     rerenderExpenseWithQueryState();
+    renderExpenseQueryChips();
 }
 
 function applyExpenseFilterModal() {
@@ -9358,6 +9448,7 @@ function applyExpenseFilterModal() {
 
     closeExpenseFilterModal();
     rerenderExpenseWithQueryState();
+    renderExpenseQueryChips();
 }
 
 function clearExpenseFilterModal() {
@@ -9381,6 +9472,7 @@ function clearExpenseFilterModal() {
 
     closeExpenseFilterModal();
     rerenderExpenseWithQueryState();
+    renderExpenseQueryChips();
 }
 
 function handleFilter(type) {
