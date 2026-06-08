@@ -510,9 +510,9 @@ select:focus {
 }
 
 .modal-actions.filter-builder-actions {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 8px;
+  display: grid !important;
+  grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  gap: 8px !important;
   position: static;
   background: #ffffff;
   margin-top: 10px;
@@ -522,48 +522,48 @@ select:focus {
 
 .modal-actions.filter-builder-actions button {
   margin-top: 0;
-  width: 100%;
-  flex: none;
+  width: 100% !important;
+  flex: none !important;
 }
 
 .modal-actions.filter-builder-actions .primary {
-  grid-column: 1 / -1;
+  grid-column: 1 / -1 !important;
 }
 
 @media (min-width: 640px) {
   .modal-actions.filter-builder-actions {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
   }
 
   .modal-actions.filter-builder-actions .primary {
-    grid-column: auto;
+    grid-column: auto !important;
   }
 }
 
 .modal-actions.sort-modal-actions {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 8px;
+  display: grid !important;
+  grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  gap: 8px !important;
 }
 
 .modal-actions.sort-modal-actions button {
   margin-top: 0;
-  width: 100%;
+  width: 100% !important;
   min-width: 0;
-  flex: none;
+  flex: none !important;
 }
 
 .modal-actions.sort-modal-actions .primary {
-  grid-column: 1 / -1;
+  grid-column: 1 / -1 !important;
 }
 
 @media (min-width: 640px) {
   .modal-actions.sort-modal-actions {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
   }
 
   .modal-actions.sort-modal-actions .primary {
-    grid-column: auto;
+    grid-column: auto !important;
   }
 }
 
