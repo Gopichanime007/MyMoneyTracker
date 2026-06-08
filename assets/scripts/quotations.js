@@ -134,6 +134,9 @@ function initializeQuotationsFilterBuilder() {
     module: "quotations",
     dateField: "updatedAt",
     templates: getQuotationsFilterTemplates(),
+    onClose: function () {
+      closeQuotationsFilterModal();
+    },
     onApply: function (filters) {
       applyQuotationsFilterModal(filters);
     },
@@ -183,16 +186,41 @@ function clearQuotationsFilterModal(closeAfterClear = true) {
   renderQuotationsWorkspace();
 }
 
+function countQuotationsFilterConditions(filters) {
+  if (!Array.isArray(filters)) return 0;
+  return filters.reduce((sum, filter) => {
+    if (!filter || typeof filter !== "object") return sum;
+    if (String(filter.op || "") === "group_any" && Array.isArray(filter.conditions)) {
+      return sum + countQuotationsFilterConditions(filter.conditions);
+    }
+    return sum + 1;
+  }, 0);
+}
+
+function isDefaultQuotationsSort(sortItem) {
+  if (!sortItem || typeof sortItem !== "object") return true;
+  const field = String(sortItem.field || "updatedAt").toLowerCase();
+  const direction = String(sortItem.direction || "desc").toLowerCase();
+  return field === "updatedat" && direction === "desc";
+}
+
+function getQuotationsSortChipLabel(sortItem) {
+  const fieldRaw = String((sortItem && sortItem.field) || "updatedAt");
+  const directionRaw = String((sortItem && sortItem.direction) || "desc").toLowerCase();
+  const fieldLabel = fieldRaw === "updatedAt"
+    ? "Updated"
+    : (fieldRaw === "total" ? "Amount" : fieldRaw.replace(/\b\w/g, c => c.toUpperCase()));
+  const arrow = directionRaw === "asc" ? "↑" : "↓";
+  return `Sort: ${fieldLabel} ${arrow}`;
+}
+
 function updateQuotationsSortIndicator() {
-  const indicator = document.getElementById("quotationsSortIndicator");
-  if (!indicator || !window.SearchService || typeof window.SearchService.getState !== "function") return;
+  const filterBtn = document.getElementById("quotationsFilterActionBtn");
+  if (!filterBtn || !window.SearchService || typeof window.SearchService.getState !== "function") return;
   const state = window.SearchService.getState("quotations");
-  const sort = Array.isArray(state.sort) ? state.sort : [];
-  if (!sort.length) {
-    indicator.textContent = "Sort: Default";
-    return;
-  }
-  indicator.textContent = `Sort: ${String(sort[0].field || "updatedAt")} (${String(sort[0].direction || "asc")})`;
+  const filters = Array.isArray(state.filters) ? state.filters : [];
+  const count = countQuotationsFilterConditions(filters);
+  filterBtn.textContent = count > 0 ? `Filter (${count})` : "Filter";
 }
 
 function getQuotationsFilterChipLabel(filter) {
@@ -212,7 +240,7 @@ function renderQuotationsQueryChips() {
 
   filters.forEach((filter, index) => {
     const chip = document.createElement("button");
-    chip.className = "secondary";
+    chip.className = "secondary query-chip";
     chip.type = "button";
     chip.textContent = `${getQuotationsFilterChipLabel(filter)} ×`;
     chip.addEventListener("click", () => removeQuotationsFilterChip(index));
@@ -221,21 +249,14 @@ function renderQuotationsQueryChips() {
 
   if (sort.length) {
     const first = sort[0];
-    const chip = document.createElement("button");
-    chip.className = "secondary";
-    chip.type = "button";
-    chip.textContent = `Sort: ${String(first.field || "updatedAt")} (${String(first.direction || "asc")}) ×`;
-    chip.addEventListener("click", clearQuotationsSortChip);
-    host.appendChild(chip);
-  }
-
-  if (filters.length || sort.length) {
-    const clearAll = document.createElement("button");
-    clearAll.className = "secondary";
-    clearAll.type = "button";
-    clearAll.textContent = "Clear All";
-    clearAll.addEventListener("click", clearQuotationsQueryChips);
-    host.appendChild(clearAll);
+    if (!isDefaultQuotationsSort(first)) {
+      const chip = document.createElement("button");
+      chip.className = "secondary query-chip";
+      chip.type = "button";
+      chip.textContent = `${getQuotationsSortChipLabel(first)} ×`;
+      chip.addEventListener("click", clearQuotationsSortChip);
+      host.appendChild(chip);
+    }
   }
 }
 
@@ -290,9 +311,9 @@ function refreshQuotationsSavedViews() {
   });
 }
 
-function saveQuotationsCurrentView() {
+async function saveQuotationsCurrentView() {
   if (!window.SearchService || typeof window.SearchService.saveView !== "function") return;
-  const name = prompt("Saved view name", "Quotations View");
+  const name = await window.AppDialog.prompt("Saved view name", "Quotations View", "Save View");
   if (!name || !name.trim()) return;
   window.SearchService.saveView({ name: name.trim(), module: "quotations", scope: "module" });
   refreshQuotationsSavedViews();
@@ -436,7 +457,7 @@ function continueEditingPlan(quotationId) {
   window.location.href = "quotation.html";
 }
 
-function deletePlan(quotationId) {
+async function deletePlan(quotationId) {
   const rows = getQuotationRegistryRows();
   const idx = rows.findIndex((row) => String(row.id) === String(quotationId));
   if (idx === -1) {
@@ -446,7 +467,7 @@ function deletePlan(quotationId) {
 
   const row = rows[idx];
   const linkedOrder = resolveLinkedOrder(row);
-  const allow = !linkedOrder || confirm("This plan has a linked order. Delete plan and keep order record?");
+  const allow = !linkedOrder || await window.AppDialog.confirm("This plan has a linked order. Delete plan and keep order record?", "Confirm Deletion");
   if (!allow) return;
 
   rows.splice(idx, 1);

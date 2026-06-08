@@ -239,21 +239,19 @@
           <option value="period">Custom Period</option>
         </select>
 
-        <button class="primary" onclick="exportSavingsPDF()">
-          📄 Download Report
-        </button>
+        <div class="action-bar action-bar-3">
+          <button id="savingsFilterActionBtn" class="secondary" type="button" onclick="openSavingsFilterModal()">
+            Filter
+          </button>
 
-        <button class="secondary" type="button" onclick="openSavingsFilterModal()">
-          Filter
-        </button>
+          <button class="secondary" type="button" onclick="openSavingsSortModal()">
+            Sort
+          </button>
 
-        <button class="secondary" type="button" onclick="openSavingsSortModal()">
-          Sort
-        </button>
+          <button class="secondary" type="button" onclick="exportSavingsPDF()">Export</button>
+        </div>
 
-        <small id="savingsSortIndicator" class="muted-note">Sort: Default</small>
-
-        <div id="savingsQueryChips" class="inline-row"></div>
+        <div id="savingsQueryChips" class="query-chip-row"></div>
 
         <div id="savingsHistory"></div>
       </div>
@@ -413,6 +411,7 @@
       </select>
 
       <div class="modal-actions">
+        <button class="secondary" type="button" onclick="closeSavingsSortModal()">Close</button>
         <button class="secondary" type="button" onclick="clearSavingsSortModal()">Clear</button>
         <button class="primary" type="button" onclick="applySavingsSortModal()">Apply</button>
       </div>

@@ -601,15 +601,31 @@
 
         function renderActions(container) {
             var actions = createEl('div', 'modal-actions filter-builder-actions');
+            var hasActiveFilters = getDescriptors().length > 0;
 
-            var clearBtn = createEl('button', 'secondary', 'Clear');
-            clearBtn.type = 'button';
-            clearBtn.addEventListener('click', function () {
-                clearAll();
-                if (typeof cfg.onClear === 'function') {
-                    cfg.onClear(getDescriptors());
-                }
-            });
+            if (hasActiveFilters) {
+                var clearAndCloseBtn = createEl('button', 'secondary', 'Clear Filter');
+                clearAndCloseBtn.type = 'button';
+                clearAndCloseBtn.addEventListener('click', function () {
+                    clearAll();
+                    if (typeof cfg.onClear === 'function') {
+                        cfg.onClear(getDescriptors());
+                    }
+                    if (typeof cfg.onClose === 'function') {
+                        cfg.onClose();
+                    }
+                });
+                actions.appendChild(clearAndCloseBtn);
+            } else {
+                var closeBtn = createEl('button', 'secondary', 'Close');
+                closeBtn.type = 'button';
+                closeBtn.addEventListener('click', function () {
+                    if (typeof cfg.onClose === 'function') {
+                        cfg.onClose();
+                    }
+                });
+                actions.appendChild(closeBtn);
+            }
 
             var saveBtn = createEl('button', 'secondary', 'Save Filter');
             saveBtn.type = 'button';
@@ -627,7 +643,6 @@
                 }
             });
 
-            actions.appendChild(clearBtn);
             actions.appendChild(saveBtn);
             actions.appendChild(applyBtn);
             container.appendChild(actions);
@@ -638,9 +653,11 @@
                 return;
             }
             root.innerHTML = '';
-            renderAvailableSection(root);
-            renderMatchLogicSection(root);
-            renderActiveSection(root);
+            var contentHost = createEl('div', 'filter-builder-content');
+            renderAvailableSection(contentHost);
+            renderMatchLogicSection(contentHost);
+            renderActiveSection(contentHost);
+            root.appendChild(contentHost);
             renderActions(root);
         }
 

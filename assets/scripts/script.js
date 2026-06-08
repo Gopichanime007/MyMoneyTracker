@@ -1366,6 +1366,123 @@ function showToast(msg) {
     }
 }
 
+// Unified in-app dialog helper to avoid browser-native alert/confirm/prompt overlays.
+if (!window.AppDialog) {
+    window.AppDialog = (function createAppDialog() {
+        let overlay = null;
+
+        function ensureDialog() {
+            if (overlay) {
+                return overlay;
+            }
+
+            overlay = document.createElement("div");
+            overlay.id = "appDialogOverlay";
+            overlay.className = "modal hidden";
+            overlay.innerHTML = `
+                <div class="modal-content" role="dialog" aria-modal="true" onclick="event.stopPropagation()">
+                    <h3 id="appDialogTitle">Notice</h3>
+                    <p id="appDialogMessage" class="modal-sub"></p>
+                    <input id="appDialogInput" type="text" class="hidden" />
+                    <div id="appDialogActions" class="modal-actions"></div>
+                </div>
+            `;
+            overlay.addEventListener("click", () => hideDialog());
+            document.body.appendChild(overlay);
+            return overlay;
+        }
+
+        function hideDialog() {
+            if (!overlay) return;
+            overlay.classList.add("hidden");
+            overlay.style.display = "none";
+        }
+
+        function showDialog(config) {
+            return new Promise((resolve) => {
+                let host = ensureDialog();
+                let titleEl = host.querySelector("#appDialogTitle");
+                let msgEl = host.querySelector("#appDialogMessage");
+                let inputEl = host.querySelector("#appDialogInput");
+                let actionsEl = host.querySelector("#appDialogActions");
+
+                titleEl.textContent = String(config.title || "Notice");
+                msgEl.textContent = String(config.message || "");
+
+                actionsEl.innerHTML = "";
+
+                if (config.type === "prompt") {
+                    inputEl.classList.remove("hidden");
+                    inputEl.value = String(config.defaultValue || "");
+                    inputEl.focus();
+                } else {
+                    inputEl.classList.add("hidden");
+                    inputEl.value = "";
+                }
+
+                function finalize(value) {
+                    hideDialog();
+                    resolve(value);
+                }
+
+                if (config.type === "alert") {
+                    let okBtn = document.createElement("button");
+                    okBtn.className = "primary";
+                    okBtn.type = "button";
+                    okBtn.textContent = "OK";
+                    okBtn.addEventListener("click", () => finalize(true));
+                    actionsEl.appendChild(okBtn);
+                } else if (config.type === "confirm") {
+                    let cancelBtn = document.createElement("button");
+                    cancelBtn.className = "secondary";
+                    cancelBtn.type = "button";
+                    cancelBtn.textContent = "Cancel";
+                    cancelBtn.addEventListener("click", () => finalize(false));
+
+                    let okBtn = document.createElement("button");
+                    okBtn.className = "primary";
+                    okBtn.type = "button";
+                    okBtn.textContent = "Continue";
+                    okBtn.addEventListener("click", () => finalize(true));
+
+                    actionsEl.appendChild(cancelBtn);
+                    actionsEl.appendChild(okBtn);
+                } else {
+                    let cancelBtn = document.createElement("button");
+                    cancelBtn.className = "secondary";
+                    cancelBtn.type = "button";
+                    cancelBtn.textContent = "Cancel";
+                    cancelBtn.addEventListener("click", () => finalize(null));
+
+                    let saveBtn = document.createElement("button");
+                    saveBtn.className = "primary";
+                    saveBtn.type = "button";
+                    saveBtn.textContent = "Save";
+                    saveBtn.addEventListener("click", () => finalize(String(inputEl.value || "")));
+
+                    actionsEl.appendChild(cancelBtn);
+                    actionsEl.appendChild(saveBtn);
+                }
+
+                host.classList.remove("hidden");
+                host.style.display = "flex";
+            });
+        }
+
+        return {
+            alert: function (message, title) {
+                return showDialog({ type: "alert", title: title || "Notice", message: message || "" });
+            },
+            confirm: function (message, title) {
+                return showDialog({ type: "confirm", title: title || "Confirm", message: message || "" });
+            },
+            prompt: function (message, defaultValue, title) {
+                return showDialog({ type: "prompt", title: title || "Input", message: message || "", defaultValue: defaultValue || "" });
+            }
+        };
+    }());
+}
+
 
 
 /* =========================
@@ -1506,7 +1623,7 @@ async function deleteExpenseUI(id) {
 
         let safePlan = validateTransactionDependencies("expense", rootIds, false);
         if (safePlan.blocked) {
-            let proceed = window.confirm(
+            let proceed = await window.AppDialog.confirm(
                 `Cannot delete because dependent records exist (${safePlan.summary}).\n\n` +
                 `Use cascade delete and remove all dependents as well?`
             );
@@ -9352,6 +9469,9 @@ function initializeExpenseFilterBuilder() {
         module: "expenses",
         dateField: "date",
         templates: getExpenseFilterTemplates(),
+        onClose: function () {
+            closeExpenseFilterModal();
+        },
         onApply: function (filters) {
             applyExpenseFilterModal(filters);
         },
@@ -9381,23 +9501,50 @@ function rerenderExpenseWithQueryState() {
     loadHistory(fallback);
 }
 
+function countExpenseFilterConditions(filters) {
+    if (!Array.isArray(filters)) {
+        return 0;
+    }
+    return filters.reduce((sum, filter) => {
+        if (!filter || typeof filter !== "object") {
+            return sum;
+        }
+        if (String(filter.op || "") === "group_any" && Array.isArray(filter.conditions)) {
+            return sum + countExpenseFilterConditions(filter.conditions);
+        }
+        return sum + 1;
+    }, 0);
+}
+
+function isDefaultExpenseSort(sortItem) {
+    if (!sortItem || typeof sortItem !== "object") {
+        return true;
+    }
+    let field = String(sortItem.field || "date").toLowerCase();
+    let direction = String(sortItem.direction || "desc").toLowerCase();
+    return field === "date" && direction === "desc";
+}
+
+function getExpenseSortChipLabel(sortItem) {
+    let fieldRaw = String((sortItem && sortItem.field) || "date").toLowerCase();
+    let directionRaw = String((sortItem && sortItem.direction) || "desc").toLowerCase();
+    let fieldLabel = fieldRaw === "date"
+        ? "Date"
+        : (fieldRaw === "amount" ? "Amount" : fieldRaw.replace(/\b\w/g, c => c.toUpperCase()));
+    let arrow = directionRaw === "asc" ? "↑" : "↓";
+    return `Sort: ${fieldLabel} ${arrow}`;
+}
+
 function updateExpenseSortIndicator() {
-    let indicator = document.getElementById("expenseSortIndicator");
-    if (!indicator || !window.SearchService || typeof window.SearchService.getState !== "function") {
+    let filterBtn = document.getElementById("expenseFilterActionBtn");
+    if (!filterBtn || !window.SearchService || typeof window.SearchService.getState !== "function") {
         return;
     }
 
     let state = window.SearchService.getState("expenses");
-    let sort = Array.isArray(state.sort) ? state.sort : [];
-    if (!sort.length) {
-        indicator.textContent = "Sort: Default";
-        return;
-    }
-
-    let first = sort[0];
-    let field = String(first.field || "date");
-    let direction = String(first.direction || "asc");
-    indicator.textContent = `Sort: ${field} (${direction})`;
+    let filters = Array.isArray(state.filters) ? state.filters : [];
+    let count = countExpenseFilterConditions(filters);
+    filterBtn.textContent = count > 0 ? `Filter (${count})` : "Filter";
 }
 
 function getExpenseFilterChipLabel(filter) {
@@ -9419,7 +9566,29 @@ function getExpenseFilterChipLabel(filter) {
         if (filter.op === "lt") return `Date Before ${String(filter.value || "-")}`;
         if (filter.op === "eq") return `Date Equals ${String(filter.value || "-")}`;
     }
-    return `${String(filter.field || "field")} ${String(filter.op || "eq")} ${String(filter.value || "")}`;
+
+    let fieldRaw = String(filter.field || "field");
+    let valueText = String(filter.value || "");
+    let fieldLabel = fieldRaw === "category"
+        ? "Category"
+        : (fieldRaw === "amount" ? "Amount" : fieldRaw.replace(/\b\w/g, c => c.toUpperCase()));
+
+    if (fieldRaw === "amount") {
+        if (filter.op === "gt") return `Amount > ${valueText}`;
+        if (filter.op === "gte") return `Amount >= ${valueText}`;
+        if (filter.op === "lt") return `Amount < ${valueText}`;
+        if (filter.op === "lte") return `Amount <= ${valueText}`;
+        if (filter.op === "between") return `Amount ${String(filter.from || "-")} to ${String(filter.to || "-")}`;
+    }
+
+    if (filter.op === "contains") {
+        return `${fieldLabel} ${valueText}`;
+    }
+    if (filter.op === "eq") {
+        return `${fieldLabel}: ${valueText}`;
+    }
+
+    return `${fieldLabel} ${String(filter.op || "eq")} ${valueText}`;
 }
 
 function renderExpenseQueryChips() {
@@ -9436,7 +9605,7 @@ function renderExpenseQueryChips() {
 
     filters.forEach((filter, index) => {
         let chip = document.createElement("button");
-        chip.className = "secondary";
+        chip.className = "secondary query-chip";
         chip.type = "button";
         chip.textContent = `${getExpenseFilterChipLabel(filter)} ×`;
         chip.addEventListener("click", () => removeExpenseFilterChip(index));
@@ -9445,21 +9614,14 @@ function renderExpenseQueryChips() {
 
     if (sort.length) {
         let first = sort[0];
-        let chip = document.createElement("button");
-        chip.className = "secondary";
-        chip.type = "button";
-        chip.textContent = `Sort: ${String(first.field || "date")} (${String(first.direction || "asc")}) ×`;
-        chip.addEventListener("click", clearExpenseSortChip);
-        host.appendChild(chip);
-    }
-
-    if (filters.length || sort.length) {
-        let clearAll = document.createElement("button");
-        clearAll.className = "secondary";
-        clearAll.type = "button";
-        clearAll.textContent = "Clear All";
-        clearAll.addEventListener("click", clearExpenseQueryChips);
-        host.appendChild(clearAll);
+        if (!isDefaultExpenseSort(first)) {
+            let chip = document.createElement("button");
+            chip.className = "secondary query-chip";
+            chip.type = "button";
+            chip.textContent = `${getExpenseSortChipLabel(first)} ×`;
+            chip.addEventListener("click", clearExpenseSortChip);
+            host.appendChild(chip);
+        }
     }
 }
 
@@ -9554,11 +9716,11 @@ function applyExpenseFilterModal(explicitFilters) {
     renderExpenseQueryChips();
 }
 
-function saveExpenseFilterModal() {
+async function saveExpenseFilterModal() {
     if (!window.SearchService || typeof window.SearchService.saveView !== "function") {
         return;
     }
-    let name = prompt("Filter name", "Expense Filter");
+    let name = await window.AppDialog.prompt("Filter name", "Expense Filter", "Save Filter");
     if (!name || !name.trim()) {
         return;
     }

@@ -16,7 +16,11 @@ function showOrderNotice(message, variant) {
     showToast(message, variant || "info");
     return;
   }
-  alert(message);
+  if (window.AppDialog && typeof window.AppDialog.alert === "function") {
+    window.AppDialog.alert(message, "Notice");
+    return;
+  }
+  console.warn(message);
 }
 
 function getQuotationData() {
@@ -427,7 +431,7 @@ async function completePurchase() {
     .reduce((sum, e) => sum + Math.abs(Number(e.amount || 0)), 0);
 
   if (dailyLimit > 0 && (todaySpent + total > dailyLimit)) {
-    let proceed = confirm(
+    let proceed = await window.AppDialog.confirm(
       `Daily limit exceeded.\nLimit: ${formatCurrency(dailyLimit)}\nSpent today: ${formatCurrency(todaySpent)}\nOrder: ${formatCurrency(total)}\n\nContinue?`
     );
     if (!proceed) return;
@@ -502,7 +506,7 @@ async function completePurchase() {
   renderOrder();
 }
 
-function advanceOrderStatus(nextStatus) {
+async function advanceOrderStatus(nextStatus) {
   const order = ensureActiveOrder();
   if (!order) {
     showOrderNotice("No order data found.", "warning");
@@ -547,7 +551,7 @@ function advanceOrderStatus(nextStatus) {
   renderOrder();
 }
 
-function cancelOrder() {
+async function cancelOrder() {
   const order = ensureActiveOrder();
   if (!order) {
     showOrderNotice("No order data found.", "warning");
@@ -565,9 +569,10 @@ function cancelOrder() {
     ? "Cancel this draft order and return to quotation?"
     : "Cancel this order? A refund entry will be recorded if it was already confirmed.";
 
-  if (!confirm(message)) return;
+  if (!await window.AppDialog.confirm(message, "Cancel Order")) return;
 
-  const reason = prompt("Cancellation reason", "Cancelled from order workflow") || "Cancelled from order workflow";
+  const reasonInput = await window.AppDialog.prompt("Cancellation reason", "Cancelled from order workflow", "Cancel Order");
+  const reason = (reasonInput || "").trim() || "Cancelled from order workflow";
 
   let orders = getOrders();
   const idx = orders.findIndex(o => String(o.id) === String(order.id));

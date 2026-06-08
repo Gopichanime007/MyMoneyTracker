@@ -24,7 +24,11 @@ function showNotice(message, variant) {
     showToast(message, variant || "info");
     return;
   }
-  alert(message);
+  if (window.AppDialog && typeof window.AppDialog.alert === "function") {
+    window.AppDialog.alert(message, "Notice");
+    return;
+  }
+  console.warn(message);
 }
 
 function getTodayDateKey() {
@@ -884,9 +888,9 @@ function convertToOrder() {
   window.location.href = "order.html";
 }
 
-function clearQuotation() {
+async function clearQuotation() {
   const meta = getCurrentMeta();
-  const ok = confirm("Delete this draft purchase plan?");
+  const ok = await window.AppDialog.confirm("Delete this draft purchase plan?", "Confirm Deletion");
   if (!ok) return;
 
   const rows = getRegistry().filter((row) => String(row.id) !== String(meta.id));

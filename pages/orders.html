@@ -46,9 +46,10 @@
 
       <div class="orders-toolbar">
         <h4>Order Execution Records</h4>
-        <button class="secondary" type="button" onclick="openOrdersFilterModal()">Filter</button>
-        <button class="secondary" type="button" onclick="openOrdersSortModal()">Sort</button>
-        <small id="ordersSortIndicator" class="muted-note">Sort: Default</small>
+        <div class="action-bar action-bar-2">
+          <button id="ordersFilterActionBtn" class="secondary" type="button" onclick="openOrdersFilterModal()">Filter</button>
+          <button class="secondary" type="button" onclick="openOrdersSortModal()">Sort</button>
+        </div>
         <select id="ordersStatusFilter" onchange="renderOrders()">
           <option value="all">All Statuses</option>
           <option value="draft">Draft</option>
@@ -58,7 +59,7 @@
         </select>
       </div>
 
-      <div id="ordersQueryChips" class="inline-row"></div>
+      <div id="ordersQueryChips" class="query-chip-row"></div>
 
       <div class="inline-row">
         <select id="ordersSavedView"></select>
@@ -100,6 +101,7 @@
       </select>
 
       <div class="modal-actions">
+        <button class="secondary" type="button" onclick="closeOrdersSortModal()">Close</button>
         <button class="secondary" type="button" onclick="clearOrdersSortModal()">Clear</button>
         <button class="primary" type="button" onclick="applyOrdersSortModal()">Apply</button>
       </div>

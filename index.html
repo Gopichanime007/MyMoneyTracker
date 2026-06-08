@@ -211,38 +211,19 @@
 
           <div class="history-toolbar premium-history-toolbar">
             <div class="history-filter-wrap">
-              <input id="historySearchInput" type="text" placeholder="Search" oninput="onExpenseHistorySearchInput(this.value)">
+              <input id="historySearchInput" type="text" placeholder="Search transactions..." oninput="onExpenseHistorySearchInput(this.value)">
             </div>
 
-            <div class="inline-row history-tools">
-              <button class="secondary" type="button" onclick="openExpenseFilterModal()">Filter</button>
+            <div class="history-tools action-bar action-bar-4">
+              <button id="expenseFilterActionBtn" class="secondary" type="button" onclick="openExpenseFilterModal()">Filter</button>
               <button class="secondary" type="button" onclick="openExpenseSortModal()">Sort</button>
-              <small id="expenseSortIndicator" class="muted-note">Sort: Default</small>
-
-              <!-- DOWNLOAD -->
-              <button class="icon-btn" onclick="exportPDF()" title="Download PDF">
-                <svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2">
-                  <path d="M12 3v12"></path>
-                  <path d="M7 10l5 5 5-5"></path>
-                  <path d="M5 21h14"></path>
-                </svg>
-              </button>
-
-              <!-- SHARE -->
-              <button class="icon-btn" onclick="sharePDF()" title="Share PDF">
-                <svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2">
-                  <circle cx="18" cy="5" r="3"></circle>
-                  <circle cx="6" cy="12" r="3"></circle>
-                  <circle cx="18" cy="19" r="3"></circle>
-                  <path d="M8.5 13.5l7 4"></path>
-                  <path d="M15.5 6.5l-7 4"></path>
-                </svg>
-              </button>
+              <button class="secondary" type="button" onclick="exportPDF()" title="Download PDF">Export</button>
+              <button class="secondary" type="button" onclick="sharePDF()" title="Share PDF">Share</button>
 
             </div>
           </div>
 
-          <div id="expenseQueryChips" class="inline-row"></div>
+          <div id="expenseQueryChips" class="query-chip-row"></div>
 
           <div id="historyList" class="history-list-premium"></div>
         </div>
@@ -572,6 +553,7 @@
       </select>
 
       <div class="modal-actions">
+        <button class="secondary" type="button" onclick="closeExpenseSortModal()">Close</button>
         <button class="secondary" type="button" onclick="clearExpenseSortModal()">Clear</button>
         <button class="primary" type="button" onclick="applyExpenseSortModal()">Apply</button>
       </div>

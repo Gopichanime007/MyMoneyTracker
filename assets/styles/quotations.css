@@ -54,14 +54,16 @@ body {
 }
 
 .workspace-toolbar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
+  display: grid;
   gap: 10px;
 }
 
 .workspace-toolbar h3 {
   margin: 0;
+}
+
+.workspace-toolbar .action-bar {
+  max-width: 620px;
 }
 
 .workspace-section h4 {
@@ -163,8 +165,7 @@ body {
 }
 
 @media (max-width: 720px) {
-  .workspace-toolbar {
-    flex-direction: column;
-    align-items: stretch;
+  .workspace-toolbar .action-bar {
+    max-width: none;
   }
 }

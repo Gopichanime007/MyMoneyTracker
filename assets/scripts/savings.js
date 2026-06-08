@@ -1767,6 +1767,9 @@ function initializeSavingsFilterBuilder() {
         module: "savings",
         dateField: "date",
         templates: getSavingsFilterTemplates(),
+        onClose: function () {
+            closeSavingsFilterModal();
+        },
         onApply: function (filters) {
             applySavingsFilterModal(filters);
         },
@@ -1803,11 +1806,11 @@ function applySavingsFilterModal(explicitFilters) {
     renderSavingsQueryChips();
 }
 
-function saveSavingsFilterModal() {
+async function saveSavingsFilterModal() {
     if (!window.SearchService || typeof window.SearchService.saveView !== "function") {
         return;
     }
-    let name = prompt("Filter name", "Savings Filter");
+    let name = await window.AppDialog.prompt("Filter name", "Savings Filter", "Save Filter");
     if (!name || !name.trim()) {
         return;
     }
@@ -1833,21 +1836,44 @@ function clearSavingsFilterModal(closeAfterClear = true) {
     renderSavingsQueryChips();
 }
 
+function countSavingsFilterConditions(filters) {
+    if (!Array.isArray(filters)) return 0;
+    return filters.reduce((sum, filter) => {
+        if (!filter || typeof filter !== "object") return sum;
+        if (String(filter.op || "") === "group_any" && Array.isArray(filter.conditions)) {
+            return sum + countSavingsFilterConditions(filter.conditions);
+        }
+        return sum + 1;
+    }, 0);
+}
+
+function isDefaultSavingsSort(sortItem) {
+    if (!sortItem || typeof sortItem !== "object") return true;
+    let field = String(sortItem.field || "date").toLowerCase();
+    let direction = String(sortItem.direction || "desc").toLowerCase();
+    return field === "date" && direction === "desc";
+}
+
+function getSavingsSortChipLabel(sortItem) {
+    let fieldRaw = String((sortItem && sortItem.field) || "date").toLowerCase();
+    let directionRaw = String((sortItem && sortItem.direction) || "desc").toLowerCase();
+    let fieldLabel = fieldRaw === "date"
+        ? "Date"
+        : (fieldRaw === "amount" ? "Amount" : fieldRaw.replace(/\b\w/g, c => c.toUpperCase()));
+    let arrow = directionRaw === "asc" ? "↑" : "↓";
+    return `Sort: ${fieldLabel} ${arrow}`;
+}
+
 function updateSavingsSortIndicator() {
-    let indicator = document.getElementById("savingsSortIndicator");
-    if (!indicator || !window.SearchService || typeof window.SearchService.getState !== "function") {
+    let filterBtn = document.getElementById("savingsFilterActionBtn");
+    if (!filterBtn || !window.SearchService || typeof window.SearchService.getState !== "function") {
         return;
     }
 
     let state = window.SearchService.getState("savings");
-    let sort = Array.isArray(state.sort) ? state.sort : [];
-    if (!sort.length) {
-        indicator.textContent = "Sort: Default";
-        return;
-    }
-
-    let first = sort[0];
-    indicator.textContent = `Sort: ${String(first.field || "date")} (${String(first.direction || "asc")})`;
+    let filters = Array.isArray(state.filters) ? state.filters : [];
+    let count = countSavingsFilterConditions(filters);
+    filterBtn.textContent = count > 0 ? `Filter (${count})` : "Filter";
 }
 
 function getSavingsFilterChipLabel(filter) {
@@ -1876,7 +1902,7 @@ function renderSavingsQueryChips() {
 
     filters.forEach((filter, index) => {
         let chip = document.createElement("button");
-        chip.className = "secondary";
+        chip.className = "secondary query-chip";
         chip.type = "button";
         chip.textContent = `${getSavingsFilterChipLabel(filter)} ×`;
         chip.addEventListener("click", () => removeSavingsFilterChip(index));
@@ -1885,21 +1911,14 @@ function renderSavingsQueryChips() {
 
     if (sort.length) {
         let first = sort[0];
-        let chip = document.createElement("button");
-        chip.className = "secondary";
-        chip.type = "button";
-        chip.textContent = `Sort: ${String(first.field || "date")} (${String(first.direction || "asc")}) ×`;
-        chip.addEventListener("click", clearSavingsSortChip);
-        host.appendChild(chip);
-    }
-
-    if (filters.length || sort.length) {
-        let clearAll = document.createElement("button");
-        clearAll.className = "secondary";
-        clearAll.type = "button";
-        clearAll.textContent = "Clear All";
-        clearAll.addEventListener("click", clearSavingsQueryChips);
-        host.appendChild(clearAll);
+        if (!isDefaultSavingsSort(first)) {
+            let chip = document.createElement("button");
+            chip.className = "secondary query-chip";
+            chip.type = "button";
+            chip.textContent = `${getSavingsSortChipLabel(first)} ×`;
+            chip.addEventListener("click", clearSavingsSortChip);
+            host.appendChild(chip);
+        }
     }
 }
 
@@ -2836,7 +2855,7 @@ async function deleteSavings(id) {
     if (typeof validateTransactionDependencies === "function") {
         let safePlan = validateTransactionDependencies("savings", rootIds, false);
         if (safePlan.blocked) {
-            let proceed = window.confirm(
+            let proceed = await window.AppDialog.confirm(
                 `Cannot delete because dependent records exist (${safePlan.summary}).\n\n` +
                 `Use cascade delete and remove all dependents as well?`
             );

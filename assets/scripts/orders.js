@@ -11,7 +11,11 @@ function showOrdersNotice(message, variant) {
     showToast(message, variant || "info");
     return;
   }
-  alert(message);
+  if (window.AppDialog && typeof window.AppDialog.alert === "function") {
+    window.AppDialog.alert(message, "Notice");
+    return;
+  }
+  console.warn(message);
 }
 
 function createOrderEntryId() {
@@ -117,6 +121,9 @@ function initializeOrdersFilterBuilder() {
     module: "orders",
     dateField: "updatedAt",
     templates: getOrdersFilterTemplates(),
+    onClose: function () {
+      closeOrdersFilterModal();
+    },
     onApply: function (filters) {
       applyOrdersFilterModal(filters);
     },
@@ -166,16 +173,41 @@ function clearOrdersFilterModal(closeAfterClear = true) {
   renderOrders();
 }
 
+function countOrdersFilterConditions(filters) {
+  if (!Array.isArray(filters)) return 0;
+  return filters.reduce((sum, filter) => {
+    if (!filter || typeof filter !== "object") return sum;
+    if (String(filter.op || "") === "group_any" && Array.isArray(filter.conditions)) {
+      return sum + countOrdersFilterConditions(filter.conditions);
+    }
+    return sum + 1;
+  }, 0);
+}
+
+function isDefaultOrdersSort(sortItem) {
+  if (!sortItem || typeof sortItem !== "object") return true;
+  const field = String(sortItem.field || "updatedAt").toLowerCase();
+  const direction = String(sortItem.direction || "desc").toLowerCase();
+  return field === "updatedat" && direction === "desc";
+}
+
+function getOrdersSortChipLabel(sortItem) {
+  const fieldRaw = String((sortItem && sortItem.field) || "updatedAt");
+  const directionRaw = String((sortItem && sortItem.direction) || "desc").toLowerCase();
+  const fieldLabel = fieldRaw === "updatedAt"
+    ? "Updated"
+    : (fieldRaw === "total" ? "Amount" : fieldRaw.replace(/\b\w/g, c => c.toUpperCase()));
+  const arrow = directionRaw === "asc" ? "↑" : "↓";
+  return `Sort: ${fieldLabel} ${arrow}`;
+}
+
 function updateOrdersSortIndicator() {
-  const indicator = document.getElementById("ordersSortIndicator");
-  if (!indicator || !window.SearchService || typeof window.SearchService.getState !== "function") return;
+  const filterBtn = document.getElementById("ordersFilterActionBtn");
+  if (!filterBtn || !window.SearchService || typeof window.SearchService.getState !== "function") return;
   const state = window.SearchService.getState("orders");
-  const sort = Array.isArray(state.sort) ? state.sort : [];
-  if (!sort.length) {
-    indicator.textContent = "Sort: Default";
-    return;
-  }
-  indicator.textContent = `Sort: ${String(sort[0].field || "updatedAt")} (${String(sort[0].direction || "asc")})`;
+  const filters = Array.isArray(state.filters) ? state.filters : [];
+  const count = countOrdersFilterConditions(filters);
+  filterBtn.textContent = count > 0 ? `Filter (${count})` : "Filter";
 }
 
 function getOrdersFilterChipLabel(filter) {
@@ -195,7 +227,7 @@ function renderOrdersQueryChips() {
 
   filters.forEach((filter, index) => {
     const chip = document.createElement("button");
-    chip.className = "secondary";
+    chip.className = "secondary query-chip";
     chip.type = "button";
     chip.textContent = `${getOrdersFilterChipLabel(filter)} ×`;
     chip.addEventListener("click", () => removeOrdersFilterChip(index));
@@ -204,21 +236,14 @@ function renderOrdersQueryChips() {
 
   if (sort.length) {
     const first = sort[0];
-    const chip = document.createElement("button");
-    chip.className = "secondary";
-    chip.type = "button";
-    chip.textContent = `Sort: ${String(first.field || "updatedAt")} (${String(first.direction || "asc")}) ×`;
-    chip.addEventListener("click", clearOrdersSortChip);
-    host.appendChild(chip);
-  }
-
-  if (filters.length || sort.length) {
-    const clearAll = document.createElement("button");
-    clearAll.className = "secondary";
-    clearAll.type = "button";
-    clearAll.textContent = "Clear All";
-    clearAll.addEventListener("click", clearOrdersQueryChips);
-    host.appendChild(clearAll);
+    if (!isDefaultOrdersSort(first)) {
+      const chip = document.createElement("button");
+      chip.className = "secondary query-chip";
+      chip.type = "button";
+      chip.textContent = `${getOrdersSortChipLabel(first)} ×`;
+      chip.addEventListener("click", clearOrdersSortChip);
+      host.appendChild(chip);
+    }
   }
 }
 
@@ -273,9 +298,9 @@ function refreshOrdersSavedViews() {
   });
 }
 
-function saveOrdersCurrentView() {
+async function saveOrdersCurrentView() {
   if (!window.SearchService || typeof window.SearchService.saveView !== "function") return;
-  const name = prompt("Saved view name", "Orders View");
+  const name = await window.AppDialog.prompt("Saved view name", "Orders View", "Save View");
   if (!name || !name.trim()) return;
   window.SearchService.saveView({ name: name.trim(), module: "orders", scope: "module" });
   refreshOrdersSavedViews();
@@ -522,7 +547,7 @@ function getOrderFundingSummary(order) {
   return `Funding ${sourceType} → ${sourceName} | Planned ${planned} | Order ${total}`;
 }
 
-function deleteOrder(orderId) {
+async function deleteOrder(orderId) {
   let orders = getOrders();
   const idx = orders.findIndex(o => String(o.id) === String(orderId));
   if (idx === -1) {
@@ -536,7 +561,7 @@ function deleteOrder(orderId) {
     return;
   }
 
-  const ok = confirm(
+  const ok = await window.AppDialog.confirm(
     `Delete order ${row.id}?\n\nThis removes it from order history and cannot be undone.`
   );
   if (!ok) return;
