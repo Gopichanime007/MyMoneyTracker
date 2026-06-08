@@ -3,7 +3,7 @@
 
 <head>
   <meta charset="UTF-8">
-  <title>Orders</title>
+  <title>Orders Workspace</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
   <link rel="stylesheet" href="../assets/styles/style.css">
@@ -38,22 +38,34 @@
     <!-- 🔙 HEADER -->
     <header class="header header-row">
       <button class="back-btn" onclick="window.location.href='../index.html'">←</button>
-      <h2>📦 Orders</h2>
+      <h2>📦 Orders Workspace</h2>
     </header>
 
     <!-- 📦 CONTENT CARD -->
     <div class="card">
 
       <div class="orders-toolbar">
-        <h4>Order History</h4>
+        <h4>Order Execution Records</h4>
+        <div class="action-bar action-bar-2">
+          <button id="ordersFilterActionBtn" class="secondary" type="button" onclick="openOrdersFilterModal()">Filter</button>
+          <button class="secondary" type="button" onclick="openOrdersSortModal()">Sort</button>
+        </div>
         <select id="ordersStatusFilter" onchange="renderOrders()">
           <option value="all">All Statuses</option>
           <option value="draft">Draft</option>
-          <option value="confirmed">Confirmed</option>
-          <option value="processing">Processing</option>
+          <option value="open">Open</option>
           <option value="completed">Completed</option>
           <option value="cancelled">Cancelled</option>
         </select>
+      </div>
+
+      <div id="ordersQueryChips" class="query-chip-row"></div>
+
+      <div class="inline-row">
+        <select id="ordersSavedView"></select>
+        <button class="secondary" type="button" onclick="saveOrdersCurrentView()">Save View</button>
+        <button class="secondary" type="button" onclick="applyOrdersSavedView()">Apply View</button>
+        <button class="danger" type="button" onclick="deleteOrdersSavedView()">Delete View</button>
       </div>
 
       <!-- Orders will be injected here -->
@@ -63,7 +75,43 @@
 
   </div>
 
+  <div id="ordersFilterModal" class="modal hidden" onclick="closeOrdersFilterModal()">
+    <div class="modal-content" onclick="event.stopPropagation()">
+      <h3>Order Filter Builder</h3>
+      <div id="ordersFilterBuilderRoot"></div>
+    </div>
+  </div>
+
+  <div id="ordersSortModal" class="modal hidden" onclick="closeOrdersSortModal()">
+    <div class="modal-content" onclick="event.stopPropagation()">
+      <h3>Order Sort</h3>
+
+      <label for="ordersSortField">Field</label>
+      <select id="ordersSortField">
+        <option value="updatedAt">Last Updated</option>
+        <option value="total">Amount</option>
+        <option value="status">Status</option>
+        <option value="orderNo">Order No</option>
+      </select>
+
+      <label for="ordersSortDirection">Direction</label>
+      <select id="ordersSortDirection">
+        <option value="desc">Descending</option>
+        <option value="asc">Ascending</option>
+      </select>
+
+      <div class="modal-actions">
+        <button class="secondary" type="button" onclick="closeOrdersSortModal()">Close</button>
+        <button class="secondary" type="button" onclick="clearOrdersSortModal()">Clear</button>
+        <button class="primary" type="button" onclick="applyOrdersSortModal()">Apply</button>
+      </div>
+    </div>
+  </div>
+
   <!-- 📜 SCRIPT -->
+  <script src="../assets/scripts/queryEngine.js"></script>
+  <script src="../assets/scripts/searchService.js"></script>
+  <script src="../assets/scripts/filterBuilder.js"></script>
   <script src="../assets/scripts/script.js"></script>
   <script src="../assets/scripts/orders.js"></script>
 </body>

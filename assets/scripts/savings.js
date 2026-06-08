@@ -1284,6 +1284,17 @@ function setTextById(id, value) {
     el.textContent = value;
 }
 
+function normalizeSavingsAggregationType(type) {
+    const normalized = String(type || "").toLowerCase();
+    if (normalized === "income") return "deposit";
+    return normalized;
+}
+
+function isSavingsDepositBucket(entry) {
+    if (!entry || typeof entry !== "object") return false;
+    return normalizeSavingsAggregationType(entry.type) === "deposit";
+}
+
 function getPeriodEntriesForSavingsDashboard(allRows, activePeriod, periodKey) {
     if (!Array.isArray(allRows)) return [];
     return allRows;
@@ -1300,7 +1311,7 @@ function loadSavings() {
     if (dailyEl) dailyEl.innerText = "₹ " + Number(daily || 0).toFixed(2);
 
     let totalBalance = allRows.reduce((sum, t) => sum + Number(t && t.amount || 0), 0);
-    let totalDeposits = allRows.filter(t => t && t.type === "deposit").reduce((sum, t) => sum + Math.abs(Number(t.amount || 0)), 0);
+    let totalDeposits = allRows.filter(isSavingsDepositBucket).reduce((sum, t) => sum + Math.abs(Number(t.amount || 0)), 0);
     let totalTransfers = allRows.filter(t => t && (t.type === "transfer" || t.type === "budget_allocation")).reduce((sum, t) => sum + Math.abs(Number(t.amount || 0)), 0);
     let totalRefunds = allRows.filter(t => t && t.type === "refund").reduce((sum, t) => sum + Math.abs(Number(t.amount || 0)), 0);
     let netMovement = allRows.reduce((sum, t) => sum + Number(t && t.amount || 0), 0);
@@ -1414,9 +1425,13 @@ function renderSavingsHistory(data) {
     let container = document.getElementById("savingsHistory");
     if (!container) return;
 
+    let sourceData = applySavingsSearch(data);
+        renderSavingsQueryChips();
+        updateSavingsSortIndicator();
+
     container.innerHTML = "";
 
-    if (!Array.isArray(data) || !data.length) {
+    if (!Array.isArray(sourceData) || !sourceData.length) {
         container.innerHTML = `<p class="empty-state">No data yet</p>`;
         return;
     }
@@ -1428,7 +1443,7 @@ function renderSavingsHistory(data) {
         return String(a.id || "").localeCompare(String(b.id || ""));
     };
 
-    let chronological = data.slice().sort(compareTxn);
+    let chronological = sourceData.slice().sort(compareTxn);
     let persisted = ((typeof getSavings === "function") ? getSavings() : []) || [];
     let persistedById = new Map(persisted.map(x => [String(x && x.id), x]));
 
@@ -1693,6 +1708,313 @@ function setTodayDate() {
 
 //Filter
 let filteredSavingsData = [];
+
+function applySavingsSearch(rows) {
+    let list = Array.isArray(rows) ? rows : [];
+    if (!window.SearchService || typeof window.SearchService.applyModuleSearch !== "function") {
+        return list;
+    }
+
+    let queryResult = window.SearchService.applyModuleSearch("savings", list);
+    return Array.isArray(queryResult.results) ? queryResult.results : list;
+}
+
+function openSavingsFilterModal() {
+    initializeSavingsFilterBuilder();
+    if (window.SearchService && typeof window.SearchService.getState === "function" && savingsFilterBuilderInstance) {
+        let state = window.SearchService.getState("savings");
+        savingsFilterBuilderInstance.setFromFilters(Array.isArray(state.filters) ? state.filters : []);
+    }
+    let modal = document.getElementById("savingsFilterModal");
+    if (modal) {
+        modal.classList.remove("hidden");
+        modal.style.display = "flex";
+    }
+}
+
+function closeSavingsFilterModal() {
+    let modal = document.getElementById("savingsFilterModal");
+    if (modal) {
+        modal.classList.add("hidden");
+        modal.style.display = "none";
+    }
+}
+
+let savingsFilterBuilderInstance = null;
+
+function getSavingsFilterTemplates() {
+    return [
+        { key: "date", label: "Date", field: "date", type: "date", hint: "Use Equals, Before, After, or Between" },
+        { key: "category", label: "Category", field: "type", type: "text", hint: "Savings, reserve, emergency" },
+        { key: "type", label: "Type", field: "type", type: "text", hint: "deposit, withdrawal" },
+        { key: "amount", label: "Amount", field: "amount", type: "number", hint: "5000, 10000, 25000" },
+        { key: "payment", label: "Payment Type", field: "paymentType", type: "enum", hint: "UPI, Cash, Debit Card, Credit Card" },
+        { key: "budget", label: "Budget", field: "sourceId", type: "text", hint: "Budget or source id" },
+        { key: "savings", label: "Savings", field: "note", type: "text", hint: "Goal or note tags" },
+        { key: "source", label: "Source", field: "entity", type: "text", hint: "Bank or source entity" },
+        { key: "person", label: "Person", field: "person", type: "text", hint: "Person names" },
+        { key: "attachment", label: "Attachment", field: "attachmentName", type: "presence", hint: "Has any attachment" }
+    ];
+}
+
+function initializeSavingsFilterBuilder() {
+    let root = document.getElementById("savingsFilterBuilderRoot");
+    if (!root || savingsFilterBuilderInstance || !window.FilterBuilder || typeof window.FilterBuilder.create !== "function") {
+        return;
+    }
+
+    savingsFilterBuilderInstance = window.FilterBuilder.create({
+        module: "savings",
+        dateField: "date",
+        templates: getSavingsFilterTemplates(),
+        onClose: function () {
+            closeSavingsFilterModal();
+        },
+        onApply: function (filters) {
+            applySavingsFilterModal(filters);
+        },
+        onClear: function () {
+            clearSavingsFilterModal(false);
+        },
+        onSave: function () {
+            saveSavingsFilterModal();
+        }
+    });
+
+    savingsFilterBuilderInstance.mount(root);
+}
+
+function buildSavingsFilterDescriptorsFromModal() {
+    initializeSavingsFilterBuilder();
+    if (!savingsFilterBuilderInstance) {
+        return [];
+    }
+    return savingsFilterBuilderInstance.getDescriptors();
+}
+
+function applySavingsFilterModal(explicitFilters) {
+    if (window.SearchService && typeof window.SearchService.setFilters === "function") {
+        let filters = Array.isArray(explicitFilters) ? explicitFilters : buildSavingsFilterDescriptorsFromModal();
+        window.SearchService.setFilters("savings", filters);
+    }
+
+    closeSavingsFilterModal();
+    let base = filteredSavingsData.length ? filteredSavingsData : getScopedSavings();
+    filteredSavingsData = applySavingsSearch(base);
+    renderSavingsHistory(filteredSavingsData);
+    loadSavingsGraph(filteredSavingsData);
+    renderSavingsQueryChips();
+}
+
+async function saveSavingsFilterModal() {
+    if (!window.SearchService || typeof window.SearchService.saveView !== "function") {
+        return;
+    }
+    let name = await window.AppDialog.prompt("Filter name", "Savings Filter", "Save Filter");
+    if (!name || !name.trim()) {
+        return;
+    }
+    window.SearchService.saveView({ name: name.trim(), module: "savings", scope: "module" });
+}
+
+function clearSavingsFilterModal(closeAfterClear = true) {
+    initializeSavingsFilterBuilder();
+    if (savingsFilterBuilderInstance) {
+        savingsFilterBuilderInstance.clearAll();
+    }
+
+    if (window.SearchService && typeof window.SearchService.clearFilters === "function") {
+        window.SearchService.clearFilters("savings");
+    }
+
+    if (closeAfterClear) {
+        closeSavingsFilterModal();
+    }
+    filteredSavingsData = applySavingsSearch(getScopedSavings());
+    renderSavingsHistory(filteredSavingsData);
+    loadSavingsGraph(filteredSavingsData);
+    renderSavingsQueryChips();
+}
+
+function countSavingsFilterConditions(filters) {
+    if (!Array.isArray(filters)) return 0;
+    return filters.reduce((sum, filter) => {
+        if (!filter || typeof filter !== "object") return sum;
+        if (String(filter.op || "") === "group_any" && Array.isArray(filter.conditions)) {
+            return sum + countSavingsFilterConditions(filter.conditions);
+        }
+        return sum + 1;
+    }, 0);
+}
+
+function isDefaultSavingsSort(sortItem) {
+    if (!sortItem || typeof sortItem !== "object") return true;
+    let field = String(sortItem.field || "date").toLowerCase();
+    let direction = String(sortItem.direction || "desc").toLowerCase();
+    return field === "date" && direction === "desc";
+}
+
+function getSavingsSortChipLabel(sortItem) {
+    let fieldRaw = String((sortItem && sortItem.field) || "date").toLowerCase();
+    let directionRaw = String((sortItem && sortItem.direction) || "desc").toLowerCase();
+    let fieldLabel = fieldRaw === "date"
+        ? "Date"
+        : (fieldRaw === "amount" ? "Amount" : fieldRaw.replace(/\b\w/g, c => c.toUpperCase()));
+    let arrow = directionRaw === "asc" ? "↑" : "↓";
+    return `Sort: ${fieldLabel} ${arrow}`;
+}
+
+function updateSavingsSortIndicator() {
+    let filterBtn = document.getElementById("savingsFilterActionBtn");
+    if (!filterBtn || !window.SearchService || typeof window.SearchService.getState !== "function") {
+        return;
+    }
+
+    let state = window.SearchService.getState("savings");
+    let filters = Array.isArray(state.filters) ? state.filters : [];
+    let count = countSavingsFilterConditions(filters);
+    filterBtn.textContent = count > 0 ? `Filter (${count})` : "Filter";
+}
+
+function getSavingsFilterChipLabel(filter) {
+    if (!filter || typeof filter !== "object") return "Filter";
+    if (filter.op === "period" && filter.value && typeof filter.value === "object") {
+        let type = String(filter.value.type || "custom");
+        if (type === "custom") {
+            return `Period: ${filter.value.from || "-"} to ${filter.value.to || "-"}`;
+        }
+        return `Period: ${type}`;
+    }
+    return `${String(filter.field || "field")} ${String(filter.op || "eq")} ${String(filter.value || "")}`;
+}
+
+function renderSavingsQueryChips() {
+    let host = document.getElementById("savingsQueryChips");
+    if (!host || !window.SearchService || typeof window.SearchService.getState !== "function") {
+        return;
+    }
+
+    let state = window.SearchService.getState("savings");
+    let filters = Array.isArray(state.filters) ? state.filters : [];
+    let sort = Array.isArray(state.sort) ? state.sort : [];
+
+    host.innerHTML = "";
+
+    filters.forEach((filter, index) => {
+        let chip = document.createElement("button");
+        chip.className = "secondary query-chip";
+        chip.type = "button";
+        chip.textContent = `${getSavingsFilterChipLabel(filter)} ×`;
+        chip.addEventListener("click", () => removeSavingsFilterChip(index));
+        host.appendChild(chip);
+    });
+
+    if (sort.length) {
+        let first = sort[0];
+        if (!isDefaultSavingsSort(first)) {
+            let chip = document.createElement("button");
+            chip.className = "secondary query-chip";
+            chip.type = "button";
+            chip.textContent = `${getSavingsSortChipLabel(first)} ×`;
+            chip.addEventListener("click", clearSavingsSortChip);
+            host.appendChild(chip);
+        }
+    }
+}
+
+function removeSavingsFilterChip(index) {
+    if (!window.SearchService || typeof window.SearchService.getState !== "function") return;
+    let state = window.SearchService.getState("savings");
+    let filters = Array.isArray(state.filters) ? state.filters.slice() : [];
+    filters.splice(index, 1);
+    if (typeof window.SearchService.setFilters === "function") {
+        window.SearchService.setFilters("savings", filters);
+    }
+    let base = filteredSavingsData.length ? filteredSavingsData : getScopedSavings();
+    filteredSavingsData = applySavingsSearch(base);
+    renderSavingsHistory(filteredSavingsData);
+    loadSavingsGraph(filteredSavingsData);
+    renderSavingsQueryChips();
+}
+
+function clearSavingsSortChip() {
+    if (window.SearchService && typeof window.SearchService.clearSort === "function") {
+        window.SearchService.clearSort("savings");
+    }
+    let base = filteredSavingsData.length ? filteredSavingsData : getScopedSavings();
+    filteredSavingsData = applySavingsSearch(base);
+    renderSavingsHistory(filteredSavingsData);
+    loadSavingsGraph(filteredSavingsData);
+}
+
+function clearSavingsQueryChips() {
+    if (window.SearchService) {
+        if (typeof window.SearchService.clearFilters === "function") {
+            window.SearchService.clearFilters("savings");
+        }
+        if (typeof window.SearchService.clearSort === "function") {
+            window.SearchService.clearSort("savings");
+        }
+    }
+    filteredSavingsData = applySavingsSearch(getScopedSavings());
+    renderSavingsHistory(filteredSavingsData);
+    loadSavingsGraph(filteredSavingsData);
+    renderSavingsQueryChips();
+}
+
+function openSavingsSortModal() {
+    let modal = document.getElementById("savingsSortModal");
+    if (modal) {
+        modal.classList.remove("hidden");
+        modal.style.display = "flex";
+    }
+}
+
+function closeSavingsSortModal() {
+    let modal = document.getElementById("savingsSortModal");
+    if (modal) {
+        modal.classList.add("hidden");
+        modal.style.display = "none";
+    }
+}
+
+function applySavingsSortModal() {
+    let field = document.getElementById("savingsSortField")?.value || "date";
+    let direction = document.getElementById("savingsSortDirection")?.value || "desc";
+    let type = field === "amount" ? "number" : (field === "date" ? "date" : "string");
+
+    if (window.SearchService && typeof window.SearchService.setSort === "function") {
+        window.SearchService.setSort("savings", [{ field: field, direction: direction, type: type }]);
+    }
+
+    closeSavingsSortModal();
+    updateSavingsSortIndicator();
+    let base = filteredSavingsData.length ? filteredSavingsData : getScopedSavings();
+    filteredSavingsData = applySavingsSearch(base);
+    renderSavingsHistory(filteredSavingsData);
+    loadSavingsGraph(filteredSavingsData);
+    renderSavingsQueryChips();
+}
+
+function clearSavingsSortModal() {
+    let fieldEl = document.getElementById("savingsSortField");
+    let directionEl = document.getElementById("savingsSortDirection");
+    if (fieldEl) fieldEl.value = "date";
+    if (directionEl) directionEl.value = "desc";
+
+    if (window.SearchService && typeof window.SearchService.clearSort === "function") {
+        window.SearchService.clearSort("savings");
+    }
+
+    closeSavingsSortModal();
+    updateSavingsSortIndicator();
+    let base = filteredSavingsData.length ? filteredSavingsData : getScopedSavings();
+    filteredSavingsData = applySavingsSearch(base);
+    renderSavingsHistory(filteredSavingsData);
+    loadSavingsGraph(filteredSavingsData);
+    renderSavingsQueryChips();
+}
+
 // Filters savings data by time (today, week, month, all) and updates UI
 function handleSavingsFilter(type) {
 
@@ -1774,10 +2096,10 @@ function handleSavingsFilter(type) {
     // =========================
     // 📊 STORE + UPDATE UI
     // =========================
-    filteredSavingsData = result;
+    filteredSavingsData = applySavingsSearch(result);
 
-    renderSavingsHistory(result);
-    loadSavingsGraph(result);
+    renderSavingsHistory(filteredSavingsData);
+    loadSavingsGraph(filteredSavingsData);
 }
 // Generates income vs expense chart using filtered or full data
 function loadSavingsGraph(data) {
@@ -2213,7 +2535,7 @@ function applySavingsDateFilter() {
 
     let data = getSavings() || [];
 
-    filteredSavingsData = data.filter(t => {
+    let scoped = data.filter(t => {
         let d = new Date(t.date).toISOString().slice(0, 10);
 
         if (from && !to) return d === from;
@@ -2222,6 +2544,8 @@ function applySavingsDateFilter() {
 
         return true;
     });
+
+    filteredSavingsData = applySavingsSearch(scoped);
 
     renderSavingsHistory(filteredSavingsData);
     loadSavingsGraph(filteredSavingsData);
@@ -2531,7 +2855,7 @@ async function deleteSavings(id) {
     if (typeof validateTransactionDependencies === "function") {
         let safePlan = validateTransactionDependencies("savings", rootIds, false);
         if (safePlan.blocked) {
-            let proceed = window.confirm(
+            let proceed = await window.AppDialog.confirm(
                 `Cannot delete because dependent records exist (${safePlan.summary}).\n\n` +
                 `Use cascade delete and remove all dependents as well?`
             );

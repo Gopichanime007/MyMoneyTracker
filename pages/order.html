@@ -19,7 +19,7 @@
         <button class="back-btn" type="button" onclick="goBackToQuotation()" aria-label="Back to quotation">←</button>
         <div>
           <h2>Order</h2>
-          <p class="header-subtitle">Validate funding and complete fulfillment workflow</p>
+          <p class="header-subtitle">Execute accepted purchase plan</p>
         </div>
       </div>
     </header>
@@ -40,6 +40,10 @@
           <strong id="orderIdLabel">-</strong>
         </div>
         <div class="meta-block">
+          <small>Order No.</small>
+          <strong id="orderNoLabel">-</strong>
+        </div>
+        <div class="meta-block">
           <small>Created</small>
           <strong id="orderCreatedLabel">-</strong>
         </div>
@@ -50,6 +54,7 @@
       </div>
 
       <div class="order-context">
+        <p><strong>Purpose:</strong> <span id="orderPurposeLabel">-</span></p>
         <p><strong>Quotation:</strong> <span id="orderQuotationLabel">-</span></p>
         <p><strong>Funding Source:</strong> <span id="orderSourceLabel">Not selected</span></p>
       </div>
@@ -92,19 +97,13 @@
       </div>
 
       <div class="section-heading">
-        <h4>Payment & Source</h4>
+        <h4>Funding Details</h4>
       </div>
-
-      <select id="oSourceType" onchange="loadSourceOptions()">
-        <option value="">Select Source Type</option>
-        <option value="savings">Savings</option>
-        <option value="budget">Budget</option>
-      </select>
-
-      <select id="oSource">
-        <option value="">Select Source</option>
-      </select>
       <div id="sourcePreview"></div>
+
+      <div class="section-heading">
+        <h4>Payment</h4>
+      </div>
       <select id="oPaymentType">
         <option value="">Payment Type</option>
         <option>UPI</option>

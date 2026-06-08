@@ -1,11 +1,10 @@
-// =========================
-// 📦 QUOTATION STORAGE
-// =========================
-const QUOTATION_REGISTRY_KEY = "quotationRegistry";
-const QUOTATION_META_KEY = "quotationMeta";
+const Q_WORKFLOW_KEYS = (window.DocWorkflow && window.DocWorkflow.keys) || {};
+const Q_REGISTRY_STORAGE_KEY = Q_WORKFLOW_KEYS.quotationRegistry || "quotationRegistry";
+const Q_META_STORAGE_KEY = Q_WORKFLOW_KEYS.quotationMeta || "quotationMeta";
+const Q_ACTIVE_STORAGE_KEY = Q_WORKFLOW_KEYS.activeQuotation || "activeQuotationId";
 
-let quotationItems = JSON.parse(localStorage.getItem("quotationItems") || "[]");
-let quotationCharges = JSON.parse(localStorage.getItem("quotationCharges") || "[]");
+let quotationItems = [];
+let quotationCharges = [];
 
 function createEntityId(prefix) {
   return `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
@@ -20,73 +19,49 @@ function escapeQuotationHtml(value) {
     .replace(/'/g, "&#39;");
 }
 
+function showNotice(message, variant) {
+  if (typeof showToast === "function") {
+    showToast(message, variant || "info");
+    return;
+  }
+  if (window.AppDialog && typeof window.AppDialog.alert === "function") {
+    window.AppDialog.alert(message, "Notice");
+    return;
+  }
+  console.warn(message);
+}
+
+function getTodayDateKey() {
+  return new Date().toISOString().split("T")[0];
+}
+
 function getRegistry() {
-  return JSON.parse(localStorage.getItem(QUOTATION_REGISTRY_KEY) || "[]");
+  if (window.DocWorkflow) return window.DocWorkflow.getQuotationRegistry();
+  return JSON.parse(localStorage.getItem(Q_REGISTRY_STORAGE_KEY) || "[]");
 }
 
 function saveRegistry(rows) {
-  localStorage.setItem(QUOTATION_REGISTRY_KEY, JSON.stringify(Array.isArray(rows) ? rows : []));
+  if (window.DocWorkflow) {
+    window.DocWorkflow.saveQuotationRegistry(rows);
+    return;
+  }
+  localStorage.setItem(Q_REGISTRY_STORAGE_KEY, JSON.stringify(Array.isArray(rows) ? rows : []));
 }
 
-function getCurrentMeta() {
-  let meta = JSON.parse(localStorage.getItem(QUOTATION_META_KEY) || "null");
-  if (!meta || !meta.id) {
-    const now = new Date().toISOString();
-    meta = {
-      id: createEntityId("quote"),
-      status: "draft",
-      createdAt: now,
-      updatedAt: now,
-      validUntil: null,
-      convertedOrderId: null,
-      history: [
-        { at: now, action: "created", status: "draft", note: "Quotation created" }
-      ]
-    };
-    localStorage.setItem(QUOTATION_META_KEY, JSON.stringify(meta));
+function getActiveQuotationId() {
+  try {
+    return JSON.parse(localStorage.getItem(Q_ACTIVE_STORAGE_KEY) || "null");
+  } catch (_err) {
+    return null;
   }
-  return meta;
 }
 
 function saveCurrentMeta(meta) {
-  localStorage.setItem(QUOTATION_META_KEY, JSON.stringify(meta));
-}
-
-function upsertRegistry(meta, totals) {
-  let registry = getRegistry();
-  const row = {
-    id: meta.id,
-    status: meta.status,
-    createdAt: meta.createdAt,
-    updatedAt: meta.updatedAt,
-    validUntil: meta.validUntil || null,
-    convertedOrderId: meta.convertedOrderId || null,
-    itemCount: quotationItems.length,
-    subtotal: Number(totals.subtotal || 0),
-    total: Number(totals.total || 0)
-  };
-
-  const idx = registry.findIndex(x => String(x.id) === String(meta.id));
-  if (idx === -1) {
-    registry.push(row);
-  } else {
-    registry[idx] = { ...registry[idx], ...row };
-  }
-  saveRegistry(registry);
-}
-
-function getAllowedStatusTransitions() {
-  return {
-    draft: ["sent"],
-    sent: ["accepted", "rejected", "draft"],
-    accepted: ["converted", "draft"],
-    rejected: ["draft"],
-    converted: []
-  };
+  localStorage.setItem(Q_META_STORAGE_KEY, JSON.stringify(meta));
 }
 
 function getStatusOrder() {
-  return ["draft", "sent", "accepted", "converted"];
+  return ["draft", "accepted", "converted"];
 }
 
 function isQuotationEditable(status) {
@@ -96,49 +71,150 @@ function isQuotationEditable(status) {
 function getStatusLabel(status) {
   const map = {
     draft: "Draft",
-    sent: "Sent",
     accepted: "Accepted",
-    rejected: "Rejected",
     converted: "Converted"
   };
   return map[status] || "Draft";
 }
 
-function showNotice(message, variant) {
-  if (typeof showToast === "function") {
-    showToast(message, variant || "info");
-    return;
+function getAllowedStatusTransitions() {
+  return {
+    draft: ["accepted"],
+    accepted: ["draft", "converted"],
+    converted: []
+  };
+}
+
+function getCurrentMeta() {
+  const activeId = getActiveQuotationId();
+  const registry = getRegistry();
+
+  if (activeId) {
+    const row = registry.find((x) => String(x.id) === String(activeId));
+    if (row) {
+      const existing = JSON.parse(localStorage.getItem(Q_META_STORAGE_KEY) || "null");
+      if (existing && String(existing.id) === String(row.id)) return existing;
+
+      const rebuilt = {
+        id: row.id,
+        quotationNo: row.quotationNo || (window.DocWorkflow ? window.DocWorkflow.generateDocumentNumber("quotation") : createEntityId("QT")),
+        purpose: row.purpose || "",
+        status: row.status || "draft",
+        createdAt: row.createdAt || new Date().toISOString(),
+        updatedAt: row.updatedAt || new Date().toISOString(),
+        validUntil: row.validUntil || null,
+        convertedOrderId: row.convertedOrderId || row.orderId || null,
+        fundingSourceType: row.fundingSourceType || null,
+        fundingSourceId: row.fundingSourceId || null,
+        fundingSourceName: row.fundingSourceName || null,
+        history: Array.isArray(row.history) ? row.history : []
+      };
+
+      quotationItems = Array.isArray(row.items) ? row.items.slice() : [];
+      quotationCharges = Array.isArray(row.charges) ? row.charges.slice() : [];
+
+      saveCurrentMeta(rebuilt);
+      return rebuilt;
+    }
   }
-  alert(message);
+
+  let meta = JSON.parse(localStorage.getItem(Q_META_STORAGE_KEY) || "null");
+  if (meta && meta.id) return meta;
+
+  const now = new Date().toISOString();
+  const quotationNo = window.DocWorkflow
+    ? window.DocWorkflow.generateDocumentNumber("quotation")
+    : createEntityId("QT");
+
+  meta = {
+    id: createEntityId("quote"),
+    quotationNo,
+    purpose: "",
+    status: "draft",
+    createdAt: now,
+    updatedAt: now,
+    validUntil: null,
+    convertedOrderId: null,
+    fundingSourceType: null,
+    fundingSourceId: null,
+    fundingSourceName: null,
+    history: [
+      { at: now, action: "created", status: "draft", note: "Purchase plan created" }
+    ]
+  };
+
+  quotationItems = [];
+  quotationCharges = [];
+  localStorage.setItem(Q_ACTIVE_STORAGE_KEY, JSON.stringify(meta.id));
+  saveCurrentMeta(meta);
+  return meta;
+}
+
+function addHistory(meta, action, note) {
+  const now = new Date().toISOString();
+  if (!Array.isArray(meta.history)) meta.history = [];
+  meta.history.push({ at: now, action, status: meta.status, note: note || "" });
+  meta.updatedAt = now;
 }
 
 function getTotals() {
-  let subtotal = quotationItems.reduce((sum, i) => sum + Number(i.total || 0), 0);
+  const subtotal = quotationItems.reduce((sum, item) => sum + Number(item.total || 0), 0);
 
   let gstAmount = 0;
   let delivery = 0;
   let discount = 0;
 
-  quotationCharges.forEach(c => {
+  quotationCharges.forEach((charge) => {
     let baseAmount = 0;
-    if (c.appliesTo === "all") {
+    if (charge.appliesTo === "all") {
       baseAmount = subtotal;
     } else {
-      const item = quotationItems.find(i => String(i.id) === String(c.appliesTo));
+      const item = quotationItems.find((x) => String(x.id) === String(charge.appliesTo));
       baseAmount = item ? Number(item.total || 0) : 0;
     }
 
-    let amount = c.mode === "percent"
-      ? (baseAmount * Number(c.value || 0)) / 100
-      : Number(c.value || 0);
+    const amount = charge.mode === "percent"
+      ? (baseAmount * Number(charge.value || 0)) / 100
+      : Number(charge.value || 0);
 
-    if (c.type === "gst") gstAmount += amount;
-    if (c.type === "delivery") delivery += amount;
-    if (c.type === "discount") discount += amount;
+    if (charge.type === "gst") gstAmount += amount;
+    if (charge.type === "delivery") delivery += amount;
+    if (charge.type === "discount") discount += amount;
   });
 
-  let total = subtotal + gstAmount + delivery - discount;
+  const total = subtotal + gstAmount + delivery - discount;
   return { subtotal, gstAmount, total };
+}
+
+function upsertRegistry(meta, totals) {
+  const rows = getRegistry();
+  const relation = window.DocWorkflow ? window.DocWorkflow.getRelationByQuotationId(meta.id) : null;
+
+  const dataRow = {
+    id: meta.id,
+    quotationNo: meta.quotationNo,
+    purpose: meta.purpose,
+    status: meta.status,
+    createdAt: meta.createdAt,
+    updatedAt: meta.updatedAt,
+    validUntil: meta.validUntil || null,
+    convertedOrderId: meta.convertedOrderId || null,
+    fundingSourceType: meta.fundingSourceType || null,
+    fundingSourceId: meta.fundingSourceId || null,
+    fundingSourceName: meta.fundingSourceName || null,
+    orderId: relation && relation.orderId ? relation.orderId : (meta.convertedOrderId || null),
+    relationshipStatus: relation && relation.relationshipStatus ? relation.relationshipStatus : (meta.convertedOrderId ? "linked" : "unlinked"),
+    itemCount: quotationItems.length,
+    subtotal: Number(totals.subtotal || 0),
+    total: Number(totals.total || 0),
+    items: quotationItems,
+    charges: quotationCharges,
+    history: Array.isArray(meta.history) ? meta.history : []
+  };
+
+  const idx = rows.findIndex((x) => String(x.id) === String(meta.id));
+  if (idx === -1) rows.push(dataRow); else rows[idx] = Object.assign({}, rows[idx], dataRow);
+  saveRegistry(rows);
 }
 
 function syncQuotationData() {
@@ -147,11 +223,16 @@ function syncQuotationData() {
 
   const payload = {
     id: meta.id,
+    quotationNo: meta.quotationNo,
+    purpose: meta.purpose,
     status: meta.status,
     createdAt: meta.createdAt,
     updatedAt: meta.updatedAt,
     validUntil: meta.validUntil || null,
     convertedOrderId: meta.convertedOrderId || null,
+    fundingSourceType: meta.fundingSourceType || null,
+    fundingSourceId: meta.fundingSourceId || null,
+    fundingSourceName: meta.fundingSourceName || null,
     items: quotationItems,
     charges: quotationCharges,
     subtotal: totals.subtotal,
@@ -164,33 +245,37 @@ function syncQuotationData() {
   localStorage.setItem("quotationItems", JSON.stringify(quotationItems));
   localStorage.setItem("quotationCharges", JSON.stringify(quotationCharges));
   upsertRegistry(meta, totals);
-}
 
-function addHistory(meta, action, note) {
-  const now = new Date().toISOString();
-  if (!Array.isArray(meta.history)) meta.history = [];
-  meta.history.push({ at: now, action, status: meta.status, note: note || "" });
-  meta.updatedAt = now;
+  if (window.DocWorkflow) {
+    window.DocWorkflow.upsertRelation({
+      quotationId: meta.id,
+      orderId: meta.convertedOrderId || null,
+      relationshipStatus: meta.convertedOrderId ? "linked" : "unlinked"
+    });
+  }
 }
 
 function renderLifecycle() {
   const meta = getCurrentMeta();
   const statusEl = document.getElementById("quotationStatusLabel");
-  const idEl = document.getElementById("quotationIdLabel");
+  const noEl = document.getElementById("quotationNoLabel");
   const dateEl = document.getElementById("quotationValidityDate");
+  const purposeEl = document.getElementById("quotationPurpose");
 
   if (statusEl) {
     statusEl.textContent = getStatusLabel(meta.status);
     statusEl.className = `status-pill status-${meta.status}`;
   }
-  if (idEl) idEl.textContent = meta.id;
+  if (noEl) noEl.textContent = meta.quotationNo || "-";
   if (dateEl) dateEl.value = meta.validUntil || "";
+  if (purposeEl) purposeEl.value = meta.purpose || "";
 
   const steps = Array.from(document.querySelectorAll("[data-status-step]"));
   const order = getStatusOrder();
   let activeIndex = order.indexOf(String(meta.status || "draft"));
   if (activeIndex < 0) activeIndex = 0;
-  steps.forEach(step => {
+
+  steps.forEach((step) => {
     const stepStatus = String(step.getAttribute("data-status-step") || "");
     const idx = order.indexOf(stepStatus);
     step.classList.toggle("active", idx !== -1 && idx <= activeIndex);
@@ -199,7 +284,7 @@ function renderLifecycle() {
 
   const statusActions = Array.from(document.querySelectorAll("[data-quote-action]"));
   const allowed = getAllowedStatusTransitions()[String(meta.status || "draft")] || [];
-  statusActions.forEach(btn => {
+  statusActions.forEach((btn) => {
     const action = String(btn.getAttribute("data-quote-action") || "");
     btn.style.display = allowed.includes(action) ? "inline-flex" : "none";
   });
@@ -209,19 +294,29 @@ function renderLifecycle() {
   const addChargeBtn = document.getElementById("addQuotationChargeBtn");
   const clearBtn = document.getElementById("clearQuotationBtn");
   const convertBtn = document.getElementById("convertQuotationBtn");
+  const saveDraftBtn = document.getElementById("saveDraftBtn");
+  const sourceType = document.getElementById("qSourceType");
+  const sourceValue = document.getElementById("qSourceValue");
+  const validityDate = document.getElementById("quotationValidityDate");
+  const purposeInput = document.getElementById("quotationPurpose");
 
   if (addItemBtn) addItemBtn.disabled = !editable;
   if (addChargeBtn) addChargeBtn.disabled = !editable;
   if (clearBtn) clearBtn.disabled = !editable;
+  if (saveDraftBtn) saveDraftBtn.disabled = !editable;
   if (convertBtn) convertBtn.style.display = String(meta.status || "draft") === "accepted" ? "inline-flex" : "none";
+  if (sourceType) sourceType.disabled = !editable;
+  if (sourceValue) sourceValue.disabled = !editable;
+  if (validityDate) validityDate.disabled = !editable;
+  if (purposeInput) purposeInput.disabled = !editable;
 
   const audit = document.getElementById("quotationAuditTrail");
   if (audit) {
-    const rows = (meta.history || []).slice(-4).reverse();
+    const rows = (meta.history || []).slice(-5).reverse();
     if (!rows.length) {
       audit.innerHTML = "";
     } else {
-      audit.innerHTML = rows.map(row => {
+      audit.innerHTML = rows.map((row) => {
         const when = new Date(row.at).toLocaleString("en-IN");
         const note = row.note ? ` - ${escapeQuotationHtml(row.note)}` : "";
         return `<div class="audit-row"><small>${escapeQuotationHtml(when)} - ${escapeQuotationHtml(getStatusLabel(row.status))}${note}</small></div>`;
@@ -230,15 +325,38 @@ function renderLifecycle() {
   }
 }
 
+function setQuotationPurpose() {
+  const input = document.getElementById("quotationPurpose");
+  if (!input) return;
+
+  const meta = getCurrentMeta();
+  if (!isQuotationEditable(meta.status)) return;
+
+  const purpose = String(input.value || "").trim();
+  meta.purpose = purpose;
+  addHistory(meta, "purpose_updated", purpose ? `Purpose set to ${purpose}` : "Purpose cleared");
+  saveCurrentMeta(meta);
+  syncQuotationData();
+  renderLifecycle();
+}
+
 function updateQuotationValidityDate() {
   const dateInput = document.getElementById("quotationValidityDate");
   if (!dateInput) return;
-  let meta = getCurrentMeta();
+  const meta = getCurrentMeta();
+
   if (!isQuotationEditable(meta.status)) {
-    showNotice("Only Draft quotations can be edited. Reopen to Draft to continue.", "warning");
+    showNotice("Only draft plans can be edited.", "warning");
     dateInput.value = meta.validUntil || "";
     return;
   }
+
+  if (dateInput.value && dateInput.value < getTodayDateKey()) {
+    showNotice("Validity date cannot be in the past.", "warning");
+    dateInput.value = meta.validUntil || "";
+    return;
+  }
+
   meta.validUntil = dateInput.value || null;
   addHistory(meta, "validity_updated", meta.validUntil ? `Valid until ${meta.validUntil}` : "Validity cleared");
   saveCurrentMeta(meta);
@@ -246,24 +364,125 @@ function updateQuotationValidityDate() {
   renderLifecycle();
 }
 
-function setQuotationStatus(nextStatus) {
-  let meta = getCurrentMeta();
-  const current = String(meta.status || "draft");
+function loadQuotationFundingOptions() {
+  const typeEl = document.getElementById("qSourceType");
+  const valueEl = document.getElementById("qSourceValue");
+  const meta = getCurrentMeta();
 
+  if (!typeEl || !valueEl) return;
+
+  const selectedType = typeEl.value;
+  valueEl.innerHTML = '<option value="">Select Funding Account</option>';
+
+  const list = window.DocWorkflow ? window.DocWorkflow.getFundingSourceSummaries(selectedType) : [];
+  list.forEach((row) => {
+    const option = document.createElement("option");
+    option.value = String(row.id);
+    option.textContent = `${row.name} (${formatCurrency(Number(row.remaining || 0))})`;
+    option.dataset.type = selectedType;
+    option.dataset.name = row.name;
+    option.dataset.remaining = String(Number(row.remaining || 0));
+    valueEl.appendChild(option);
+  });
+
+  if (meta.fundingSourceType === selectedType && meta.fundingSourceId) {
+    valueEl.value = String(meta.fundingSourceId);
+  }
+
+  renderQuotationFundingPreview();
+}
+
+function renderQuotationFundingPreview() {
+  const typeEl = document.getElementById("qSourceType");
+  const valueEl = document.getElementById("qSourceValue");
+  const preview = document.getElementById("qFundingPreview");
+  if (!typeEl || !valueEl || !preview) return;
+
+  const selected = valueEl.options[valueEl.selectedIndex];
+  if (!selected || !selected.value) {
+    preview.innerHTML = "<small>Select source type and account with available balance.</small>";
+    return;
+  }
+
+  preview.innerHTML = `
+    <small><strong>Funding Type:</strong> ${escapeQuotationHtml(typeEl.value)}</small><br>
+    <small><strong>Account:</strong> ${escapeQuotationHtml(selected.dataset.name || selected.textContent)}</small><br>
+    <small><strong>Available:</strong> ${formatCurrency(Number(selected.dataset.remaining || 0))}</small>
+  `;
+}
+
+function setQuotationFunding() {
+  const typeEl = document.getElementById("qSourceType");
+  const valueEl = document.getElementById("qSourceValue");
+  if (!typeEl || !valueEl) return;
+
+  const meta = getCurrentMeta();
+  if (!isQuotationEditable(meta.status)) return;
+
+  const selected = valueEl.options[valueEl.selectedIndex];
+  meta.fundingSourceType = typeEl.value || null;
+  meta.fundingSourceId = selected && selected.value ? String(selected.value) : null;
+  meta.fundingSourceName = selected && selected.value ? (selected.dataset.name || selected.textContent) : null;
+
+  addHistory(meta, "funding_updated", meta.fundingSourceName ? `Funding set to ${meta.fundingSourceType} → ${meta.fundingSourceName}` : "Funding cleared");
+  saveCurrentMeta(meta);
+  syncQuotationData();
+  renderLifecycle();
+}
+
+function validatePlanCore(meta) {
+  if (!String(meta.purpose || "").trim()) {
+    showNotice("Purpose / Title is required.", "warning");
+    return false;
+  }
+
+  if (!meta.fundingSourceType || !meta.fundingSourceId) {
+    showNotice("Select funding source type and account.", "warning");
+    return false;
+  }
+
+  if (!quotationItems.length) {
+    showNotice("Add at least one expense plan item.", "warning");
+    return false;
+  }
+
+  return true;
+}
+
+function savePurchasePlanDraft() {
+  const meta = getCurrentMeta();
+  if (!isQuotationEditable(meta.status)) {
+    showNotice("Only draft plans can be edited.", "warning");
+    return;
+  }
+
+  if (!validatePlanCore(meta)) return;
+
+  addHistory(meta, "draft_saved", "Draft saved");
+  saveCurrentMeta(meta);
+  syncQuotationData();
+  renderLifecycle();
+  showNotice("Purchase plan draft saved.", "success");
+}
+
+function setQuotationStatus(nextStatus) {
+  const meta = getCurrentMeta();
+  const current = String(meta.status || "draft");
   if (current === nextStatus) return;
+
   const allowed = getAllowedStatusTransitions()[current] || [];
   if (!allowed.includes(nextStatus)) {
-    showNotice(`Status transition not allowed: ${getStatusLabel(current)} → ${getStatusLabel(nextStatus)}`, "warning");
+    showNotice(`Status transition not allowed: ${getStatusLabel(current)} to ${getStatusLabel(nextStatus)}`, "warning");
     return;
   }
 
-  if (nextStatus === "accepted" && !quotationItems.length) {
-    showNotice("Cannot accept an empty quotation.", "warning");
-    return;
-  }
+  if (nextStatus === "accepted") {
+    if (!validatePlanCore(meta)) return;
 
-  if (nextStatus === "draft" && current === "rejected") {
-    addHistory(meta, "reopened", "Quotation reopened for corrections");
+    if (meta.validUntil && meta.validUntil < getTodayDateKey()) {
+      showNotice("Cannot accept an expired purchase plan.", "warning");
+      return;
+    }
   }
 
   meta.status = nextStatus;
@@ -271,16 +490,15 @@ function setQuotationStatus(nextStatus) {
   saveCurrentMeta(meta);
   syncQuotationData();
   renderLifecycle();
-  showNotice(`Quotation moved to ${getStatusLabel(nextStatus)}.`);
+  showNotice(`Plan moved to ${getStatusLabel(nextStatus)}.`);
 }
 
-// =========================
-// 🔗 OPEN PRODUCT LINK
-// =========================
 function openProductLink() {
-  if (!document.getElementById || !document.getElementById("mLink")) return;
-  const link = document.getElementById("mLink").value.trim();
+  const linkEl = document.getElementById("mLink");
+  if (!linkEl) return;
+  const link = String(linkEl.value || "").trim();
   if (!link) return;
+
   try {
     const url = new URL(link);
     window.open(url.toString(), "_blank", "noopener,noreferrer");
@@ -289,114 +507,114 @@ function openProductLink() {
   }
 }
 
-// =========================
-// 📦 MODAL CONTROL
-// =========================
 function openItemModal() {
-  if (!document.getElementById || !document.getElementById("itemModal")) return;
+  const modal = document.getElementById("itemModal");
+  if (!modal) return;
+
   const meta = getCurrentMeta();
   if (!isQuotationEditable(meta.status)) {
-    showNotice("Only Draft quotations can be edited. Reopen to Draft to add items.", "warning");
+    showNotice("Only draft plans can be edited.", "warning");
     return;
   }
-  document.getElementById("itemModal").style.display = "flex";
+
+  modal.style.display = "flex";
   if (typeof loadSources === "function") loadSources();
 }
 
 function closeItemModal() {
-  if (!document.getElementById || !document.getElementById("itemModal")) return;
-  document.getElementById("itemModal").style.display = "none";
+  const modal = document.getElementById("itemModal");
+  if (modal) modal.style.display = "none";
 }
 
 function openChargeModal() {
-  if (!document.getElementById || !document.getElementById("chargeModal")) return;
+  const modal = document.getElementById("chargeModal");
+  if (!modal) return;
+
   const meta = getCurrentMeta();
   if (!isQuotationEditable(meta.status)) {
-    showNotice("Only Draft quotations can be edited. Reopen to Draft to add charges.", "warning");
+    showNotice("Only draft plans can be edited.", "warning");
     return;
   }
-  document.getElementById("chargeModal").style.display = "flex";
 
-  let select = document.getElementById("cApplyTo");
+  modal.style.display = "flex";
+
+  const select = document.getElementById("cApplyTo");
   if (select) {
-    select.innerHTML = `<option value="all">All Items</option>`;
-    quotationItems.forEach(i => {
-      let option = document.createElement("option");
-      option.value = i.id;
-      option.textContent = i.name;
+    select.innerHTML = '<option value="all">All Items</option>';
+    quotationItems.forEach((item) => {
+      const option = document.createElement("option");
+      option.value = item.id;
+      option.textContent = item.name;
       select.appendChild(option);
     });
   }
+
+  toggleCustomChargeField();
+  const typeEl = document.getElementById("cType");
+  if (typeEl) typeEl.onchange = toggleCustomChargeField;
 }
 
 function closeChargeModal() {
-  if (!document.getElementById || !document.getElementById("chargeModal")) return;
-  document.getElementById("chargeModal").style.display = "none";
+  const modal = document.getElementById("chargeModal");
+  if (modal) modal.style.display = "none";
+  if (document.getElementById("cValue")) document.getElementById("cValue").value = "";
+  if (document.getElementById("cCustomLabel")) document.getElementById("cCustomLabel").value = "";
+  if (document.getElementById("cApplyTo")) document.getElementById("cApplyTo").value = "all";
 }
 
-// =========================
-// ➕ ADD ITEM FROM MODAL
-// =========================
-function addItemFromModal() {
-  if (!document.getElementById || !document.getElementById("mSource")) return;
+function toggleCustomChargeField() {
+  const typeEl = document.getElementById("cType");
+  const customEl = document.getElementById("cCustomLabel");
+  if (!typeEl || !customEl) return;
 
+  const visible = typeEl.value === "custom";
+  customEl.style.display = visible ? "block" : "none";
+  if (!visible) customEl.value = "";
+}
+
+function addItemFromModal() {
   const meta = getCurrentMeta();
   if (!isQuotationEditable(meta.status)) {
-    showNotice("Only Draft quotations can be edited.", "warning");
+    showNotice("Only draft plans can be edited.", "warning");
     closeItemModal();
     return;
   }
 
-  let sourceSelect = document.getElementById("mSource");
-  let newSourceInput = document.getElementById("newSourceInput");
+  const sourceSelect = document.getElementById("mSource");
+  const newSourceInput = document.getElementById("newSourceInput");
   let source = sourceSelect ? sourceSelect.value : "";
 
   if (source === "__add_new__") {
-    let newSource = newSourceInput.value.trim();
+    const newSource = String(newSourceInput ? newSourceInput.value : "").trim();
     if (!newSource) {
       showNotice("Enter a new source name.", "warning");
       return;
     }
 
-    let sources = getSources();
-    if (!sources.includes(newSource)) {
-      sources.push(newSource);
-      saveSources(sources);
+    const list = getSources();
+    if (!list.includes(newSource)) {
+      list.push(newSource);
+      saveSources(list);
     }
     source = newSource;
   }
 
-  let name = document.getElementById("mName") ? document.getElementById("mName").value.trim() : "";
-  let price = document.getElementById("mPrice") ? Number(document.getElementById("mPrice").value) : 0;
-  let qty = document.getElementById("mQty") ? Number(document.getElementById("mQty").value) : 0;
-  let link = document.getElementById("mLink") ? document.getElementById("mLink").value.trim() : "";
-
-  if (!name && link) {
-    try {
-      let url = new URL(link);
-      if (url.pathname.includes("/dp/")) {
-        let parts = url.pathname.split("/");
-        name = parts[1] ? parts[1].replace(/-/g, " ") : "Online Product";
-      } else if (url.searchParams.get("k")) {
-        name = url.searchParams.get("k").replace(/\+/g, " ");
-      } else {
-        name = url.hostname.replace("www.", "");
-      }
-    } catch (_err) {
-      name = "Online Product";
-    }
-  }
+  const name = String((document.getElementById("mName") || {}).value || "").trim();
+  const price = Number((document.getElementById("mPrice") || {}).value || 0);
+  const qty = Number((document.getElementById("mQty") || {}).value || 0);
+  const unit = String((document.getElementById("mUnit") || {}).value || "pcs");
+  const link = String((document.getElementById("mLink") || {}).value || "").trim();
 
   if (!name) {
-    showNotice("Product name is required.", "warning");
+    showNotice("Item name is required.", "warning");
     return;
   }
-  if (!(price > 0)) {
-    showNotice("Price must be greater than zero.", "warning");
+  if (name.length > 120) {
+    showNotice("Item name is too long.", "warning");
     return;
   }
-  if (!(qty > 0)) {
-    showNotice("Quantity must be greater than zero.", "warning");
+  if (!(price > 0) || !(qty > 0)) {
+    showNotice("Price and quantity must be greater than zero.", "warning");
     return;
   }
   if (link) {
@@ -406,21 +624,19 @@ function addItemFromModal() {
     }
   }
 
-  const item = {
+  quotationItems.push({
     id: createEntityId("qi"),
     name,
     price,
     qty,
+    unit,
     source: source || "Unspecified",
     link,
     total: Number((price * qty).toFixed(2))
-  };
-
-  quotationItems.push(item);
+  });
 
   addHistory(meta, "item_added", `${name} x${qty}`);
   saveCurrentMeta(meta);
-
   clearItemModal();
   closeItemModal();
   renderQuotation();
@@ -429,16 +645,16 @@ function addItemFromModal() {
 function deleteItem(id) {
   const meta = getCurrentMeta();
   if (!isQuotationEditable(meta.status)) {
-    showNotice("Only Draft quotations can be edited.", "warning");
+    showNotice("Only draft plans can be edited.", "warning");
     return;
   }
 
-  const row = quotationItems.find(i => String(i.id) === String(id));
-  quotationItems = quotationItems.filter(i => String(i.id) !== String(id));
+  const row = quotationItems.find((item) => String(item.id) === String(id));
+  quotationItems = quotationItems.filter((item) => String(item.id) !== String(id));
+  quotationCharges = quotationCharges.filter((charge) => String(charge.appliesTo || "all") !== String(id));
 
   addHistory(meta, "item_removed", row ? row.name : "Item removed");
   saveCurrentMeta(meta);
-
   renderQuotation();
 }
 
@@ -446,20 +662,122 @@ function clearItemModal() {
   if (document.getElementById("mName")) document.getElementById("mName").value = "";
   if (document.getElementById("mPrice")) document.getElementById("mPrice").value = "";
   if (document.getElementById("mQty")) document.getElementById("mQty").value = "";
+  if (document.getElementById("mUnit")) document.getElementById("mUnit").value = "pcs";
   if (document.getElementById("mSource")) document.getElementById("mSource").value = "";
   if (document.getElementById("mLink")) document.getElementById("mLink").value = "";
   if (document.getElementById("newSourceInput")) document.getElementById("newSourceInput").value = "";
 }
 
-// =========================
-// 📋 RENDER ITEMS
-// =========================
+function addCharge() {
+  const meta = getCurrentMeta();
+  if (!isQuotationEditable(meta.status)) {
+    showNotice("Only draft plans can be edited.", "warning");
+    closeChargeModal();
+    return;
+  }
+
+  const type = String((document.getElementById("cType") || {}).value || "delivery");
+  const customLabel = String((document.getElementById("cCustomLabel") || {}).value || "").trim();
+  const value = Number((document.getElementById("cValue") || {}).value || 0);
+  const mode = String((document.getElementById("cMode") || {}).value || "fixed");
+  const appliesTo = String((document.getElementById("cApplyTo") || {}).value || "all");
+
+  if (!(value > 0)) {
+    showNotice("Charge value must be greater than zero.", "warning");
+    return;
+  }
+  if (mode === "percent" && value > 100) {
+    showNotice("Charge percentage must be <= 100.", "warning");
+    return;
+  }
+  if (type === "custom" && !customLabel) {
+    showNotice("Custom charge name is required.", "warning");
+    return;
+  }
+
+  quotationCharges.push({
+    id: createEntityId("qc"),
+    type,
+    label: type === "custom" ? customLabel : type,
+    value,
+    mode,
+    appliesTo
+  });
+
+  addHistory(meta, "charge_added", `${type.toUpperCase()} ${mode === "percent" ? `${value}%` : formatCurrency(value)}`);
+  saveCurrentMeta(meta);
+  closeChargeModal();
+  renderQuotation();
+}
+
+function deleteCharge(id) {
+  const meta = getCurrentMeta();
+  if (!isQuotationEditable(meta.status)) {
+    showNotice("Only draft plans can be edited.", "warning");
+    return;
+  }
+
+  const row = quotationCharges.find((charge) => String(charge.id) === String(id));
+  quotationCharges = quotationCharges.filter((charge) => String(charge.id) !== String(id));
+  addHistory(meta, "charge_removed", row ? String(row.type || "Charge") : "Charge removed");
+  saveCurrentMeta(meta);
+  renderQuotation();
+}
+
+function renderCharges() {
+  const host = document.getElementById("chargesList");
+  if (!host) return;
+
+  host.innerHTML = "";
+  if (!quotationCharges.length) {
+    host.innerHTML = '<p class="empty">No charges added</p>';
+    return;
+  }
+
+  const subtotal = quotationItems.reduce((sum, item) => sum + Number(item.total || 0), 0);
+  quotationCharges.forEach((charge) => {
+    let baseAmount = 0;
+    let serial = "";
+
+    if (charge.appliesTo === "all") {
+      baseAmount = subtotal;
+    } else {
+      const item = quotationItems.find((x) => String(x.id) === String(charge.appliesTo));
+      baseAmount = item ? Number(item.total || 0) : 0;
+      const index = quotationItems.findIndex((x) => String(x.id) === String(charge.appliesTo));
+      serial = index !== -1 ? `(Item ${index + 1})` : "";
+    }
+
+    const amount = charge.mode === "percent"
+      ? (baseAmount * Number(charge.value || 0)) / 100
+      : Number(charge.value || 0);
+
+    const row = document.createElement("div");
+    row.innerHTML = `
+      <div class="charge-row">
+        <span class="charge-name">${escapeQuotationHtml(String((charge.label || charge.type || "")).toUpperCase())} ${escapeQuotationHtml(serial)}</span>
+        <span class="charge-percent">${charge.mode === "percent" ? `${Number(charge.value || 0)}%` : ""}</span>
+        <span class="charge-amount">${formatCurrency(Number(amount || 0))}</span>
+        <button type="button" onclick="deleteCharge('${escapeQuotationHtml(charge.id)}')" class="delete-btn">✕</button>
+      </div>
+    `;
+    host.appendChild(row);
+  });
+}
+
+function updateTotals() {
+  const totals = getTotals();
+  if (document.getElementById("qSubtotal")) document.getElementById("qSubtotal").innerText = formatCurrency(Number(totals.subtotal || 0));
+  if (document.getElementById("qGSTAmount")) document.getElementById("qGSTAmount").innerText = formatCurrency(Number(totals.gstAmount || 0));
+  if (document.getElementById("qFinalTotal")) document.getElementById("qFinalTotal").innerText = formatCurrency(Number(totals.total || 0));
+}
+
 function renderQuotation() {
-  if (!document.getElementById || !document.getElementById("quotationItems")) return;
-  let container = document.getElementById("quotationItems");
+  const host = document.getElementById("quotationItems");
+  if (!host) return;
 
   if (!quotationItems.length) {
-    container.innerHTML = `<p class="empty">No items added</p>`;
+    host.innerHTML = '<p class="empty">No items added</p>';
     renderCharges();
     updateTotals();
     renderLifecycle();
@@ -467,31 +785,26 @@ function renderQuotation() {
     return;
   }
 
-  container.innerHTML = "";
+  host.innerHTML = "";
+  quotationItems.forEach((item) => {
+    const row = document.createElement("div");
+    row.className = "table-row";
 
-  quotationItems.forEach(i => {
-    let div = document.createElement("div");
-    div.className = "table-row";
+    const safeName = escapeQuotationHtml(item.name);
+    const safeSource = escapeQuotationHtml(item.source || "-");
+    const safeLink = escapeQuotationHtml(item.link || "");
 
-    const safeName = escapeQuotationHtml(i.name);
-    const safeSource = escapeQuotationHtml(i.source || "-");
-    const safeLink = escapeQuotationHtml(i.link || "");
-
-    div.innerHTML = `
+    row.innerHTML = `
       <span>${safeName}</span>
-      <span>${formatCurrency(Number(i.price || 0))}</span>
-      <span>${Number(i.qty || 0)}</span>
+      <span>${formatCurrency(Number(item.price || 0))}</span>
+      <span>${Number(item.qty || 0)} ${escapeQuotationHtml(item.unit || "")}</span>
       <span>${safeSource}</span>
-      <span>
-        ${safeLink ? `<button type="button" class="secondary tiny-btn" onclick="window.open('${safeLink}','_blank','noopener,noreferrer')">View</button>` : "-"}
-      </span>
-      <span>${formatCurrency(Number(i.total || 0))}</span>
-      <span>
-        <button type="button" class="secondary tiny-btn" onclick="deleteItem('${escapeQuotationHtml(i.id)}')">Remove</button>
-      </span>
+      <span>${safeLink ? `<button type="button" class="secondary tiny-btn" onclick="window.open('${safeLink}','_blank','noopener,noreferrer')">View</button>` : "-"}</span>
+      <span>${formatCurrency(Number(item.total || 0))}</span>
+      <span><button type="button" class="secondary tiny-btn" onclick="deleteItem('${escapeQuotationHtml(item.id)}')">Remove</button></span>
     `;
 
-    container.appendChild(div);
+    host.appendChild(row);
   });
 
   renderCharges();
@@ -501,222 +814,150 @@ function renderQuotation() {
   updateCurrencyUI();
 }
 
-// =========================
-// ➕ ADD CHARGE
-// =========================
-function addCharge() {
-  if (!document.getElementById || !document.getElementById("cType")) return;
-
-  const meta = getCurrentMeta();
-  if (!isQuotationEditable(meta.status)) {
-    showNotice("Only Draft quotations can be edited.", "warning");
-    closeChargeModal();
-    return;
-  }
-
-  let type = document.getElementById("cType").value;
-  let value = Number(document.getElementById("cValue").value);
-  let mode = document.getElementById("cMode").value;
-  let appliesTo = document.getElementById("cApplyTo").value;
-
-  if (!(value > 0)) {
-    showNotice("Charge value must be greater than zero.", "warning");
-    return;
-  }
-
-  if (mode === "percent" && value > 1000) {
-    showNotice("Charge percentage seems too high.", "warning");
-    return;
-  }
-
-  const charge = {
-    id: createEntityId("qc"),
-    type,
-    value,
-    mode,
-    appliesTo
-  };
-
-  quotationCharges.push(charge);
-
-  addHistory(meta, "charge_added", `${type.toUpperCase()} ${mode === "percent" ? `${value}%` : formatCurrency(value)}`);
-  saveCurrentMeta(meta);
-
-  closeChargeModal();
-  renderQuotation();
-}
-
-function renderCharges() {
-  let container = document.getElementById("chargesList");
-  if (!container) return;
-
-  container.innerHTML = "";
-
-  let subtotal = quotationItems.reduce((sum, i) => sum + Number(i.total || 0), 0);
-
-  quotationCharges.forEach(c => {
-    let baseAmount = 0;
-    let serial = "";
-
-    if (c.appliesTo === "all") {
-      baseAmount = subtotal;
-    } else {
-      let item = quotationItems.find(i => String(i.id) === String(c.appliesTo));
-      baseAmount = item ? Number(item.total || 0) : 0;
-
-      let index = quotationItems.findIndex(i => String(i.id) === String(c.appliesTo));
-      serial = index !== -1 ? `(Item ${index + 1})` : "";
-    }
-
-    let amount = c.mode === "percent"
-      ? (baseAmount * Number(c.value || 0)) / 100
-      : Number(c.value || 0);
-
-    let div = document.createElement("div");
-    div.innerHTML = `
-      <div class="charge-row">
-        <span class="charge-name">${escapeQuotationHtml(String(c.type || "").toUpperCase())} ${escapeQuotationHtml(serial)}</span>
-        <span class="charge-percent">${c.mode === "percent" ? `${Number(c.value || 0)}%` : ""}</span>
-        <span class="charge-amount">${formatCurrency(Number(amount || 0))}</span>
-        <button type="button" onclick="deleteCharge('${escapeQuotationHtml(c.id)}')" class="delete-btn">✕</button>
-      </div>
-    `;
-
-    container.appendChild(div);
-  });
-}
-
-function deleteCharge(id) {
-  const meta = getCurrentMeta();
-  if (!isQuotationEditable(meta.status)) {
-    showNotice("Only Draft quotations can be edited.", "warning");
-    return;
-  }
-
-  const row = quotationCharges.find(c => String(c.id) === String(id));
-  quotationCharges = quotationCharges.filter(c => String(c.id) !== String(id));
-
-  addHistory(meta, "charge_removed", row ? String(row.type || "Charge") : "Charge removed");
-  saveCurrentMeta(meta);
-
-  renderQuotation();
-}
-
-function updateTotals() {
-  const totals = getTotals();
-
-  if (document.getElementById("qSubtotal")) {
-    document.getElementById("qSubtotal").innerText = formatCurrency(Number(totals.subtotal || 0));
-  }
-  if (document.getElementById("qGSTAmount")) {
-    document.getElementById("qGSTAmount").innerText = formatCurrency(Number(totals.gstAmount || 0));
-  }
-  if (document.getElementById("qFinalTotal")) {
-    document.getElementById("qFinalTotal").innerText = formatCurrency(Number(totals.total || 0));
-  }
-}
-
-// =========================
-// 🔄 CONVERT TO ORDER
-// =========================
 function convertToOrder() {
-  if (!quotationItems.length) {
-    showNotice("Add at least one item before conversion.", "warning");
+  const meta = getCurrentMeta();
+
+  if (meta.status !== "accepted") {
+    showNotice("Plan must be accepted before creating order.", "warning");
     return;
   }
 
-  let meta = getCurrentMeta();
-  if (meta.status !== "accepted") {
-    showNotice("Quotation must be Accepted before converting to order.", "warning");
+  if (meta.validUntil && meta.validUntil < getTodayDateKey()) {
+    showNotice("Plan is expired. Update validity date before order creation.", "warning");
     return;
   }
+
+  if (!validatePlanCore(meta)) return;
 
   const totals = getTotals();
   const orderId = createEntityId("order");
+  const orderNo = window.DocWorkflow
+    ? window.DocWorkflow.generateDocumentNumber("order")
+    : createEntityId("ORD");
+
+  const orders = JSON.parse(localStorage.getItem("orders") || "[]");
+  const now = new Date().toISOString();
+
+  const orderRow = {
+    id: orderId,
+    orderNo,
+    quotationId: meta.id,
+    quotationNo: meta.quotationNo,
+    purpose: meta.purpose,
+    quotationStatus: meta.status,
+    status: "draft",
+    statusHistory: [{ at: now, from: null, to: "draft", note: "Created from accepted purchase plan" }],
+    items: quotationItems,
+    charges: quotationCharges,
+    subtotal: Number(totals.subtotal || 0),
+    gst: Number(totals.gstAmount || 0),
+    total: Number(totals.total || 0),
+    plannedAmount: Number(totals.total || 0),
+    sourceType: meta.fundingSourceType,
+    sourceId: meta.fundingSourceId,
+    sourceName: meta.fundingSourceName,
+    paymentType: null,
+    createdAt: now,
+    updatedAt: now,
+    financialPosted: false,
+    financialEntryId: null,
+    cancellationReason: null,
+    cancelledAt: null
+  };
+
+  orders.push(orderRow);
+  localStorage.setItem("orders", JSON.stringify(orders));
 
   meta.status = "converted";
   meta.convertedOrderId = orderId;
-  addHistory(meta, "converted", `Converted to order ${orderId}`);
+  addHistory(meta, "converted", `Created order ${orderNo}`);
   saveCurrentMeta(meta);
+  syncQuotationData();
 
-  const data = {
-    id: meta.id,
-    orderId,
-    status: meta.status,
-    createdAt: meta.createdAt,
-    updatedAt: meta.updatedAt,
-    validUntil: meta.validUntil || null,
-    convertedOrderId: orderId,
-    items: quotationItems,
-    charges: quotationCharges,
-    subtotal: totals.subtotal,
-    gstAmount: totals.gstAmount,
-    total: totals.total,
-    history: Array.isArray(meta.history) ? meta.history : []
-  };
+  if (window.DocWorkflow) {
+    window.DocWorkflow.upsertRelation({
+      quotationId: meta.id,
+      orderId,
+      relationshipStatus: "linked"
+    });
+  }
 
-  localStorage.setItem("quotationData", JSON.stringify(data));
   localStorage.setItem("activeOrderId", JSON.stringify(orderId));
-  upsertRegistry(meta, totals);
 
-  showNotice("Quotation converted. Continue with order confirmation.", "success");
+  showNotice("Purchase plan converted to order.", "success");
   window.location.href = "order.html";
 }
 
-// =========================
-// 🗑 CLEAR ALL
-// =========================
-function clearQuotation() {
-  if (!confirm("Clear current quotation draft?")) return;
+async function clearQuotation() {
+  const meta = getCurrentMeta();
+  const ok = await window.AppDialog.confirm("Delete this draft purchase plan?", "Confirm Deletion");
+  if (!ok) return;
+
+  const rows = getRegistry().filter((row) => String(row.id) !== String(meta.id));
+  saveRegistry(rows);
 
   quotationItems = [];
   quotationCharges = [];
-
-  const now = new Date().toISOString();
-  const meta = {
-    id: createEntityId("quote"),
-    status: "draft",
-    createdAt: now,
-    updatedAt: now,
-    validUntil: null,
-    convertedOrderId: null,
-    history: [{ at: now, action: "created", status: "draft", note: "Quotation created" }]
-  };
-
-  localStorage.setItem(QUOTATION_META_KEY, JSON.stringify(meta));
+  localStorage.removeItem(Q_META_STORAGE_KEY);
   localStorage.removeItem("quotationData");
-  localStorage.setItem("quotationItems", JSON.stringify([]));
-  localStorage.setItem("quotationCharges", JSON.stringify([]));
+  localStorage.removeItem("quotationItems");
+  localStorage.removeItem("quotationCharges");
+  localStorage.removeItem(Q_ACTIVE_STORAGE_KEY);
 
-  renderQuotation();
+  if (window.DocWorkflow) {
+    window.DocWorkflow.upsertRelation({ quotationId: meta.id, orderId: meta.convertedOrderId || null, relationshipStatus: "archived" });
+  }
+
+  showNotice("Draft deleted.", "success");
+  window.location.href = "quotations.html";
 }
 
-// =========================
-// 🚀 INIT
-// =========================
 function initializeQuotationModule() {
   const meta = getCurrentMeta();
   if (!meta.validUntil) {
     const d = new Date();
     d.setDate(d.getDate() + 7);
     meta.validUntil = d.toISOString().split("T")[0];
-    addHistory(meta, "validity_updated", `Valid until ${meta.validUntil}`);
     saveCurrentMeta(meta);
   }
 
   const validityDate = document.getElementById("quotationValidityDate");
   if (validityDate) {
+    validityDate.min = getTodayDateKey();
     validityDate.value = meta.validUntil || "";
     validityDate.addEventListener("change", updateQuotationValidityDate);
   }
 
+  const purposeEl = document.getElementById("quotationPurpose");
+  if (purposeEl) {
+    purposeEl.value = meta.purpose || "";
+    purposeEl.addEventListener("blur", setQuotationPurpose);
+  }
+
+  const sourceType = document.getElementById("qSourceType");
+  if (sourceType) {
+    sourceType.value = meta.fundingSourceType || "";
+    sourceType.addEventListener("change", () => {
+      loadQuotationFundingOptions();
+      setQuotationFunding();
+    });
+  }
+
+  const sourceValue = document.getElementById("qSourceValue");
+  if (sourceValue) {
+    sourceValue.addEventListener("change", () => {
+      renderQuotationFundingPreview();
+      setQuotationFunding();
+    });
+  }
+
+  loadQuotationFundingOptions();
+  renderQuotationFundingPreview();
   renderQuotation();
 }
 
-initializeQuotationModule();
-
 function goBack() {
-  window.location.href = "../index.html";
+  window.location.href = "quotations.html";
 }
 
 function getSources() {
@@ -730,30 +971,29 @@ function saveSources(list) {
 }
 
 function loadSources() {
-  let select = document.getElementById("mSource");
-  let sources = getSources();
-
+  const select = document.getElementById("mSource");
+  const sources = getSources();
   if (!select) return;
-  select.innerHTML = '<option value="">Source</option>';
 
-  sources.forEach(s => {
-    let opt = document.createElement("option");
-    opt.value = s;
-    opt.textContent = s;
+  select.innerHTML = '<option value="">Source</option>';
+  sources.forEach((source) => {
+    const opt = document.createElement("option");
+    opt.value = source;
+    opt.textContent = source;
     select.appendChild(opt);
   });
 
-  let addOpt = document.createElement("option");
+  const addOpt = document.createElement("option");
   addOpt.value = "__add_new__";
-  addOpt.textContent = "➕ Add New Source";
+  addOpt.textContent = "Add New Source";
   select.appendChild(addOpt);
 }
 
-function handleSourceChange(val) {
-  let input = document.getElementById("newSourceInput");
+function handleSourceChange(value) {
+  const input = document.getElementById("newSourceInput");
   if (!input) return;
 
-  if (val === "__add_new__") {
+  if (value === "__add_new__") {
     input.style.display = "block";
     input.focus();
   } else {
@@ -763,10 +1003,28 @@ function handleSourceChange(val) {
 
 function updateCurrencyUI() {
   if (typeof getCurrency !== "function") return;
-
-  let symbol = getCurrency();
-  let fixedOption = document.getElementById("fixedCurrencyOption");
-  if (fixedOption) {
-    fixedOption.textContent = `Fixed ${symbol}`;
-  }
+  const symbol = getCurrency();
+  const fixedOption = document.getElementById("fixedCurrencyOption");
+  if (fixedOption) fixedOption.textContent = `Fixed ${symbol}`;
 }
+
+initializeQuotationModule();
+
+if (typeof window !== "undefined") {
+  window.goBack = goBack;
+  window.setQuotationStatus = setQuotationStatus;
+  window.savePurchasePlanDraft = savePurchasePlanDraft;
+  window.convertToOrder = convertToOrder;
+  window.clearQuotation = clearQuotation;
+  window.loadQuotationFundingOptions = loadQuotationFundingOptions;
+  window.renderQuotationFundingPreview = renderQuotationFundingPreview;
+  window.openItemModal = openItemModal;
+  window.closeItemModal = closeItemModal;
+  window.addItemFromModal = addItemFromModal;
+  window.openChargeModal = openChargeModal;
+  window.closeChargeModal = closeChargeModal;
+  window.addCharge = addCharge;
+  window.openProductLink = openProductLink;
+  window.handleSourceChange = handleSourceChange;
+}
+

@@ -863,12 +863,16 @@ function saveBudgetPeriod() {
   extraDays = Math.max(0, extraDays);
 
   if (!start) {
-    alert("Select start date");
+    if (window.AppDialog && typeof window.AppDialog.alert === "function") {
+      window.AppDialog.alert("Select start date", "Validation");
+    }
     return;
   }
 
   if (status === "closed" && !end) {
-    alert("End date required for closed budget");
+    if (window.AppDialog && typeof window.AppDialog.alert === "function") {
+      window.AppDialog.alert("End date required for closed budget", "Validation");
+    }
     return;
   }
 
@@ -890,7 +894,9 @@ function saveBudgetPeriod() {
   });
 
   if (duplicate) {
-    alert("This budget period already exists");
+    if (window.AppDialog && typeof window.AppDialog.alert === "function") {
+      window.AppDialog.alert("This budget period already exists", "Validation");
+    }
     return;
   }
 
@@ -992,7 +998,9 @@ function toggleStatus() {
       let result = reactivateBudgetPeriodLifecycle(selectedId, new Date());
 
       if (!result || result.ok !== true) {
-        alert((result && result.error) || "Reactivation failed");
+        if (window.AppDialog && typeof window.AppDialog.alert === "function") {
+          window.AppDialog.alert((result && result.error) || "Reactivation failed", "Warning");
+        }
         return;
       }
 
@@ -1070,7 +1078,9 @@ function deleteBudget() {
   if (typeof validateBudgetPeriodDeletion === "function") {
     let check = validateBudgetPeriodDeletion(selectedId);
     if (check && check.blocked) {
-      alert("Cannot delete budget period. " + check.summary);
+      if (window.AppDialog && typeof window.AppDialog.alert === "function") {
+        window.AppDialog.alert("Cannot delete budget period. " + check.summary, "Warning");
+      }
       return;
     }
   }
