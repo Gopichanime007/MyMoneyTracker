@@ -196,6 +196,52 @@ function clearOrdersQueryChips() {
   renderOrders();
 }
 
+function refreshOrdersSavedViews() {
+  const select = document.getElementById("ordersSavedView");
+  if (!select || !window.SearchService || typeof window.SearchService.listViews !== "function") return;
+
+  const views = window.SearchService.listViews("module", "orders")
+    .filter((view) => String(view.scope || "") === "orders" || String(view.scope || "") === "*");
+
+  select.innerHTML = "";
+  const defaultOpt = document.createElement("option");
+  defaultOpt.value = "";
+  defaultOpt.textContent = "Saved Views";
+  select.appendChild(defaultOpt);
+
+  views.forEach((view) => {
+    const opt = document.createElement("option");
+    opt.value = String(view.id);
+    opt.textContent = String(view.name || "Untitled");
+    select.appendChild(opt);
+  });
+}
+
+function saveOrdersCurrentView() {
+  if (!window.SearchService || typeof window.SearchService.saveView !== "function") return;
+  const name = prompt("Saved view name", "Orders View");
+  if (!name || !name.trim()) return;
+  window.SearchService.saveView({ name: name.trim(), module: "orders", scope: "module" });
+  refreshOrdersSavedViews();
+}
+
+function applyOrdersSavedView() {
+  if (!window.SearchService || typeof window.SearchService.applyView !== "function") return;
+  const id = document.getElementById("ordersSavedView")?.value || "";
+  if (!id) return;
+  window.SearchService.applyView(id, "orders");
+  renderOrders();
+}
+
+function deleteOrdersSavedView() {
+  if (!window.SearchService || typeof window.SearchService.deleteView !== "function") return;
+  const id = document.getElementById("ordersSavedView")?.value || "";
+  if (!id) return;
+  window.SearchService.deleteView(id);
+  refreshOrdersSavedViews();
+  renderOrders();
+}
+
 function openOrdersSortModal() {
   const modal = document.getElementById("ordersSortModal");
   if (modal) modal.classList.remove("hidden");
@@ -242,6 +288,7 @@ function renderOrders() {
   const container = document.getElementById("ordersList");
   updateOrdersSortIndicator();
   renderOrdersQueryChips();
+  refreshOrdersSavedViews();
   const filter = document.getElementById("ordersStatusFilter");
   const selectedStatus = filter ? filter.value : "all";
 

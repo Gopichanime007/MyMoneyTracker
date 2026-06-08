@@ -60,6 +60,13 @@
 
       <div id="ordersQueryChips" class="inline-row"></div>
 
+      <div class="inline-row">
+        <select id="ordersSavedView"></select>
+        <button class="secondary" type="button" onclick="saveOrdersCurrentView()">Save View</button>
+        <button class="secondary" type="button" onclick="applyOrdersSavedView()">Apply View</button>
+        <button class="danger" type="button" onclick="deleteOrdersSavedView()">Delete View</button>
+      </div>
+
       <!-- Orders will be injected here -->
       <div id="ordersList"></div>
 
