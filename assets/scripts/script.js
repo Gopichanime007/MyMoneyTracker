@@ -9277,8 +9277,14 @@ function injectGlobalFooter() {
 
 function openExpenseFilterModal() {
     let modal = document.getElementById("expenseFilterModal");
+    initializeExpenseFilterBuilder();
+    if (window.SearchService && typeof window.SearchService.getState === "function" && expenseFilterBuilderInstance) {
+        let state = window.SearchService.getState("expenses");
+        expenseFilterBuilderInstance.setFromFilters(Array.isArray(state.filters) ? state.filters : []);
+    }
     if (modal) {
         modal.classList.remove("hidden");
+        modal.style.display = "flex";
     }
 }
 
@@ -9286,29 +9292,56 @@ function closeExpenseFilterModal() {
     let modal = document.getElementById("expenseFilterModal");
     if (modal) {
         modal.classList.add("hidden");
+        modal.style.display = "none";
     }
 }
 
+let expenseFilterBuilderInstance = null;
+
+function getExpenseFilterTemplates() {
+    return [
+        { key: "category", label: "Category", field: "category", type: "text", hint: "Shopping, Food, Travel, Medical, Bills" },
+        { key: "type", label: "Type", field: "type", type: "text", hint: "expense, income" },
+        { key: "amount", label: "Amount", field: "amount", type: "number", hint: "5000, 10000, 25000" },
+        { key: "payment", label: "Payment Type", field: "paymentType", type: "enum", hint: "UPI, Cash, Debit Card, Credit Card" },
+        { key: "budget", label: "Budget", field: "budgetId", type: "text", hint: "Budget reference id" },
+        { key: "savings", label: "Savings", field: "refundType", type: "text", hint: "Refund, transfer, adjustment" },
+        { key: "source", label: "Source", field: "entity", type: "text", hint: "Store, vendor, provider" },
+        { key: "person", label: "Person", field: "person", type: "text", hint: "Person names" },
+        { key: "attachment", label: "Attachment", field: "attachmentName", type: "presence", hint: "Has any attachment" }
+    ];
+}
+
+function initializeExpenseFilterBuilder() {
+    let root = document.getElementById("expenseFilterBuilderRoot");
+    if (!root || expenseFilterBuilderInstance || !window.FilterBuilder || typeof window.FilterBuilder.create !== "function") {
+        return;
+    }
+
+    expenseFilterBuilderInstance = window.FilterBuilder.create({
+        module: "expenses",
+        dateField: "date",
+        templates: getExpenseFilterTemplates(),
+        onApply: function (filters) {
+            applyExpenseFilterModal(filters);
+        },
+        onClear: function () {
+            clearExpenseFilterModal(false);
+        },
+        onSave: function () {
+            saveExpenseFilterModal();
+        }
+    });
+
+    expenseFilterBuilderInstance.mount(root);
+}
+
 function buildExpenseFilterDescriptorsFromModal() {
-    let filters = [];
-
-    let preset = document.getElementById("expenseFilterPreset")?.value || "all";
-    let from = document.getElementById("expenseFilterFrom")?.value || null;
-    let to = document.getElementById("expenseFilterTo")?.value || null;
-
-    if (preset !== "all" && window.SearchService && typeof window.SearchService.buildPeriodFilterDescriptor === "function") {
-        filters.push(window.SearchService.buildPeriodFilterDescriptor("date", preset, from, to));
+    initializeExpenseFilterBuilder();
+    if (!expenseFilterBuilderInstance) {
+        return [];
     }
-
-    let field = document.getElementById("expenseFilterField")?.value || "";
-    let op = document.getElementById("expenseFilterOperator")?.value || "contains";
-    let value = document.getElementById("expenseFilterValue")?.value || "";
-
-    if (field && value.trim()) {
-        filters.push({ field: field, op: op, value: value.trim() });
-    }
-
-    return filters;
+    return expenseFilterBuilderInstance.getDescriptors();
 }
 
 function rerenderExpenseWithQueryState() {
@@ -9432,12 +9465,18 @@ function clearExpenseQueryChips() {
 
 function openExpenseSortModal() {
     let modal = document.getElementById("expenseSortModal");
-    if (modal) modal.classList.remove("hidden");
+    if (modal) {
+        modal.classList.remove("hidden");
+        modal.style.display = "flex";
+    }
 }
 
 function closeExpenseSortModal() {
     let modal = document.getElementById("expenseSortModal");
-    if (modal) modal.classList.add("hidden");
+    if (modal) {
+        modal.classList.add("hidden");
+        modal.style.display = "none";
+    }
 }
 
 function applyExpenseSortModal() {
@@ -9472,9 +9511,10 @@ function clearExpenseSortModal() {
     renderExpenseQueryChips();
 }
 
-function applyExpenseFilterModal() {
+function applyExpenseFilterModal(explicitFilters) {
     if (window.SearchService && typeof window.SearchService.setFilters === "function") {
-        window.SearchService.setFilters("expenses", buildExpenseFilterDescriptorsFromModal());
+        let filters = Array.isArray(explicitFilters) ? explicitFilters : buildExpenseFilterDescriptorsFromModal();
+        window.SearchService.setFilters("expenses", filters);
     }
 
     closeExpenseFilterModal();
@@ -9482,26 +9522,30 @@ function applyExpenseFilterModal() {
     renderExpenseQueryChips();
 }
 
-function clearExpenseFilterModal() {
-    let presetEl = document.getElementById("expenseFilterPreset");
-    let fromEl = document.getElementById("expenseFilterFrom");
-    let toEl = document.getElementById("expenseFilterTo");
-    let fieldEl = document.getElementById("expenseFilterField");
-    let opEl = document.getElementById("expenseFilterOperator");
-    let valueEl = document.getElementById("expenseFilterValue");
+function saveExpenseFilterModal() {
+    if (!window.SearchService || typeof window.SearchService.saveView !== "function") {
+        return;
+    }
+    let name = prompt("Filter name", "Expense Filter");
+    if (!name || !name.trim()) {
+        return;
+    }
+    window.SearchService.saveView({ name: name.trim(), module: "expenses", scope: "module" });
+}
 
-    if (presetEl) presetEl.value = "all";
-    if (fromEl) fromEl.value = "";
-    if (toEl) toEl.value = "";
-    if (fieldEl) fieldEl.value = "type";
-    if (opEl) opEl.value = "contains";
-    if (valueEl) valueEl.value = "";
+function clearExpenseFilterModal(closeAfterClear = true) {
+    initializeExpenseFilterBuilder();
+    if (expenseFilterBuilderInstance) {
+        expenseFilterBuilderInstance.clearAll();
+    }
 
     if (window.SearchService && typeof window.SearchService.clearFilters === "function") {
         window.SearchService.clearFilters("expenses");
     }
 
-    closeExpenseFilterModal();
+    if (closeAfterClear) {
+        closeExpenseFilterModal();
+    }
     rerenderExpenseWithQueryState();
     renderExpenseQueryChips();
 }

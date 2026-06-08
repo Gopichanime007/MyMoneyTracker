@@ -353,6 +353,14 @@
                 ? options.searchFields
                 : adapter.searchFields;
 
+            var rawFilters = Array.isArray(descriptor.filters) ? descriptor.filters : [];
+            var groupAnyFilter = rawFilters.find(function (item) {
+                return item && item.op === 'group_any' && item.value && Array.isArray(item.value.conditions);
+            });
+            var filtersWithoutGroupAny = rawFilters.filter(function (item) {
+                return !(item && item.op === 'group_any');
+            });
+
             var normalizedDescriptor = {
                 version: 'v1',
                 module: key,
@@ -360,7 +368,7 @@
                     text: String((descriptor.search && descriptor.search.text) || ''),
                     fields: searchFields
                 },
-                filters: Array.isArray(descriptor.filters) ? descriptor.filters : [],
+                filters: filtersWithoutGroupAny,
                 sort: Array.isArray(descriptor.sort) ? descriptor.sort : []
             };
 
@@ -375,9 +383,28 @@
             }
 
             var normalizer = options.normalizeItem || adapter.normalizeItem;
-            return globalScope.QueryEngine.runQueryPipeline(list, normalizedDescriptor, {
+            var result = globalScope.QueryEngine.runQueryPipeline(list, normalizedDescriptor, {
                 normalizeItem: typeof normalizer === 'function' ? normalizer : function identity(item) { return item; }
             });
+
+            if (!groupAnyFilter || !globalScope.QueryEngine || typeof globalScope.QueryEngine.evaluateFilterDescriptorV1 !== 'function') {
+                return result;
+            }
+
+            var groupConditions = groupAnyFilter.value.conditions;
+            var groupedResults = (Array.isArray(result.results) ? result.results : []).filter(function (row) {
+                return groupConditions.some(function (condition) {
+                    return globalScope.QueryEngine.evaluateFilterDescriptorV1(row, condition);
+                });
+            });
+
+            return {
+                descriptor: result.descriptor,
+                totalCount: result.totalCount,
+                normalizedCount: result.normalizedCount,
+                resultCount: groupedResults.length,
+                results: groupedResults
+            };
         }
 
         function applyLegacyDateFilter(moduleName, rows, periodType, from, to, now, fieldName) {
