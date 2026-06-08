@@ -387,6 +387,74 @@ select:focus {
   min-width: 110px;
 }
 
+.filter-builder-section {
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  padding: 12px;
+  margin-top: 10px;
+  background: #fafafa;
+}
+
+.filter-builder-section h4,
+.filter-builder-section h5 {
+  margin: 0 0 8px;
+}
+
+.filter-builder-subtitle {
+  margin: 0 0 8px;
+  color: #6b7280;
+  font-size: 12px;
+}
+
+.filter-builder-period-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.filter-builder-radio {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 6px 0;
+  font-size: 13px;
+}
+
+.filter-builder-chip-wrap {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.filter-builder-chip {
+  width: auto;
+  margin-top: 0;
+  padding: 8px 10px;
+}
+
+.filter-builder-card {
+  border: 1px solid #d1d5db;
+  border-radius: 10px;
+  background: #ffffff;
+  padding: 10px;
+  margin-top: 8px;
+  display: grid;
+  gap: 8px;
+}
+
+.filter-builder-hint {
+  margin: 0;
+  font-size: 12px;
+  color: #6b7280;
+}
+
+.filter-builder-summary {
+  margin: 0;
+  color: #111827;
+  font-size: 13px;
+}
+
 /* =========================
    📦 CATEGORY LIST
 ========================= */
