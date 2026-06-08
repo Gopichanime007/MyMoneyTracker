@@ -1385,6 +1385,7 @@ function loadHistory(list = getExpenses()) {
         currentFilteredExpenses = finalList;
         updateExpenseSortIndicator();
         renderExpenseQueryChips();
+        updateFilteredViewActiveIndicator();
 
         let container = document.getElementById("historyList");
         if (!container) return;
@@ -7217,6 +7218,33 @@ function bindRemainingCard() {
 //     document.getElementById("incomeValue").innerText = totalIncome;
 //     document.getElementById("netValue").innerText = net;
 // }
+
+function hasActiveExpenseQueryState() {
+    if (!window.SearchService || typeof window.SearchService.getState !== "function") {
+        return false;
+    }
+    let state = window.SearchService.getState("expenses");
+    let searchText = String((state.search && state.search.text) || "").trim();
+    let hasFilters = Array.isArray(state.filters) && state.filters.length > 0;
+    let hasSort = Array.isArray(state.sort) && state.sort.length > 0;
+    return Boolean(searchText || hasFilters || hasSort);
+}
+
+function applyActiveExpenseQuery(rows) {
+    let list = Array.isArray(rows) ? rows : [];
+    if (!window.SearchService || typeof window.SearchService.applyModuleSearch !== "function") {
+        return list;
+    }
+    let queryResult = window.SearchService.applyModuleSearch("expenses", list);
+    return Array.isArray(queryResult.results) ? queryResult.results : list;
+}
+
+function updateFilteredViewActiveIndicator() {
+    let badge = document.getElementById("filteredViewActive");
+    if (!badge) return;
+    badge.textContent = hasActiveExpenseQueryState() ? "Filtered View Active" : "";
+}
+
 function loadDashboard() {
 
     let budgets = getBudgets();
@@ -7230,6 +7258,9 @@ function loadDashboard() {
 
     let filteredExpenses =
         filterByActivePeriod(expenses);
+
+    filteredExpenses = applyActiveExpenseQuery(filteredExpenses);
+    updateFilteredViewActiveIndicator();
 
     // =========================
     // 💰 TOTALS
@@ -7976,7 +8007,7 @@ function getDailyLimit() {
 
 let chart;
 function loadGraph(type = "day", data = null, customRange = null) {
-    const expenses = data || getExpenses();
+    const expenses = applyActiveExpenseQuery(data || getExpenses());
     const dataset = groupData(expenses, type, null, customRange);
     const filtered = filterDataByType(type, expenses, customRange);
 
