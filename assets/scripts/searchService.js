@@ -2,6 +2,7 @@
     'use strict';
 
     var STORAGE_KEY = 'query.state.v1';
+    var VIEWS_STORAGE_KEY = 'query.views.v1';
     var MODULES = ['expenses', 'savings', 'orders', 'quotations'];
 
     function hasQueryEngine() {
@@ -26,6 +27,27 @@
             localStorage.setItem(STORAGE_KEY, JSON.stringify(stateMap || {}));
         } catch (_err) {
             // Ignore quota/storage errors to keep runtime resilient.
+        }
+    }
+
+    function readPersistedViews() {
+        try {
+            var raw = localStorage.getItem(VIEWS_STORAGE_KEY);
+            if (!raw) {
+                return [];
+            }
+            var parsed = JSON.parse(raw);
+            return Array.isArray(parsed) ? parsed : [];
+        } catch (_err) {
+            return [];
+        }
+    }
+
+    function writePersistedViews(views) {
+        try {
+            localStorage.setItem(VIEWS_STORAGE_KEY, JSON.stringify(Array.isArray(views) ? views : []));
+        } catch (_err) {
+            // Ignore storage errors to keep runtime resilient.
         }
     }
 
@@ -82,11 +104,13 @@
 
     function createSearchService() {
         var persisted = readPersistedState();
+        var persistedViews = readPersistedViews();
         var store = hasQueryEngine()
             ? globalScope.QueryEngine.createQueryStateStore(persisted)
             : createFallbackStateStore(persisted);
 
         var adapters = {};
+        var views = Array.isArray(persistedViews) ? persistedViews.slice() : [];
 
         function registerAdapter(moduleName, config) {
             var key = normalizeModuleName(moduleName);
@@ -121,6 +145,95 @@
 
         function persist() {
             writePersistedState(serializeState());
+        }
+
+        function persistViews() {
+            writePersistedViews(views);
+        }
+
+        function createViewId() {
+            return 'qv_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8);
+        }
+
+        function normalizeScope(scope, moduleName) {
+            if (scope === 'global') {
+                return '*';
+            }
+            return normalizeModuleName(moduleName);
+        }
+
+        function listViews(scope, moduleName) {
+            var resolvedScope = scope === 'global' ? '*' : normalizeModuleName(moduleName);
+            return views.filter(function (view) {
+                if (resolvedScope === '*') {
+                    return String(view.scope || '') === '*';
+                }
+                return String(view.scope || '') === resolvedScope || String(view.scope || '') === '*';
+            });
+        }
+
+        function saveView(payload) {
+            var source = payload || {};
+            var moduleName = normalizeModuleName(source.module);
+            var now = new Date().toISOString();
+            var view = {
+                id: createViewId(),
+                name: typeof source.name === 'string' && source.name.trim() ? source.name.trim() : 'Untitled View',
+                module: moduleName,
+                scope: normalizeScope(source.scope, moduleName),
+                query: source.query || store.getState(moduleName),
+                createdAt: now,
+                updatedAt: now
+            };
+            views.push(view);
+            persistViews();
+            return view;
+        }
+
+        function updateView(viewId, patch) {
+            var idx = views.findIndex(function (view) {
+                return String(view.id) === String(viewId);
+            });
+            if (idx === -1) {
+                return null;
+            }
+            var current = views[idx];
+            var next = Object.assign({}, current, patch || {}, {
+                updatedAt: new Date().toISOString()
+            });
+            if (patch && patch.scope) {
+                next.scope = normalizeScope(patch.scope, next.module || current.module);
+            }
+            views[idx] = next;
+            persistViews();
+            return next;
+        }
+
+        function deleteView(viewId) {
+            var before = views.length;
+            views = views.filter(function (view) {
+                return String(view.id) !== String(viewId);
+            });
+            var deleted = views.length !== before;
+            if (deleted) {
+                persistViews();
+            }
+            return deleted;
+        }
+
+        function applyView(viewId, moduleName) {
+            var targetModule = normalizeModuleName(moduleName);
+            var view = views.find(function (entry) {
+                return String(entry.id) === String(viewId);
+            });
+            if (!view) {
+                return null;
+            }
+            var query = view.query || {};
+            var effectiveModule = view.scope === '*' ? targetModule : normalizeModuleName(view.module);
+            var next = store.setState(effectiveModule, query);
+            persist();
+            return next;
         }
 
         function setSearchText(moduleName, text, fields) {
@@ -294,6 +407,7 @@
 
         return {
             STORAGE_KEY: STORAGE_KEY,
+            VIEWS_STORAGE_KEY: VIEWS_STORAGE_KEY,
             registerAdapter: registerAdapter,
             getAdapter: getAdapter,
             getState: getState,
@@ -307,6 +421,11 @@
             buildPeriodFilterDescriptor: buildPeriodFilterDescriptor,
             applyModuleSearch: applyModuleSearch,
             applyLegacyDateFilter: applyLegacyDateFilter,
+            listViews: listViews,
+            saveView: saveView,
+            updateView: updateView,
+            deleteView: deleteView,
+            applyView: applyView,
             persist: persist
         };
     }
