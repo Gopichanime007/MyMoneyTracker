@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <title>Purchase Plans</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <link rel="stylesheet" href="../assets/styles/style.css">
+  <link rel="stylesheet" href="../assets/styles/quotations.css">
+</head>
+
+<body>
+  <div class="app">
+    <header class="header header-row">
+      <button class="back-btn" type="button" onclick="window.location.href='../index.html'">←</button>
+      <div>
+        <h2>Open Quotations</h2>
+        <p class="header-subtitle">Personal finance purchase plan workspace</p>
+      </div>
+    </header>
+
+    <div class="card">
+      <div class="workspace-toolbar">
+        <h3>Purchase Plan Workspace</h3>
+        <button class="primary" type="button" onclick="createNewPlan()">+ New Plan</button>
+      </div>
+
+      <div class="workspace-section">
+        <h4>Draft Plans</h4>
+        <div id="draftPlansList"></div>
+      </div>
+
+      <div class="workspace-section">
+        <h4>Accepted Plans</h4>
+        <div id="acceptedPlansList"></div>
+      </div>
+
+      <div class="workspace-section">
+        <h4>Expired Plans</h4>
+        <div id="expiredPlansList"></div>
+      </div>
+
+      <div class="workspace-section">
+        <h4>Converted Plans</h4>
+        <div id="convertedPlansList"></div>
+      </div>
+    </div>
+  </div>
+
+  <div id="planNavigationModal" class="modal hidden" onclick="closePlanNavigationModal()">
+    <div class="modal-content" onclick="event.stopPropagation()">
+      <h3>Open Purchase Plan</h3>
+      <p id="planNavigationInfo" class="modal-sub"></p>
+      <div class="modal-actions modal-stack-actions">
+        <button class="primary" type="button" id="openPlanBtn">Open Purchase Plan</button>
+        <button class="secondary" type="button" id="openLinkedOrderBtn">Open Linked Order</button>
+      </div>
+      <button class="secondary" type="button" onclick="closePlanNavigationModal()">Close</button>
+    </div>
+  </div>
+
+  <script src="../assets/scripts/documentWorkflow.js"></script>
+  <script src="../assets/scripts/script.js"></script>
+  <script src="../assets/scripts/quotations.js"></script>
+</body>
+
+</html>

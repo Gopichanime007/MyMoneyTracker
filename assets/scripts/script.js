@@ -3836,64 +3836,309 @@ function hexToRgb(hex) {
         messages.scrollTop = messages.scrollHeight;
     }
 
-    function generateInsightIntent(intent) {
-        const i = String(intent || '').toLowerCase();
-        const model = buildPriorityInsights();
-
-        if (i.includes('critical')) {
-            return model.critical.length ? model.critical.join(' ') : 'No critical alerts right now.';
-        }
-        if (i.includes('budget')) {
-            return model.budgetRisks.length ? model.budgetRisks.join(' ') : 'No budget risk detected in active allocations.';
-        }
-        if (i.includes('saving')) {
-            return model.savingsOps.length ? model.savingsOps.join(' ') : 'No immediate savings opportunity detected from current records.';
-        }
-        if (i.includes('pending') || i.includes('order') || i.includes('quotation')) {
-            return model.pendingActions.length ? model.pendingActions.join(' ') : 'No pending operational actions.';
-        }
-        if (i.includes('recommend')) {
-            return model.recommendations.length ? model.recommendations.join(' ') : 'No recommendation generated from current data.';
-        }
-
-        const all = []
-            .concat(model.critical)
-            .concat(model.budgetRisks)
-            .concat(model.savingsOps)
-            .concat(model.pendingActions)
-            .concat(model.recommendations);
-        return all.length ? all.slice(0, 3).join(' ') : 'No actionable signal found in current dataset.';
+    function tokenizePrompt(text) {
+        return String(text || '')
+            .toLowerCase()
+            .replace(/[^a-z0-9\s?]/g, ' ')
+            .split(/\s+/)
+            .filter(Boolean);
     }
 
-    function handlePreset(promptKey) {
-        const map = {
-            'Show critical alerts': 'critical',
-            'Show budget risks': 'budget',
-            'Show savings opportunities': 'saving',
-            'Show pending actions': 'pending',
-            'Show recommendations': 'recommendations'
+    function detectIntent(tokens, lower) {
+        const has = (...words) => words.some((w) => lower.includes(w));
+        if (has('how many', 'count', 'number of')) return 'COUNT';
+        if (has('list', 'show all', 'all ')) return 'LIST';
+        if (has('show', 'display')) return 'SHOW';
+        if (has('highest', 'top', 'most', 'max')) return 'TOP';
+        if (has('total', 'sum', 'overall')) return 'TOTAL';
+        if (has('compare', 'vs', 'versus', 'difference')) return 'COMPARE';
+        if (has('risk', 'alert', 'critical', 'danger')) return 'RISK';
+        if (has('status', 'state')) return 'STATUS';
+        return 'SUMMARY';
+    }
+
+    function detectEntity(tokens, lower) {
+        const map = [
+            { entity: 'Budget', keys: ['budget', 'budgets'] },
+            { entity: 'Savings', keys: ['savings', 'saving', 'fund', 'wallet'] },
+            { entity: 'Orders', keys: ['order', 'orders'] },
+            { entity: 'Quotations', keys: ['quotation', 'quotations', 'quote', 'quotes', 'plan', 'plans'] },
+            { entity: 'Expenses', keys: ['expense', 'expenses', 'spend', 'spent'] },
+            { entity: 'Income', keys: ['income', 'earnings', 'credited'] },
+            { entity: 'Categories', keys: ['category', 'categories'] }
+        ];
+
+        const found = map.find((row) => row.keys.some((k) => lower.includes(k)));
+        return found ? found.entity : 'General';
+    }
+
+    function getEntityRecords(entity) {
+        if (entity === 'Budget') return (typeof getBudgets === 'function' ? getBudgets() : []) || [];
+        if (entity === 'Savings') return (typeof getSavings === 'function' ? getSavings() : []) || [];
+        if (entity === 'Orders') return JSON.parse(localStorage.getItem('orders') || '[]');
+        if (entity === 'Quotations') {
+            if (window.DocWorkflow && typeof window.DocWorkflow.getQuotationRegistry === 'function') {
+                return window.DocWorkflow.getQuotationRegistry() || [];
+            }
+            return JSON.parse(localStorage.getItem('quotationRegistry') || '[]');
+        }
+        if (entity === 'Expenses') return ((typeof getExpenses === 'function' ? getExpenses() : []) || []).filter((e) => Number(e.amount || 0) < 0);
+        if (entity === 'Income') return ((typeof getExpenses === 'function' ? getExpenses() : []) || []).filter((e) => Number(e.amount || 0) > 0);
+        if (entity === 'Categories') return (typeof getCategories === 'function' ? getCategories() : []) || [];
+        return [];
+    }
+
+    function formatRecordName(entity, row) {
+        if (!row) return '-';
+        if (entity === 'Budget') return row.name || row.note || row.entity || row.budgetId || row.id || '-';
+        if (entity === 'Savings') return row.note || row.entity || row.id || '-';
+        if (entity === 'Orders') return row.orderNo || row.id || '-';
+        if (entity === 'Quotations') return row.quotationNo || row.id || '-';
+        if (entity === 'Expenses' || entity === 'Income') return row.purpose || row.note || row.category || row.id || '-';
+        return String(row);
+    }
+
+    function buildDataDrivenReply(analysis) {
+        const records = getEntityRecords(analysis.entity);
+        const lower = analysis.lower;
+        const isActive = /active/.test(lower);
+        const isDraft = /draft/.test(lower);
+
+        let filtered = records;
+        if (analysis.entity === 'Budget' && isActive && typeof getActiveBudgetPeriod === 'function') {
+            const active = getActiveBudgetPeriod();
+            const key = active && active.periodKey ? String(active.periodKey) : '';
+            if (key) {
+                filtered = records.filter((b) => String(b.periodKey || '') === key);
+            }
+        }
+        if (analysis.entity === 'Orders' && isDraft) filtered = records.filter((o) => String(o.status || 'draft') === 'draft');
+        if (analysis.entity === 'Quotations' && isDraft) filtered = records.filter((q) => String(q.status || 'draft') === 'draft');
+
+        let response = '';
+        if (analysis.intent === 'COUNT') {
+            response = `${analysis.entity} count: ${filtered.length}.`;
+        } else if (analysis.intent === 'LIST' || analysis.intent === 'SHOW') {
+            const names = filtered.slice(0, 6).map((row) => formatRecordName(analysis.entity, row));
+            response = names.length ? `${analysis.entity}: ${names.join(', ')}.` : `No ${analysis.entity.toLowerCase()} records found.`;
+        } else if (analysis.intent === 'TOP') {
+            if (analysis.entity === 'Budget') {
+                const grouped = new Map();
+                filtered.forEach((row) => {
+                    const id = String(row.budgetId || row.id || '');
+                    if (!id) return;
+                    const prev = grouped.get(id) || { name: formatRecordName('Budget', row), total: 0 };
+                    prev.total += Number(row.totalAllocated || row.amount || 0);
+                    grouped.set(id, prev);
+                });
+                const top = Array.from(grouped.values()).sort((a, b) => b.total - a.total)[0];
+                response = top ? `Highest budget is ${top.name} at ${formatCurrency(top.total)}.` : 'No budget records found.';
+            } else if (analysis.entity === 'Categories') {
+                const expenseRows = getEntityRecords('Expenses');
+                const grouped = new Map();
+                expenseRows.forEach((e) => {
+                    const name = String(e.category || 'Others');
+                    grouped.set(name, (grouped.get(name) || 0) + Math.abs(Number(e.amount || 0)));
+                });
+                const top = Array.from(grouped.entries()).sort((a, b) => b[1] - a[1])[0];
+                response = top ? `Top spending category is ${top[0]} at ${formatCurrency(top[1])}.` : 'No category spending found.';
+            } else {
+                response = `Top query for ${analysis.entity} is not available yet; try count or list.`;
+            }
+        } else if (analysis.intent === 'TOTAL') {
+            if (analysis.entity === 'Budget') {
+                const total = filtered.reduce((sum, b) => sum + Number(b.totalAllocated || b.amount || 0), 0);
+                response = `Total budget allocation is ${formatCurrency(total)}.`;
+            } else if (analysis.entity === 'Savings') {
+                const total = filtered.reduce((sum, s) => sum + Number(s.amount || 0), 0);
+                response = `Total savings balance is ${formatCurrency(total)}.`;
+            } else if (analysis.entity === 'Expenses' || analysis.entity === 'Income') {
+                const total = filtered.reduce((sum, e) => sum + Math.abs(Number(e.amount || 0)), 0);
+                response = `Total ${analysis.entity.toLowerCase()} is ${formatCurrency(total)}.`;
+            } else {
+                response = `${analysis.entity} total records: ${filtered.length}.`;
+            }
+        } else if (analysis.intent === 'COMPARE') {
+            const budgetTotal = getEntityRecords('Budget').reduce((sum, b) => sum + Number(b.totalAllocated || b.amount || 0), 0);
+            const expenseTotal = getEntityRecords('Expenses').reduce((sum, e) => sum + Math.abs(Number(e.amount || 0)), 0);
+            const delta = budgetTotal - expenseTotal;
+            response = `Budget vs expense: ${formatCurrency(budgetTotal)} vs ${formatCurrency(expenseTotal)} (difference ${formatCurrency(delta)}).`;
+        } else if (analysis.intent === 'STATUS') {
+            if (analysis.entity === 'Orders' || analysis.entity === 'Quotations') {
+                const grouped = new Map();
+                filtered.forEach((row) => {
+                    const s = String(row.status || 'draft');
+                    grouped.set(s, (grouped.get(s) || 0) + 1);
+                });
+                const parts = Array.from(grouped.entries()).map(([k, v]) => `${k}: ${v}`);
+                response = parts.length ? `${analysis.entity} status summary: ${parts.join(', ')}.` : `No ${analysis.entity.toLowerCase()} records found.`;
+            } else {
+                response = `${analysis.entity} status query is not applicable.`;
+            }
+        } else if (analysis.intent === 'RISK') {
+            const model = buildPriorityInsights();
+            response = model.critical.concat(model.budgetRisks).slice(0, 3).join(' ') || 'No immediate critical risk detected.';
+        } else {
+            const model = buildPriorityInsights();
+            response = model.critical.concat(model.budgetRisks, model.savingsOps, model.pendingActions).slice(0, 3).join(' ') || 'No summary available from current records.';
+        }
+
+        return {
+            records: filtered,
+            response: response || 'No matching response generated.'
         };
-        const intent = map[promptKey] || 'summary';
-        renderMessage(promptKey);
-        const reply = generateInsightIntent(intent);
-        setTimeout(() => renderMessage(reply), 200);
+    }
+
+    function analyzeUserPrompt(text) {
+        const raw = String(text || '').trim();
+        const lower = raw.toLowerCase();
+        const tokens = tokenizePrompt(raw);
+
+        const questionHeads = ['what', 'why', 'when', 'where', 'who', 'which', 'how'];
+        const auxHeads = ['is', 'am', 'are', 'was', 'were', 'can', 'could', 'should', 'would', 'do', 'does', 'did'];
+        const startsWithQuestionHead = questionHeads.concat(auxHeads).some(head => lower.startsWith(`${head} `));
+        const isQuestion = startsWithQuestionHead || /\?$/.test(lower);
+        const questionType = tokens[0] || '';
+
+        const stopWords = new Set([
+            'the', 'a', 'an', 'to', 'for', 'of', 'in', 'on', 'at', 'and', 'or', 'please', 'show', 'tell', 'me',
+            'what', 'why', 'when', 'where', 'who', 'which', 'how', 'is', 'am', 'are', 'was', 'were', 'can', 'could',
+            'should', 'would', 'do', 'does', 'did'
+        ]);
+        const keywords = tokens.filter(t => !stopWords.has(t)).slice(0, 6);
+
+        const has = (...words) => words.some(w => lower.includes(w));
+        const route = has('open ', 'go to', 'navigate', 'take me') || has('home', 'dashboard');
+        const intent = detectIntent(tokens, lower);
+        const entity = detectEntity(tokens, lower);
+
+        return {
+            raw,
+            lower,
+            tokens,
+            keywords,
+            isQuestion,
+            questionType,
+            intent,
+            entity,
+            route
+        };
+    }
+
+    function buildIntentReply(analysis) {
+        const dataReply = buildDataDrivenReply(analysis);
+        return dataReply.response;
+    }
+
+    function buildChipsFromAnalysis(analysis) {
+        const chips = [];
+        const pushChip = (text) => {
+            if (!chips.includes(text) && chips.length < 6) chips.push(text);
+        };
+
+        const byIntent = {
+            COUNT: ['How many active budgets', 'How many draft orders', 'How many draft quotations'],
+            LIST: ['Show all savings accounts', 'Show all categories', 'Show all orders'],
+            SHOW: ['Show budget status', 'Show quotation status', 'Show order status'],
+            TOP: ['What is my highest budget', 'Which category spent most', 'Top spending category'],
+            TOTAL: ['Total savings', 'Total expenses', 'Total budget allocation'],
+            COMPARE: ['Compare budget vs expenses', 'Compare income and expenses', 'Compare orders and quotations'],
+            RISK: ['Show budget risks', 'Show critical alerts', 'Show pending actions'],
+            STATUS: ['Orders status summary', 'Quotations status summary', 'Budget status'],
+            SUMMARY: ['Show summary', 'Show critical alerts', 'Show recommendations']
+        };
+
+        (byIntent[analysis.intent] || byIntent.SUMMARY).forEach(pushChip);
+        if (analysis.keywords.includes('order')) pushChip('Open orders');
+        if (analysis.keywords.includes('quotation') || analysis.keywords.includes('quote')) pushChip('Open quotation');
+        if (analysis.keywords.includes('saving') || analysis.keywords.includes('savings')) pushChip('Open savings');
+        if (analysis.keywords.includes('budget')) pushChip('Open budget period');
+        if (analysis.isQuestion) pushChip('Show recommendations');
+
+        return chips;
+    }
+
+    function renderChips(panel, labels) {
+        const chips = panel.querySelector('[data-chips]');
+        if (!chips) return;
+        chips.innerHTML = '';
+        labels.forEach(label => {
+            const b = document.createElement('button');
+            b.className = 'remo-chip';
+            b.type = 'button';
+            b.textContent = label;
+            b.onclick = () => {
+                renderMessage(label);
+                const reply = processReMoPrompt(label, panel);
+                setTimeout(() => renderMessage(reply), 160);
+            };
+            chips.appendChild(b);
+        });
+    }
+
+    function routeReMoCommand(analysis, panel) {
+        const ask = analysis.lower;
+        if (!analysis.route && !/^open\s+/.test(ask)) return null;
+
+        const go = (target) => {
+            if (location.pathname.includes('/pages/')) {
+                window.location.href = `${target}.html`;
+            } else if (typeof window.showScreen === 'function' && document.querySelector('.screen')) {
+                window.showScreen(target === 'budgetperiod' ? 'budget' : target);
+            } else {
+                window.location.href = `pages/${target}.html`;
+            }
+            panel.classList.remove('open');
+        };
+
+        if (/home|dashboard/.test(ask)) {
+            goHomeFromAI(panel);
+            return 'Opened home dashboard.';
+        }
+        if (/order/.test(ask)) {
+            go('orders');
+            return 'Opened orders.';
+        }
+        if (/quotation|quote/.test(ask)) {
+            go('quotations');
+            return 'Opened quotations workspace.';
+        }
+        if (/saving/.test(ask)) {
+            go('savings');
+            return 'Opened savings.';
+        }
+        if (/budget/.test(ask)) {
+            go('budgetperiod');
+            return 'Opened budget period.';
+        }
+        return null;
+    }
+
+    function processReMoPrompt(text, panel) {
+        const analysis = analyzeUserPrompt(text);
+        renderChips(panel, buildChipsFromAnalysis(analysis));
+
+        console.debug('[ReMo] Detected Intent:', analysis.intent);
+        console.debug('[ReMo] Detected Entity:', analysis.entity);
+
+        const routeReply = routeReMoCommand(analysis, panel);
+        if (routeReply) return routeReply;
+
+        const dataReply = buildDataDrivenReply(analysis);
+        console.debug('[ReMo] Matched Records:', Array.isArray(dataReply.records) ? dataReply.records.length : 0);
+        const response = dataReply.response || buildIntentReply(analysis);
+        console.debug('[ReMo] Generated Response:', response);
+        if (!response || !String(response).trim()) {
+            return 'I could not confidently classify that request. Ask about critical alerts, budget risks, savings opportunities, pending actions, or recommendations.';
+        }
+        return response;
     }
 
     function openPanel(panel, previousScreenId) {
         panel.classList.add('open');
         panel.dataset.prevScreen = previousScreenId || '';
         renderPriorityDashboard(panel);
-        // populate chips
-        const chips = panel.querySelector('[data-chips]');
-        if (chips && chips.children.length === 0) {
-            ['Show critical alerts', 'Show budget risks', 'Show savings opportunities', 'Show pending actions', 'Show recommendations'].forEach(t => {
-                const b = document.createElement('button');
-                b.className = 'remo-chip';
-                b.textContent = t;
-                b.onclick = () => handlePreset(t);
-                chips.appendChild(b);
-            });
-        }
+        renderChips(panel, ['Show critical alerts', 'Show budget risks', 'Show savings opportunities', 'Show pending actions', 'Show recommendations']);
         panel.querySelector('[data-messages]').innerHTML = '';
         renderMessage('AI dashboard loaded from live app data. Ask for critical, budget, savings, pending, or recommendations.');
     }
@@ -3963,7 +4208,7 @@ function hexToRgb(hex) {
                 const text = (input.value || '').trim();
                 if (!text) return;
                 renderMessage(text);
-                const reply = generateInsightIntent(text);
+                const reply = processReMoPrompt(text, panel);
                 setTimeout(() => renderMessage(reply), 200);
                 input.value = '';
             });
@@ -4059,6 +4304,28 @@ function openAttachmentOverlay({ src, kind = "image", title = "Attachment previe
         frame.src = src;
         frame.setAttribute('title', title);
         panel.appendChild(frame);
+    } else if (kind === 'video') {
+        const video = document.createElement('video');
+        video.src = src;
+        video.controls = true;
+        video.autoplay = false;
+        video.className = 'attachment-viewer-image';
+        panel.appendChild(video);
+    } else if (kind === 'audio') {
+        const audio = document.createElement('audio');
+        audio.src = src;
+        audio.controls = true;
+        audio.autoplay = false;
+        audio.style.width = '100%';
+        panel.appendChild(audio);
+    } else if (kind === 'text') {
+        const pre = document.createElement('pre');
+        pre.className = 'attachment-viewer-text';
+        pre.style.whiteSpace = 'pre-wrap';
+        pre.style.maxHeight = '70vh';
+        pre.style.overflow = 'auto';
+        pre.textContent = String(src || '');
+        panel.appendChild(pre);
     } else {
         const img = document.createElement('img');
         img.src = src;
@@ -4089,6 +4356,294 @@ function getAttachmentApi() {
     return window.reMoAttachments || window.reMoAttachmentsIndexed || null;
 }
 
+function getAttachmentExtension(filename) {
+    const name = String(filename || "");
+    const idx = name.lastIndexOf(".");
+    if (idx === -1) return "";
+    return name.slice(idx + 1).toLowerCase();
+}
+
+function formatAttachmentSize(size) {
+    const bytes = Number(size || 0);
+    if (!Number.isFinite(bytes) || bytes <= 0) return "0 B";
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function normalizeAttachmentRecord(record, id) {
+    const filename = record && record.filename ? String(record.filename) : `attachment_${id}`;
+    const mimeType = record && record.mime ? String(record.mime) : "application/octet-stream";
+    const extension = record && record.extension ? String(record.extension) : getAttachmentExtension(filename);
+    const size = Number(record && (record.size || (record.blob && record.blob.size) || 0) || 0);
+    const uploadedDateRaw = record && (record.uploadedDate || record.createdAt);
+    const uploadedDate = uploadedDateRaw
+        ? new Date(uploadedDateRaw).toISOString()
+        : new Date().toISOString();
+
+    return {
+        id: String(id || (record && record.id) || ""),
+        fileName: filename,
+        extension,
+        mimeType,
+        size,
+        uploadedDate,
+        data: record && record.blob ? record.blob : null,
+        raw: record || null
+    };
+}
+
+function buildLocalAttachmentKey(id) {
+    return `remo:attach:${String(id || "")}`;
+}
+
+function buildLocalAttachmentMetaKey(id) {
+    return `remo:attach:meta:${String(id || "")}`;
+}
+
+(function registerAttachmentService() {
+    function classifyMime(meta) {
+        const mime = String(meta && meta.mimeType || "application/octet-stream").toLowerCase();
+        const ext = String(meta && meta.extension || "").toLowerCase();
+
+        if (mime.startsWith("image/") || ["jpg", "jpeg", "png", "gif", "webp", "bmp"].includes(ext)) return "image";
+        if (mime === "application/pdf" || ext === "pdf") return "pdf";
+        if (mime.startsWith("video/") || ["mp4", "webm", "mov"].includes(ext)) return "video";
+        if (mime.startsWith("audio/") || ["mp3", "wav", "m4a"].includes(ext)) return "audio";
+        if (["doc", "docx", "xls", "xlsx", "ppt", "pptx"].includes(ext)) return "office";
+        if (mime.startsWith("text/") || ["txt", "csv", "json", "xml"].includes(ext)) return "text";
+        return "unknown";
+    }
+
+    async function saveAttachment(file, options = {}) {
+        if (!file) return null;
+
+        const at = getAttachmentApi();
+        const requestedId = options && options.id ? String(options.id) : null;
+        const generatedId = requestedId || (crypto && crypto.randomUUID ? crypto.randomUUID() : `atta_${Date.now()}`);
+
+        if (at && typeof at.storeImage === "function") {
+            const stored = await at.storeImage(generatedId, file);
+            let rec = null;
+            if (at.getRecord) {
+                try { rec = await at.getRecord(stored.id); } catch (_err) { rec = null; }
+            }
+            return normalizeAttachmentRecord(rec || {
+                id: stored.id,
+                filename: file.name,
+                extension: getAttachmentExtension(file.name),
+                mime: file.type || "application/octet-stream",
+                size: Number(file.size || 0),
+                uploadedDate: new Date().toISOString(),
+                blob: file
+            }, stored.id);
+        }
+
+        const reader = new FileReader();
+        const dataUrl = await new Promise((resolve, reject) => {
+            reader.onload = () => resolve(reader.result);
+            reader.onerror = () => reject(reader.error || new Error("Attachment read failed"));
+            reader.readAsDataURL(file);
+        });
+
+        const id = generatedId;
+        localStorage.setItem(buildLocalAttachmentKey(id), String(dataUrl || ""));
+        localStorage.setItem(buildLocalAttachmentMetaKey(id), JSON.stringify({
+            id,
+            filename: file.name || `attachment_${id}`,
+            extension: getAttachmentExtension(file.name || ""),
+            mime: file.type || "application/octet-stream",
+            size: Number(file.size || 0),
+            uploadedDate: new Date().toISOString(),
+            createdAt: Date.now()
+        }));
+
+        return normalizeAttachmentRecord(JSON.parse(localStorage.getItem(buildLocalAttachmentMetaKey(id)) || "null"), id);
+    }
+
+    async function uploadAttachment(fileOrInput, options = {}) {
+        const file = (fileOrInput instanceof File)
+            ? fileOrInput
+            : (fileOrInput && fileOrInput.files && fileOrInput.files[0] ? fileOrInput.files[0] : null);
+        if (!file) return null;
+        return saveAttachment(file, options);
+    }
+
+    async function getAttachmentMeta(attachmentId) {
+        const id = String(attachmentId || "");
+        if (!id) return null;
+
+        const at = getAttachmentApi();
+        if (at && typeof at.getRecord === "function") {
+            try {
+                const rec = await at.getRecord(id);
+                if (rec) return normalizeAttachmentRecord(rec, id);
+            } catch (_err) {
+            }
+        }
+
+        const rawMeta = localStorage.getItem(buildLocalAttachmentMetaKey(id));
+        if (rawMeta) {
+            try {
+                return normalizeAttachmentRecord(JSON.parse(rawMeta), id);
+            } catch (_err) {
+            }
+        }
+
+        return normalizeAttachmentRecord(null, id);
+    }
+
+    async function getAttachmentBlob(attachmentId) {
+        const id = String(attachmentId || "");
+        if (!id) return null;
+
+        function normalizeBlobLike(value, mimeHint) {
+            if (!value) return null;
+            if (typeof Blob !== "undefined" && value instanceof Blob) return value;
+            if (typeof value === "string") {
+                if (value.startsWith("data:")) {
+                    const commaIdx = value.indexOf(",");
+                    if (commaIdx !== -1) {
+                        const mime = value.slice(5, commaIdx).split(";")[0] || mimeHint || "application/octet-stream";
+                        const base64 = value.slice(commaIdx + 1);
+                        const bytes = atob(base64);
+                        const arr = new Uint8Array(bytes.length);
+                        for (let i = 0; i < bytes.length; i += 1) arr[i] = bytes.charCodeAt(i);
+                        return new Blob([arr], { type: mime });
+                    }
+                }
+                return new Blob([value], { type: mimeHint || "text/plain" });
+            }
+            if (value instanceof ArrayBuffer || ArrayBuffer.isView(value)) {
+                return new Blob([value], { type: mimeHint || "application/octet-stream" });
+            }
+            if (value && typeof value === "object" && typeof value.data !== "undefined") {
+                return normalizeBlobLike(value.data, mimeHint);
+            }
+            return new Blob([JSON.stringify(value)], { type: "application/json" });
+        }
+
+        const at = getAttachmentApi();
+        if (at && typeof at.getBlob === "function") {
+            try {
+                const raw = await at.getBlob(id);
+                if (raw) {
+                    const meta = await getAttachmentMeta(id);
+                    const normalized = normalizeBlobLike(raw, meta && meta.mimeType ? meta.mimeType : "application/octet-stream");
+                    if (normalized) return normalized;
+                }
+            } catch (_err) {
+            }
+        }
+
+        const dataUrl = localStorage.getItem(buildLocalAttachmentKey(id));
+        if (!dataUrl || !dataUrl.startsWith("data:")) return null;
+        const commaIdx = dataUrl.indexOf(",");
+        if (commaIdx === -1) return null;
+        return normalizeBlobLike(dataUrl, "application/octet-stream");
+    }
+
+    async function previewAttachment(meta, blob) {
+        const kind = classifyMime(meta);
+        if (kind === "image") {
+            const url = URL.createObjectURL(blob);
+            const opened = openAttachmentOverlay({ src: url, kind: "image", title: meta.fileName || "Image" });
+            if (opened) opened.dataset.objectUrl = url;
+            return { mode: "image" };
+        }
+        if (kind === "pdf") {
+            const url = URL.createObjectURL(blob);
+            window.open(url, "_blank", "noopener,noreferrer");
+            setTimeout(() => { try { URL.revokeObjectURL(url); } catch (_err) { } }, 30000);
+            return { mode: "pdf" };
+        }
+        if (kind === "video") {
+            const url = URL.createObjectURL(blob);
+            const opened = openAttachmentOverlay({ src: url, kind: "video", title: meta.fileName || "Video" });
+            if (opened) opened.dataset.objectUrl = url;
+            return { mode: "video" };
+        }
+        if (kind === "audio") {
+            const url = URL.createObjectURL(blob);
+            const opened = openAttachmentOverlay({ src: url, kind: "audio", title: meta.fileName || "Audio" });
+            if (opened) opened.dataset.objectUrl = url;
+            return { mode: "audio" };
+        }
+        if (kind === "text") {
+            const text = (blob && typeof blob.text === "function")
+                ? await blob.text()
+                : String(blob || "");
+            openAttachmentOverlay({ src: text, kind: "text", title: meta.fileName || "Text Preview" });
+            return { mode: "text" };
+        }
+        if (kind === "office") {
+            const url = URL.createObjectURL(blob);
+            window.open(url, "_blank", "noopener,noreferrer");
+            setTimeout(() => { try { URL.revokeObjectURL(url); } catch (_err) { } }, 30000);
+            return { mode: "office" };
+        }
+
+        return { mode: "unknown" };
+    }
+
+    async function openAttachment(attachmentId) {
+        const meta = await getAttachmentMeta(attachmentId);
+        const blob = await getAttachmentBlob(attachmentId);
+        if (!blob) {
+            showToast("Attachment data unavailable", "warning");
+            return { meta, opened: false };
+        }
+        const opened = await previewAttachment(meta, blob);
+        if (opened.mode === "unknown") {
+            await downloadAttachment(attachmentId, meta.fileName);
+            showToast("Unknown format: downloaded attachment", "info");
+        }
+        return { meta, opened: true, mode: opened.mode };
+    }
+
+    async function downloadAttachment(attachmentId, filenameHint) {
+        const meta = await getAttachmentMeta(attachmentId);
+        const blob = await getAttachmentBlob(attachmentId);
+        if (!blob) return false;
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = filenameHint || meta.fileName || `attachment_${attachmentId}`;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        setTimeout(() => { try { URL.revokeObjectURL(url); } catch (_err) { } }, 15000);
+        return true;
+    }
+
+    async function deleteAttachment(attachmentId) {
+        const id = String(attachmentId || "");
+        if (!id) return false;
+
+        const at = getAttachmentApi();
+        if (at && typeof at.remove === "function") {
+            try { await at.remove(id); } catch (_err) { }
+        }
+
+        localStorage.removeItem(buildLocalAttachmentKey(id));
+        localStorage.removeItem(buildLocalAttachmentMetaKey(id));
+        return true;
+    }
+
+    window.AttachmentService = {
+        uploadAttachment,
+        saveAttachment,
+        openAttachment,
+        previewAttachment,
+        downloadAttachment,
+        deleteAttachment,
+        getAttachmentMeta,
+        getAttachmentBlob,
+        classifyMime,
+        formatAttachmentSize
+    };
+})();
+
 function ensureAuditModal() {
     let existing = document.getElementById("txnDetailsModal");
     if (existing) return existing;
@@ -4117,63 +4672,24 @@ function closeTransactionAuditDetails() {
 }
 
 async function viewAttachmentById(attachmentId) {
-    let at = getAttachmentApi();
-    if (!at || !attachmentId) return;
-
+    if (!attachmentId || !window.AttachmentService) return;
     try {
-        let record = null;
-        if (at.getRecord) {
-            try { record = await at.getRecord(attachmentId); } catch (_err) { record = null; }
-        }
-
-        let mime = record && record.mime ? String(record.mime) : "";
-        let isImage = mime ? mime.startsWith("image/") : true;
-
-        if (isImage && at.getImageUrl) {
-            let src = await at.getImageUrl(attachmentId);
-            if (src) {
-                openAttachmentOverlay({ src, kind: 'image', title: 'Image preview' });
-                return;
-            }
-        }
-        if (at.getBlob) {
-            let blob = await at.getBlob(attachmentId);
-            if (!blob) return;
-            let url = URL.createObjectURL(blob);
-            let opened = openAttachmentOverlay({
-                src: url,
-                kind: 'document',
-                title: record && record.filename ? record.filename : 'Attachment preview'
-            });
-            if (opened) opened.dataset.objectUrl = url;
-        }
+        await window.AttachmentService.openAttachment(attachmentId);
     } catch (err) {
         console.warn("viewAttachmentById failed", err);
     }
 }
 
 async function downloadAttachmentById(attachmentId, filenameHint) {
-    let at = getAttachmentApi();
-    if (!at || !attachmentId || !at.getBlob) return;
-
+    if (!attachmentId || !window.AttachmentService) return;
     try {
-        let blob = await at.getBlob(attachmentId);
-        if (!blob) return;
-        let url = URL.createObjectURL(blob);
-        let a = document.createElement("a");
-        a.href = url;
-        a.download = filenameHint || `attachment_${attachmentId}.bin`;
-        document.body.appendChild(a);
-        a.click();
-        a.remove();
-        setTimeout(() => URL.revokeObjectURL(url), 15000);
+        await window.AttachmentService.downloadAttachment(attachmentId, filenameHint);
     } catch (err) {
         console.warn("downloadAttachmentById failed", err);
     }
 }
 
 async function deleteTransactionAttachment(scope, transactionId, attachmentId) {
-    let at = getAttachmentApi();
     if (!scope || !transactionId || !attachmentId) return;
 
     try {
@@ -4195,9 +4711,7 @@ async function deleteTransactionAttachment(scope, transactionId, attachmentId) {
             if (typeof renderSavingsHistory === "function") renderSavingsHistory(savings);
         }
 
-        if (at.remove) {
-            try { await at.remove(attachmentId); } catch (e) { }
-        }
+        if (window.AttachmentService) await window.AttachmentService.deleteAttachment(attachmentId);
 
         closeTransactionAuditDetails();
         showToast("Attachment deleted");
@@ -4306,23 +4820,25 @@ async function openTransactionAuditDetails(scope, transaction) {
     if (!transaction.attachmentId) {
         attachmentSection.style.display = "none";
     } else {
-        let at = getAttachmentApi();
-        let name = `attachment_${transaction.attachmentId}`;
-        let mime = "unknown";
-        let uploadDate = transaction.createdAt || transaction.date;
-
-        if (at && at.getRecord) {
+        let meta = null;
+        if (window.AttachmentService && window.AttachmentService.getAttachmentMeta) {
             try {
-                let rec = await at.getRecord(transaction.attachmentId);
-                if (rec) {
-                    name = rec.filename || name;
-                    mime = rec.mime || mime;
-                    uploadDate = rec.createdAt ? new Date(rec.createdAt).toISOString() : uploadDate;
-                }
+                meta = await window.AttachmentService.getAttachmentMeta(transaction.attachmentId);
             } catch (err) {
                 console.warn("Attachment metadata read failed", err);
             }
         }
+
+        const name = meta && meta.fileName
+            ? meta.fileName
+            : `attachment_${transaction.attachmentId}`;
+        const mime = meta && meta.mimeType ? meta.mimeType : "unknown";
+        const uploadDate = meta && meta.uploadedDate
+            ? meta.uploadedDate
+            : (transaction.createdAt || transaction.date);
+        const fileSize = meta && Number.isFinite(Number(meta.size))
+            ? formatAttachmentSize(meta.size)
+            : "-";
 
         attachmentSection.style.display = "block";
         attachmentSection.innerHTML = `
@@ -4330,9 +4846,10 @@ async function openTransactionAuditDetails(scope, transaction) {
           <div class="audit-attachment-card">
             <div><strong>${escapeHtml(name)}</strong></div>
             <div><small>Type: ${escapeHtml(mime)}</small></div>
+            <div><small>Size: ${escapeHtml(fileSize)}</small></div>
             <div><small>Uploaded: ${escapeHtml(new Date(uploadDate || Date.now()).toLocaleString("en-IN"))}</small></div>
             <div class="audit-attachment-actions">
-              <button class="secondary" onclick="viewAttachmentById('${escapeHtml(transaction.attachmentId)}')">View</button>
+              <button class="secondary" onclick="viewAttachmentById('${escapeHtml(transaction.attachmentId)}')">Open</button>
               <button class="secondary" onclick="downloadAttachmentById('${escapeHtml(transaction.attachmentId)}', '${escapeHtml(name)}')">Download</button>
               <button class="secondary" onclick="deleteTransactionAttachment('${escapeHtml(scope)}', '${escapeHtml(transaction.id)}', '${escapeHtml(transaction.attachmentId)}')">Delete</button>
             </div>
@@ -4574,10 +5091,9 @@ async function storeAttachmentFromInput(inputId) {
     const fileInput = document.getElementById(inputId);
     const file = fileInput && fileInput.files && fileInput.files[0] ? fileInput.files[0] : null;
     if (!file) return null;
-    const store = window.reMoAttachments && window.reMoAttachments.storeImage ? window.reMoAttachments.storeImage : (window.reMoAttachmentsIndexed && window.reMoAttachmentsIndexed.storeImage);
-    if (!store) return null;
+    if (!window.AttachmentService || typeof window.AttachmentService.saveAttachment !== "function") return null;
     try {
-        const res = await store(null, file);
+        const res = await window.AttachmentService.saveAttachment(file);
         return res && res.id ? res.id : null;
     } catch (err) {
         console.warn('Attachment store failed', err);
@@ -4596,7 +5112,10 @@ async function storeAttachmentWithStatus(inputId) {
     }
 
     try {
-        const attachmentId = await storeAttachmentFromInput(inputId);
+        const storedMeta = window.AttachmentService
+            ? await window.AttachmentService.uploadAttachment(file)
+            : null;
+        const attachmentId = storedMeta && storedMeta.id ? storedMeta.id : null;
         if (attachmentId) {
             if (inputId === 'expenseAttachment') {
                 window.__expenseAttachmentState = {
@@ -4630,8 +5149,11 @@ async function storeAttachmentWithStatus(inputId) {
                 attachmentId,
                 status: "linked",
                 error: null,
-                mime: file.type || null,
-                filename: file.name || null
+                mime: storedMeta.mimeType || file.type || null,
+                filename: storedMeta.fileName || file.name || null,
+                size: Number(storedMeta.size || file.size || 0),
+                uploadedDate: storedMeta.uploadedDate || new Date().toISOString(),
+                extension: storedMeta.extension || getAttachmentExtension(file.name || "")
             };
         }
 
@@ -5432,7 +5954,12 @@ const SCHEMA_DEFAULTS = {
     quotations: {
         quotationData: null,
         quotationItems: [],
-        quotationCharges: []
+        quotationCharges: [],
+        quotationRegistry: [],
+        quotationMeta: null,
+        activeQuotationId: null,
+        documentRelations: [],
+        noSeriesConfig: null
     }
 };
 
@@ -5578,7 +6105,12 @@ function migrateQuotations(quotations) {
     const next = shallowCloneObject(quotations, SCHEMA_DEFAULTS.quotations);
     if (!Array.isArray(next.quotationItems)) next.quotationItems = [];
     if (!Array.isArray(next.quotationCharges)) next.quotationCharges = [];
+    if (!Array.isArray(next.quotationRegistry)) next.quotationRegistry = [];
+    if (!Array.isArray(next.documentRelations)) next.documentRelations = [];
     if (!Object.prototype.hasOwnProperty.call(next, "quotationData")) next.quotationData = null;
+    if (!Object.prototype.hasOwnProperty.call(next, "quotationMeta")) next.quotationMeta = null;
+    if (!Object.prototype.hasOwnProperty.call(next, "activeQuotationId")) next.activeQuotationId = null;
+    if (!Object.prototype.hasOwnProperty.call(next, "noSeriesConfig")) next.noSeriesConfig = null;
     return next;
 }
 
@@ -5640,7 +6172,12 @@ function applySchemaMigrationsToLocalStorage() {
             quotations: {
                 quotationData: JSON.parse(localStorage.getItem("quotationData") || "null"),
                 quotationItems: JSON.parse(localStorage.getItem("quotationItems") || "[]"),
-                quotationCharges: JSON.parse(localStorage.getItem("quotationCharges") || "[]")
+                quotationCharges: JSON.parse(localStorage.getItem("quotationCharges") || "[]"),
+                quotationRegistry: JSON.parse(localStorage.getItem("quotationRegistry") || "[]"),
+                quotationMeta: JSON.parse(localStorage.getItem("quotationMeta") || "null"),
+                activeQuotationId: JSON.parse(localStorage.getItem("activeQuotationId") || "null"),
+                documentRelations: JSON.parse(localStorage.getItem("documentRelations") || "[]"),
+                noSeriesConfig: JSON.parse(localStorage.getItem("noSeriesConfig") || "null")
             },
             meta: { version: localStorage.getItem("dataVersion") || SCHEMA_VERSION_MAIN }
         }, { direction: "toDevelopment" }).data;
@@ -5655,6 +6192,11 @@ function applySchemaMigrationsToLocalStorage() {
         localStorage.setItem("quotationData", JSON.stringify(migrated.quotations.quotationData));
         localStorage.setItem("quotationItems", JSON.stringify(migrated.quotations.quotationItems));
         localStorage.setItem("quotationCharges", JSON.stringify(migrated.quotations.quotationCharges));
+        localStorage.setItem("quotationRegistry", JSON.stringify(migrated.quotations.quotationRegistry));
+        localStorage.setItem("quotationMeta", JSON.stringify(migrated.quotations.quotationMeta));
+        localStorage.setItem("activeQuotationId", JSON.stringify(migrated.quotations.activeQuotationId));
+        localStorage.setItem("documentRelations", JSON.stringify(migrated.quotations.documentRelations));
+        localStorage.setItem("noSeriesConfig", JSON.stringify(migrated.quotations.noSeriesConfig));
         localStorage.setItem("dataVersion", migrated.meta.version);
     } catch (err) {
         console.warn("Schema migration startup step failed", err);
@@ -5820,7 +6362,12 @@ function normalizeImportPayload(parsed, options = {}) {
         normalized.quotations = {
             quotationData: null,
             quotationItems: [],
-            quotationCharges: []
+            quotationCharges: [],
+            quotationRegistry: [],
+            quotationMeta: null,
+            activeQuotationId: null,
+            documentRelations: [],
+            noSeriesConfig: null
         };
         report.fieldsAdded.push("quotations");
         report.defaultsApplied.push("quotations=default");
@@ -5838,6 +6385,41 @@ function normalizeImportPayload(parsed, options = {}) {
         normalized.quotations.quotationCharges = [];
         report.fieldsAdded.push("quotations.quotationCharges");
         report.defaultsApplied.push("quotations.quotationCharges=[]");
+        report.missingFieldsRecovered += 1;
+    }
+
+    if (!Array.isArray(normalized.quotations.quotationRegistry)) {
+        normalized.quotations.quotationRegistry = [];
+        report.fieldsAdded.push("quotations.quotationRegistry");
+        report.defaultsApplied.push("quotations.quotationRegistry=[]");
+        report.missingFieldsRecovered += 1;
+    }
+
+    if (!Array.isArray(normalized.quotations.documentRelations)) {
+        normalized.quotations.documentRelations = [];
+        report.fieldsAdded.push("quotations.documentRelations");
+        report.defaultsApplied.push("quotations.documentRelations=[]");
+        report.missingFieldsRecovered += 1;
+    }
+
+    if (!Object.prototype.hasOwnProperty.call(normalized.quotations, "quotationMeta")) {
+        normalized.quotations.quotationMeta = null;
+        report.fieldsAdded.push("quotations.quotationMeta");
+        report.defaultsApplied.push("quotations.quotationMeta=null");
+        report.missingFieldsRecovered += 1;
+    }
+
+    if (!Object.prototype.hasOwnProperty.call(normalized.quotations, "activeQuotationId")) {
+        normalized.quotations.activeQuotationId = null;
+        report.fieldsAdded.push("quotations.activeQuotationId");
+        report.defaultsApplied.push("quotations.activeQuotationId=null");
+        report.missingFieldsRecovered += 1;
+    }
+
+    if (!Object.prototype.hasOwnProperty.call(normalized.quotations, "noSeriesConfig")) {
+        normalized.quotations.noSeriesConfig = null;
+        report.fieldsAdded.push("quotations.noSeriesConfig");
+        report.defaultsApplied.push("quotations.noSeriesConfig=null");
         report.missingFieldsRecovered += 1;
     }
 
@@ -5978,7 +6560,16 @@ function validateImportPayload(parsed) {
     }
 
     if (!Object.prototype.hasOwnProperty.call(normalized, "quotations") || normalized.quotations === null || typeof normalized.quotations === "undefined") {
-        normalized.quotations = { quotationData: null, quotationItems: [], quotationCharges: [] };
+        normalized.quotations = {
+            quotationData: null,
+            quotationItems: [],
+            quotationCharges: [],
+            quotationRegistry: [],
+            quotationMeta: null,
+            activeQuotationId: null,
+            documentRelations: [],
+            noSeriesConfig: null
+        };
         warnings.push("Missing Fields: quotations");
     } else if (typeof normalized.quotations !== "object" || Array.isArray(normalized.quotations)) {
         errors.push("Invalid Quotations Structure: quotations must be an object");
@@ -6248,6 +6839,11 @@ function importData() {
             localStorage.setItem("quotationData", JSON.stringify(data.quotations.quotationData || null));
             localStorage.setItem("quotationItems", JSON.stringify(Array.isArray(data.quotations.quotationItems) ? data.quotations.quotationItems : []));
             localStorage.setItem("quotationCharges", JSON.stringify(Array.isArray(data.quotations.quotationCharges) ? data.quotations.quotationCharges : []));
+            localStorage.setItem("quotationRegistry", JSON.stringify(Array.isArray(data.quotations.quotationRegistry) ? data.quotations.quotationRegistry : []));
+            localStorage.setItem("quotationMeta", JSON.stringify(data.quotations.quotationMeta || null));
+            localStorage.setItem("activeQuotationId", JSON.stringify(data.quotations.activeQuotationId || null));
+            localStorage.setItem("documentRelations", JSON.stringify(Array.isArray(data.quotations.documentRelations) ? data.quotations.documentRelations : []));
+            localStorage.setItem("noSeriesConfig", JSON.stringify(data.quotations.noSeriesConfig || null));
         }
 
         if (data.settings) {
@@ -6349,7 +6945,136 @@ function runMigration() {
     showToast("Migration done");
 }
 function openQuotation() {
-    window.location.href = "pages/quotation.html";
+    window.location.href = "pages/quotations.html";
+}
+
+if (typeof window !== "undefined") {
+    window.openQuotation = openQuotation;
+}
+
+function updateNoSeriesPreview() {
+    if (!window.DocWorkflow) return;
+
+    const quotationPrefixInput = document.getElementById("quotationPrefixInput");
+    const quotationStartInput = document.getElementById("quotationStartInput");
+    const orderPrefixInput = document.getElementById("orderPrefixInput");
+    const orderStartInput = document.getElementById("orderStartInput");
+    const preview = document.getElementById("noSeriesPreviewText");
+    if (!preview) return;
+
+    const current = window.DocWorkflow.getNoSeriesConfig();
+    const draft = {
+        quotation: {
+            prefix: quotationPrefixInput ? quotationPrefixInput.value : "QT",
+            startNumber: quotationStartInput ? Number(quotationStartInput.value || 0) : 1000,
+            lastNumber: current.quotation.lastNumber
+        },
+        order: {
+            prefix: orderPrefixInput ? orderPrefixInput.value : "ORD",
+            startNumber: orderStartInput ? Number(orderStartInput.value || 0) : 1000,
+            lastNumber: current.order.lastNumber
+        }
+    };
+
+    const actual = window.DocWorkflow.getSeriesPreview(draft);
+    preview.textContent = `Preview: ${actual.quotation} | ${actual.order}`;
+}
+
+function openNoSeriesModal() {
+    console.debug("[NoSeries] openNoSeriesModal called");
+    if (!window.DocWorkflow) {
+        showToast("No Series settings unavailable", "warning");
+        console.warn("[NoSeries] DocWorkflow unavailable");
+        return;
+    }
+
+    const config = window.DocWorkflow.getNoSeriesConfig();
+    const modal = document.getElementById("noSeriesModal");
+    const quotationPrefixInput = document.getElementById("quotationPrefixInput");
+    const quotationStartInput = document.getElementById("quotationStartInput");
+    const orderPrefixInput = document.getElementById("orderPrefixInput");
+    const orderStartInput = document.getElementById("orderStartInput");
+    const preview = document.getElementById("noSeriesPreviewText");
+
+    if (!modal || !quotationPrefixInput || !quotationStartInput || !orderPrefixInput || !orderStartInput || !preview) {
+        console.warn("[NoSeries] Missing modal elements", {
+            modal: !!modal,
+            quotationPrefixInput: !!quotationPrefixInput,
+            quotationStartInput: !!quotationStartInput,
+            orderPrefixInput: !!orderPrefixInput,
+            orderStartInput: !!orderStartInput,
+            preview: !!preview
+        });
+        return;
+    }
+
+    quotationPrefixInput.value = config.quotation.prefix;
+    quotationStartInput.value = String(config.quotation.startNumber);
+    orderPrefixInput.value = config.order.prefix;
+    orderStartInput.value = String(config.order.startNumber);
+
+    const previewValue = window.DocWorkflow.getSeriesPreview(config);
+    preview.textContent = `Preview: ${previewValue.quotation} | ${previewValue.order}`;
+
+    [quotationPrefixInput, quotationStartInput, orderPrefixInput, orderStartInput].forEach((el) => {
+        el.oninput = () => {
+            updateNoSeriesPreview();
+        };
+    });
+
+    modal.classList.remove("hidden");
+    modal.style.display = "flex";
+    console.debug("[NoSeries] modal opened", config);
+}
+
+function closeNoSeriesModal() {
+    const modal = document.getElementById("noSeriesModal");
+    if (modal) {
+        modal.classList.add("hidden");
+        modal.style.display = "none";
+    }
+    console.debug("[NoSeries] modal closed");
+}
+
+function saveNoSeriesModal() {
+    if (!window.DocWorkflow) return;
+    const quotationPrefixInput = document.getElementById("quotationPrefixInput");
+    const quotationStartInput = document.getElementById("quotationStartInput");
+    const orderPrefixInput = document.getElementById("orderPrefixInput");
+    const orderStartInput = document.getElementById("orderStartInput");
+
+    const current = window.DocWorkflow.getNoSeriesConfig();
+    const next = {
+        quotation: {
+            prefix: quotationPrefixInput ? quotationPrefixInput.value : current.quotation.prefix,
+            startNumber: quotationStartInput ? Number(quotationStartInput.value || current.quotation.startNumber) : current.quotation.startNumber,
+            lastNumber: current.quotation.lastNumber
+        },
+        order: {
+            prefix: orderPrefixInput ? orderPrefixInput.value : current.order.prefix,
+            startNumber: orderStartInput ? Number(orderStartInput.value || current.order.startNumber) : current.order.startNumber,
+            lastNumber: current.order.lastNumber
+        }
+    };
+
+    if (next.quotation.lastNumber < next.quotation.startNumber) {
+        next.quotation.lastNumber = next.quotation.startNumber;
+    }
+    if (next.order.lastNumber < next.order.startNumber) {
+        next.order.lastNumber = next.order.startNumber;
+    }
+
+    const saved = window.DocWorkflow.saveNoSeriesConfig(next);
+    console.debug("[NoSeries] configuration saved", saved);
+    closeNoSeriesModal();
+    showToast("No Series saved", "success");
+}
+
+if (typeof window !== "undefined") {
+    window.openNoSeriesModal = openNoSeriesModal;
+    window.closeNoSeriesModal = closeNoSeriesModal;
+    window.saveNoSeriesModal = saveNoSeriesModal;
+    window.updateNoSeriesPreview = updateNoSeriesPreview;
 }
 
 // =========================
@@ -9065,7 +9790,16 @@ function reactivateBudgetPeriodLifecycle(periodId, referenceDate = new Date()) {
 
     let rebound = rebindPeriodReferencesAcrossData(oldKey, newKey, startKey);
 
-    refreshFinancialViewsAfterPeriodUpdate();
+    // For historical/simulated reactivation calls (tests/backfills), avoid
+    // immediate UI refresh because downstream reads normalize periods using
+    // real current date, which can flip the just-reactivated period back.
+    let runtimeToday = new Date();
+    runtimeToday.setHours(0, 0, 0, 0);
+    let shouldRefreshLiveViews = now.getTime() === runtimeToday.getTime();
+
+    if (shouldRefreshLiveViews) {
+        refreshFinancialViewsAfterPeriodUpdate();
+    }
 
     return {
         ok: true,
@@ -9899,7 +10633,12 @@ function getFullAppData() {
         quotations: {
             quotationData: JSON.parse(localStorage.getItem("quotationData") || "null"),
             quotationItems: JSON.parse(localStorage.getItem("quotationItems") || "[]"),
-            quotationCharges: JSON.parse(localStorage.getItem("quotationCharges") || "[]")
+            quotationCharges: JSON.parse(localStorage.getItem("quotationCharges") || "[]"),
+            quotationRegistry: JSON.parse(localStorage.getItem("quotationRegistry") || "[]"),
+            quotationMeta: JSON.parse(localStorage.getItem("quotationMeta") || "null"),
+            activeQuotationId: JSON.parse(localStorage.getItem("activeQuotationId") || "null"),
+            documentRelations: JSON.parse(localStorage.getItem("documentRelations") || "[]"),
+            noSeriesConfig: JSON.parse(localStorage.getItem("noSeriesConfig") || "null")
         },
 
         settings: {

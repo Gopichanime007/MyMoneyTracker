@@ -132,17 +132,29 @@
             : 'assets/scripts/remo/attachments-worker.js';
     }
 
+    function getExtension(filename){
+        const name = String(filename || '');
+        const idx = name.lastIndexOf('.');
+        if(idx === -1) return '';
+        return name.slice(idx + 1).toLowerCase();
+    }
+
     async function storeImage(transactionId, file){
         const id = transactionId || (crypto && crypto.randomUUID ? crypto.randomUUID() : ('atta-'+Date.now()));
+        const filename = file && file.name ? file.name : 'attachment.bin';
         const mime = (file && file.type) ? String(file.type) : 'application/octet-stream';
         const isImage = mime.startsWith('image/');
+        const uploadedDate = new Date().toISOString();
 
         if(!isImage){
             const record = {
                 id,
                 createdAt: Date.now(),
-                filename: file.name || 'attachment.bin',
+                uploadedDate,
+                filename,
+                extension: getExtension(filename),
                 mime,
+                size: Number(file && file.size || 0),
                 blob: file,
                 thumb: null
             };
@@ -199,8 +211,11 @@
         const record = {
             id,
             createdAt: Date.now(),
-            filename: file.name || 'image.jpg',
+            uploadedDate,
+            filename,
+            extension: getExtension(filename),
             mime: 'image/jpeg',
+            size: Number(compressed && compressed.size || file && file.size || 0),
             blob: compressed,
             thumb: thumb
         };

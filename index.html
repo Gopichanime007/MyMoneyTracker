@@ -95,7 +95,7 @@
           <p id="progressText"></p>
         </div>
         <button class="primary" onclick="openQuotation()">
-          🧾 Create Quotation
+          🧾 Open Quotations
         </button>
         <button class="secondary" onclick="window.location.href='pages/orders.html'">
           📦 View Orders
@@ -189,7 +189,7 @@
         <!-- Attachment -->
         <label class="field-label">Attach Receipt (optional)</label>
         <div class="inline-row"> 
-          <input class="flex-input" id="expenseAttachment" type="file" accept="image/*,.pdf,application/pdf" capture="environment" />
+          <input class="flex-input" id="expenseAttachment" type="file" accept="*/*" capture="environment" />
           <button type="button" id="expenseAttachmentRemove" class="link-btn hidden">Remove</button>
         </div>
         <div id="expenseAttachmentPreviewWrapper" class="attachment-preview-wrapper hidden">
@@ -383,6 +383,7 @@
         <div class="btn-group">
           <button class="primary" onclick="openBackupOptions()">📤 Backup</button>
           <button class="secondary" onclick="openImportModal()">📥 Import Data</button>
+          <button class="secondary" onclick="openNoSeriesModal()">🔢 No Series</button>
 
           <!-- <button class="secondary" onclick="runMigration()"> 🔄 Fix Old Data </button> -->
           <button class="secondary" onclick="openConfirm()">🗑 Reset App</button>
@@ -520,8 +521,34 @@
     </div>
   </div>
 
+  <div id="noSeriesModal" class="modal hidden" onclick="closeNoSeriesModal()">
+    <div class="modal-content" onclick="event.stopPropagation()">
+      <h3>No Series Configuration</h3>
+
+      <label for="quotationPrefixInput">Quotation Prefix</label>
+      <input type="text" id="quotationPrefixInput" placeholder="QT">
+
+      <label for="quotationStartInput">Quotation Starting Number</label>
+      <input type="number" id="quotationStartInput" min="0" step="1" placeholder="1000">
+
+      <label for="orderPrefixInput">Order Prefix</label>
+      <input type="text" id="orderPrefixInput" placeholder="ORD">
+
+      <label for="orderStartInput">Order Starting Number</label>
+      <input type="number" id="orderStartInput" min="0" step="1" placeholder="1000">
+
+      <p id="noSeriesPreviewText" class="muted-note">Preview: QT-1001 | ORD-1001</p>
+
+      <div class="modal-actions">
+        <button class="secondary" type="button" onclick="closeNoSeriesModal()">Cancel</button>
+        <button class="primary" type="button" onclick="saveNoSeriesModal()">Save</button>
+      </div>
+    </div>
+  </div>
+
   <!-- SCRIPT -->
   <script src="assets/scripts/storage.js"></script>
+  <script src="assets/scripts/documentWorkflow.js"></script>
   <script src="assets/scripts/script.js"></script>
   <script>
     document.addEventListener("DOMContentLoaded", () => {

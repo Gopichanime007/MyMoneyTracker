@@ -3,7 +3,7 @@
 
 <head>
   <meta charset="UTF-8">
-  <title>Quotation</title>
+  <title>Purchase Plan</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
   <link rel="stylesheet" href="../assets/styles/style.css">
@@ -18,8 +18,8 @@
       <div class="header-row">
         <button onclick="goBack()" class="back-btn" type="button" aria-label="Go back">←</button>
         <div>
-          <h2>Quotation</h2>
-          <p class="header-subtitle">Prepare, validate, and convert customer quotations</p>
+          <h2>Purchase Plan</h2>
+          <p class="header-subtitle">Plan purpose, choose funding, then create execution order</p>
         </div>
       </div>
     </header>
@@ -27,7 +27,12 @@
     <div class="card">
 
       <div class="section-heading">
-        <h3>Quotation Overview</h3>
+        <h3>Purchase Plan Overview</h3>
+      </div>
+
+      <div class="meta-block">
+        <label for="quotationPurpose">Purpose / Title</label>
+        <input type="text" id="quotationPurpose" placeholder="Ex: New Laptop Purchase" />
       </div>
 
       <div class="lifecycle-strip">
@@ -36,8 +41,8 @@
           <strong id="quotationStatusLabel" class="status-pill status-draft">Draft</strong>
         </div>
         <div class="meta-block">
-          <small>Quotation ID</small>
-          <strong id="quotationIdLabel">-</strong>
+          <small>Quotation No.</small>
+          <strong id="quotationNoLabel">-</strong>
         </div>
         <div class="meta-block">
           <label for="quotationValidityDate">Valid Until</label>
@@ -47,20 +52,33 @@
 
       <div class="status-timeline" id="quotationStatusTimeline" aria-label="Quotation status timeline">
         <span class="status-step" data-status-step="draft">Draft</span>
-        <span class="status-step" data-status-step="sent">Sent</span>
         <span class="status-step" data-status-step="accepted">Accepted</span>
         <span class="status-step" data-status-step="converted">Converted</span>
       </div>
 
       <div class="status-actions" id="quotationStatusActions">
-        <button class="secondary" type="button" data-quote-action="sent" onclick="setQuotationStatus('sent')">Mark Sent</button>
-        <button class="secondary" type="button" data-quote-action="accepted" onclick="setQuotationStatus('accepted')">Mark Accepted</button>
-        <button class="secondary" type="button" data-quote-action="rejected" onclick="setQuotationStatus('rejected')">Mark Rejected</button>
-        <button class="secondary" type="button" data-quote-action="draft" onclick="setQuotationStatus('draft')">Reopen as Draft</button>
+        <button class="secondary" type="button" data-quote-action="accepted" onclick="setQuotationStatus('accepted')">Accept Plan</button>
+        <button class="secondary" type="button" data-quote-action="draft" onclick="setQuotationStatus('draft')">Reopen Draft</button>
       </div>
 
       <div class="section-heading">
-        <h4>Line Items</h4>
+        <h4>Funding Source</h4>
+      </div>
+
+      <select id="qSourceType" onchange="loadQuotationFundingOptions()">
+        <option value="">Select Source Type</option>
+        <option value="savings">Savings</option>
+        <option value="budget">Budget</option>
+      </select>
+
+      <select id="qSourceValue" onchange="renderQuotationFundingPreview()">
+        <option value="">Select Funding Account</option>
+      </select>
+
+      <div id="qFundingPreview" class="audit-trail"></div>
+
+      <div class="section-heading">
+        <h4>Expense Plan Items</h4>
         <div class="row compact-actions">
           <button id="addQuotationItemBtn" class="primary" type="button" onclick="openItemModal()">Add Item</button>
           <button id="addQuotationChargeBtn" class="secondary" type="button" onclick="openChargeModal()">Add Charge</button>
@@ -102,8 +120,9 @@
       <div id="quotationAuditTrail" class="audit-trail"></div>
 
       <div class="footer-actions">
-        <button id="convertQuotationBtn" class="primary" type="button" onclick="convertToOrder()">Convert to Order</button>
-        <button id="clearQuotationBtn" class="secondary" type="button" onclick="clearQuotation()">Clear Draft</button>
+        <button id="saveDraftBtn" class="secondary" type="button" onclick="savePurchasePlanDraft()">Save Draft</button>
+        <button id="convertQuotationBtn" class="primary" type="button" onclick="convertToOrder()">Create Order</button>
+        <button id="clearQuotationBtn" class="secondary" type="button" onclick="clearQuotation()">Delete Draft</button>
       </div>
 
     </div>
@@ -114,7 +133,7 @@
   <div id="itemModal" class="modal">
     <div class="modal-content">
 
-      <h3>Add Item</h3>
+      <h3>Add Expense Plan Item</h3>
 
       <!-- PRODUCT -->
       <div class="form-group">
@@ -190,6 +209,8 @@
         <option value="discount">Discount</option>
         <option value="custom">Custom</option>
       </select>
+
+      <input type="text" id="cCustomLabel" placeholder="Custom charge name" style="display:none;">
 
       <input type="number" id="cValue" placeholder="Value">
 

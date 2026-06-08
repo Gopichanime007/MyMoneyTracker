@@ -21,8 +21,9 @@ function createOrderEntryId() {
 function formatOrderStatus(status) {
   const map = {
     draft: "Draft",
-    confirmed: "Confirmed",
-    processing: "Processing",
+    confirmed: "Open",
+    processing: "Open",
+    open: "Open",
     completed: "Completed",
     cancelled: "Cancelled"
   };
@@ -34,10 +35,17 @@ function getAllowedOrderTransitions(status) {
     draft: ["confirmed", "cancelled"],
     confirmed: ["processing", "cancelled"],
     processing: ["completed", "cancelled"],
+    open: ["completed", "cancelled"],
     completed: [],
     cancelled: []
   };
   return map[status] || [];
+}
+
+function getFilterStatus(order) {
+  const status = String(order && order.status ? order.status : "draft");
+  if (status === "confirmed" || status === "processing") return "open";
+  return status;
 }
 
 function getPaymentIcon(type) {
@@ -45,6 +53,21 @@ function getPaymentIcon(type) {
   if (type === "Cash") return "💵";
   if (type === "Card") return "💳";
   return "💰";
+}
+
+function refreshOrderLinkedViews() {
+  try {
+    if (typeof loadDashboard === "function") loadDashboard();
+    if (typeof loadHistory === "function") loadHistory();
+    if (typeof renderBudgetEntries === "function") renderBudgetEntries();
+  } catch (_err) {
+  }
+}
+
+function openOrder(orderId) {
+  if (!orderId) return;
+  localStorage.setItem("activeOrderId", JSON.stringify(orderId));
+  window.location.href = "order.html";
 }
 
 function renderOrders() {
@@ -57,7 +80,7 @@ function renderOrders() {
 
   let orders = allOrders;
   if (selectedStatus && selectedStatus !== "all") {
-    orders = allOrders.filter(o => String(o.status || "draft") === selectedStatus);
+    orders = allOrders.filter(o => getFilterStatus(o) === selectedStatus);
   }
 
   if (!orders.length) {
@@ -98,10 +121,19 @@ function renderOrders() {
       ? `<button type="button" class="danger tiny-btn" onclick="event.stopPropagation(); openDeleteModal('${order.id}')">Cancel</button>`
       : "";
 
+    const openBtn = `<button type="button" class="secondary tiny-btn" onclick="event.stopPropagation(); openOrder('${order.id}')">Open</button>`;
+    const editBtn = `<button type="button" class="secondary tiny-btn" onclick="event.stopPropagation(); openOrder('${order.id}')">Edit</button>`;
+    const fundingBtn = `<button type="button" class="secondary tiny-btn" onclick="event.stopPropagation(); viewFundingDetails('${order.id}')">View Funding</button>`;
+    const deleteBtn = `<button type="button" class="danger tiny-btn" onclick="event.stopPropagation(); deleteOrder('${order.id}')">Delete</button>`;
+
+    const purpose = String(order.purpose || "-").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    const quotationNo = String(order.quotationNo || order.quotationId || "-").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    const funding = `${String(order.sourceType || "-").replace(/</g, "&lt;").replace(/>/g, "&gt;")} → ${String(order.sourceName || "-").replace(/</g, "&lt;").replace(/>/g, "&gt;")}`;
+
     div.innerHTML = `
       <div class="order-header" onclick="toggleOrder('${order.id}')">
         <div>
-          <strong>${formatCurrency(Number(order.total || 0))}</strong>
+          <strong>${String(order.orderNo || order.id).replace(/</g, "&lt;").replace(/>/g, "&gt;")} • ${formatCurrency(Number(order.total || 0))}</strong>
           <small>${date}</small>
         </div>
 
@@ -113,19 +145,30 @@ function renderOrders() {
 
       <div class="order-items" id="items-${order.id}">
         <div class="order-meta">
-          ${String(order.sourceName || order.note || "-").replace(/</g, "&lt;").replace(/>/g, "&gt;")} •
-          ${getPaymentIcon(order.paymentType)} ${String(order.paymentType || "-").replace(/</g, "&lt;").replace(/>/g, "&gt;")}
+          Purpose: ${purpose}
         </div>
 
         <div class="order-meta">
-          Order ID: ${String(order.id || "-").replace(/</g, "&lt;").replace(/>/g, "&gt;")}
+          Linked Quotation: ${quotationNo}
+        </div>
+
+        <div class="order-meta">
+          Funding: ${funding}
+        </div>
+
+        <div class="order-meta">
+          ${getPaymentIcon(order.paymentType)} ${String(order.paymentType || "-").replace(/</g, "&lt;").replace(/>/g, "&gt;")}
         </div>
 
         ${itemsHTML}
 
         <div class="order-actions-row">
+          ${openBtn}
+          ${editBtn}
           ${transitionButtons}
           ${cancelBtn}
+          ${fundingBtn}
+          ${deleteBtn}
         </div>
       </div>
     `;
@@ -164,15 +207,70 @@ function transitionOrderStatus(orderId, nextStatus) {
 
   const now = new Date().toISOString();
   if (!Array.isArray(row.statusHistory)) row.statusHistory = [];
+  const normalized = nextStatus === "processing" ? "open" : nextStatus;
   row.statusHistory.push({ at: now, from: current, to: nextStatus, note: `Status moved to ${formatOrderStatus(nextStatus)}` });
 
-  row.status = nextStatus;
+  row.status = normalized;
   row.updatedAt = now;
 
   orders[idx] = row;
   saveOrders(orders);
   renderOrders();
   showOrdersNotice(`Order moved to ${formatOrderStatus(nextStatus)}.`, "success");
+}
+
+function viewFundingDetails(orderId) {
+  const order = getOrders().find(x => String(x.id) === String(orderId));
+  if (!order) {
+    showOrdersNotice("Order not found.", "warning");
+    return;
+  }
+
+  const summary = getOrderFundingSummary(order);
+  showOrdersNotice(summary, "info");
+}
+
+function getOrderFundingSummary(order) {
+  const sourceType = String(order.sourceType || "-");
+  const sourceName = String(order.sourceName || "-");
+  const total = formatCurrency(Number(order.total || 0));
+  const planned = formatCurrency(Number(order.plannedAmount || order.total || 0));
+  return `Funding ${sourceType} → ${sourceName} | Planned ${planned} | Order ${total}`;
+}
+
+function deleteOrder(orderId) {
+  let orders = getOrders();
+  const idx = orders.findIndex(o => String(o.id) === String(orderId));
+  if (idx === -1) {
+    showOrdersNotice("Order not found.", "error");
+    return;
+  }
+
+  const row = orders[idx];
+  if (row.financialPosted && String(row.status || "") !== "cancelled") {
+    showOrdersNotice("Delete blocked: cancel the order first to preserve financial audit entries.", "warning");
+    return;
+  }
+
+  const ok = confirm(
+    `Delete order ${row.id}?\n\nThis removes it from order history and cannot be undone.`
+  );
+  if (!ok) return;
+
+  orders.splice(idx, 1);
+  saveOrders(orders);
+
+  try {
+    const activeOrderId = JSON.parse(localStorage.getItem("activeOrderId") || "null");
+    if (String(activeOrderId) === String(orderId)) {
+      localStorage.removeItem("activeOrderId");
+    }
+  } catch (_err) {
+  }
+
+  renderOrders();
+  refreshOrderLinkedViews();
+  showOrdersNotice("Order deleted successfully.", "success");
 }
 
 let deleteTargetId = null;
@@ -263,7 +361,20 @@ function confirmDelete() {
 
   closeDeleteModal();
   renderOrders();
+  refreshOrderLinkedViews();
   showOrdersNotice("Order cancelled and audit logged.", "success");
 }
 
 document.addEventListener("DOMContentLoaded", renderOrders);
+
+if (typeof window !== "undefined") {
+  window.openOrder = openOrder;
+  window.renderOrders = renderOrders;
+  window.toggleOrder = toggleOrder;
+  window.transitionOrderStatus = transitionOrderStatus;
+  window.openDeleteModal = openDeleteModal;
+  window.closeDeleteModal = closeDeleteModal;
+  window.confirmDelete = confirmDelete;
+  window.deleteOrder = deleteOrder;
+  window.viewFundingDetails = viewFundingDetails;
+}

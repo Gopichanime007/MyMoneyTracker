@@ -441,6 +441,7 @@ h4 {
 .badge.status-draft { background: #3949ab; }
 .badge.status-confirmed { background: #0369a1; }
 .badge.status-processing { background: #b45309; }
+.badge.status-open { background: #0369a1; }
 .badge.status-completed { background: #15803d; }
 .badge.status-cancelled { background: #b91c1c; }
 

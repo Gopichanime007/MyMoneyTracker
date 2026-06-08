@@ -1284,6 +1284,17 @@ function setTextById(id, value) {
     el.textContent = value;
 }
 
+function normalizeSavingsAggregationType(type) {
+    const normalized = String(type || "").toLowerCase();
+    if (normalized === "income") return "deposit";
+    return normalized;
+}
+
+function isSavingsDepositBucket(entry) {
+    if (!entry || typeof entry !== "object") return false;
+    return normalizeSavingsAggregationType(entry.type) === "deposit";
+}
+
 function getPeriodEntriesForSavingsDashboard(allRows, activePeriod, periodKey) {
     if (!Array.isArray(allRows)) return [];
     return allRows;
@@ -1300,7 +1311,7 @@ function loadSavings() {
     if (dailyEl) dailyEl.innerText = "₹ " + Number(daily || 0).toFixed(2);
 
     let totalBalance = allRows.reduce((sum, t) => sum + Number(t && t.amount || 0), 0);
-    let totalDeposits = allRows.filter(t => t && t.type === "deposit").reduce((sum, t) => sum + Math.abs(Number(t.amount || 0)), 0);
+    let totalDeposits = allRows.filter(isSavingsDepositBucket).reduce((sum, t) => sum + Math.abs(Number(t.amount || 0)), 0);
     let totalTransfers = allRows.filter(t => t && (t.type === "transfer" || t.type === "budget_allocation")).reduce((sum, t) => sum + Math.abs(Number(t.amount || 0)), 0);
     let totalRefunds = allRows.filter(t => t && t.type === "refund").reduce((sum, t) => sum + Math.abs(Number(t.amount || 0)), 0);
     let netMovement = allRows.reduce((sum, t) => sum + Number(t && t.amount || 0), 0);
