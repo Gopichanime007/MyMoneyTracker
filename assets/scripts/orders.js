@@ -71,21 +71,77 @@ function openOrder(orderId) {
 }
 
 function openOrdersFilterModal() {
+  initializeOrdersFilterBuilder();
+  if (window.SearchService && typeof window.SearchService.getState === "function" && ordersFilterBuilderInstance) {
+    const state = window.SearchService.getState("orders");
+    ordersFilterBuilderInstance.setFromFilters(Array.isArray(state.filters) ? state.filters : []);
+  }
   const modal = document.getElementById("ordersFilterModal");
-  if (modal) modal.classList.remove("hidden");
+  if (modal) {
+    modal.classList.remove("hidden");
+    modal.style.display = "flex";
+  }
 }
 
 function closeOrdersFilterModal() {
   const modal = document.getElementById("ordersFilterModal");
-  if (modal) modal.classList.add("hidden");
+  if (modal) {
+    modal.classList.add("hidden");
+    modal.style.display = "none";
+  }
 }
 
-function applyOrdersFilterModal() {
+let ordersFilterBuilderInstance = null;
+
+function getOrdersFilterTemplates() {
+  return [
+    { key: "orderNo", label: "Order No", field: "orderNo", type: "text", hint: "ORD-1001" },
+    { key: "purpose", label: "Purpose", field: "purpose", type: "text", hint: "Office, Travel, Equipment" },
+    { key: "status", label: "Status", field: "status", type: "enum", hint: "draft, open, completed, cancelled" },
+    { key: "amount", label: "Amount", field: "total", type: "number", hint: "5000, 10000, 25000" },
+    { key: "payment", label: "Payment Type", field: "paymentType", type: "enum", hint: "UPI, Cash, Debit Card, Credit Card" },
+    { key: "source", label: "Source", field: "sourceName", type: "text", hint: "Funding source name" },
+    { key: "quotation", label: "Quotation", field: "quotationNo", type: "text", hint: "QUO-2001" },
+    { key: "attachment", label: "Attachment", field: "attachmentName", type: "presence", hint: "Has any attachment" }
+  ];
+}
+
+function initializeOrdersFilterBuilder() {
+  const root = document.getElementById("ordersFilterBuilderRoot");
+  if (!root || ordersFilterBuilderInstance || !window.FilterBuilder || typeof window.FilterBuilder.create !== "function") {
+    return;
+  }
+
+  ordersFilterBuilderInstance = window.FilterBuilder.create({
+    module: "orders",
+    dateField: "updatedAt",
+    templates: getOrdersFilterTemplates(),
+    onApply: function (filters) {
+      applyOrdersFilterModal(filters);
+    },
+    onClear: function () {
+      clearOrdersFilterModal(false);
+    },
+    onSave: function () {
+      saveOrdersCurrentView();
+      refreshOrdersSavedViews();
+    }
+  });
+
+  ordersFilterBuilderInstance.mount(root);
+}
+
+function buildOrdersFilterDescriptorsFromModal() {
+  initializeOrdersFilterBuilder();
+  if (!ordersFilterBuilderInstance) {
+    return [];
+  }
+  return ordersFilterBuilderInstance.getDescriptors();
+}
+
+function applyOrdersFilterModal(explicitFilters) {
   if (window.SearchService && typeof window.SearchService.setFilters === "function") {
-    const field = document.getElementById("ordersFilterField")?.value || "";
-    const op = document.getElementById("ordersFilterOperator")?.value || "contains";
-    const value = document.getElementById("ordersFilterValue")?.value || "";
-    const filters = field && value.trim() ? [{ field, op, value: value.trim() }] : [];
+    const filters = Array.isArray(explicitFilters) ? explicitFilters : buildOrdersFilterDescriptorsFromModal();
     window.SearchService.setFilters("orders", filters);
   }
 
@@ -93,20 +149,19 @@ function applyOrdersFilterModal() {
   renderOrders();
 }
 
-function clearOrdersFilterModal() {
-  const fieldEl = document.getElementById("ordersFilterField");
-  const opEl = document.getElementById("ordersFilterOperator");
-  const valueEl = document.getElementById("ordersFilterValue");
-
-  if (fieldEl) fieldEl.value = "orderNo";
-  if (opEl) opEl.value = "contains";
-  if (valueEl) valueEl.value = "";
+function clearOrdersFilterModal(closeAfterClear = true) {
+  initializeOrdersFilterBuilder();
+  if (ordersFilterBuilderInstance) {
+    ordersFilterBuilderInstance.clearAll();
+  }
 
   if (window.SearchService && typeof window.SearchService.clearFilters === "function") {
     window.SearchService.clearFilters("orders");
   }
 
-  closeOrdersFilterModal();
+  if (closeAfterClear) {
+    closeOrdersFilterModal();
+  }
   renderOrders();
 }
 
@@ -244,12 +299,18 @@ function deleteOrdersSavedView() {
 
 function openOrdersSortModal() {
   const modal = document.getElementById("ordersSortModal");
-  if (modal) modal.classList.remove("hidden");
+  if (modal) {
+    modal.classList.remove("hidden");
+    modal.style.display = "flex";
+  }
 }
 
 function closeOrdersSortModal() {
   const modal = document.getElementById("ordersSortModal");
-  if (modal) modal.classList.add("hidden");
+  if (modal) {
+    modal.classList.add("hidden");
+    modal.style.display = "none";
+  }
 }
 
 function applyOrdersSortModal() {

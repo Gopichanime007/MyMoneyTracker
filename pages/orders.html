@@ -76,29 +76,8 @@
 
   <div id="ordersFilterModal" class="modal hidden" onclick="closeOrdersFilterModal()">
     <div class="modal-content" onclick="event.stopPropagation()">
-      <h3>Order Filters</h3>
-
-      <label for="ordersFilterField">Field</label>
-      <select id="ordersFilterField">
-        <option value="orderNo">Order No</option>
-        <option value="purpose">Purpose</option>
-        <option value="status">Status</option>
-        <option value="sourceName">Funding Source</option>
-      </select>
-
-      <label for="ordersFilterOperator">Operator</label>
-      <select id="ordersFilterOperator">
-        <option value="contains">Contains</option>
-        <option value="eq">Equals</option>
-      </select>
-
-      <label for="ordersFilterValue">Value</label>
-      <input type="text" id="ordersFilterValue" placeholder="Optional" />
-
-      <div class="modal-actions">
-        <button class="secondary" type="button" onclick="clearOrdersFilterModal()">Clear</button>
-        <button class="primary" type="button" onclick="applyOrdersFilterModal()">Apply</button>
-      </div>
+      <h3>Order Filter Builder</h3>
+      <div id="ordersFilterBuilderRoot"></div>
     </div>
   </div>
 
@@ -130,6 +109,7 @@
   <!-- 📜 SCRIPT -->
   <script src="../assets/scripts/queryEngine.js"></script>
   <script src="../assets/scripts/searchService.js"></script>
+  <script src="../assets/scripts/filterBuilder.js"></script>
   <script src="../assets/scripts/script.js"></script>
   <script src="../assets/scripts/orders.js"></script>
 </body>
