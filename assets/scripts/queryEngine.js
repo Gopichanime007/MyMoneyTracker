@@ -2,6 +2,9 @@
     'use strict';
 
     var QUERY_DESCRIPTOR_VERSION = 'v1';
+    var QUERY_CACHE_LIMIT = 60;
+    var queryPipelineCache = new Map();
+    var predicateCache = new Map();
 
     function cloneJsonSafe(value) {
         if (value === undefined) {
@@ -22,6 +25,16 @@
             return [];
         }
         return value.slice();
+    }
+
+    function pruneCache(cacheMap, maxSize) {
+        if (cacheMap.size <= maxSize) {
+            return;
+        }
+        var keys = Array.from(cacheMap.keys());
+        while (cacheMap.size > maxSize && keys.length) {
+            cacheMap.delete(keys.shift());
+        }
     }
 
     function createSortDescriptorV1(input) {
@@ -185,9 +198,10 @@
         }
 
         return rows.filter(function (row) {
-            return fields.some(function (field) {
-                return normalizeString(row[field]).indexOf(text) !== -1;
-            });
+            var indexedSearch = fields.map(function (field) {
+                return normalizeString(row[field]);
+            }).join('\u0000');
+            return indexedSearch.indexOf(text) !== -1;
         });
     }
 
@@ -330,9 +344,47 @@
             return rows;
         }
 
-        return rows.filter(function (row) {
-            return filters.every(function (filter) {
+        function compileFilterEvaluator(filter) {
+            if (!filter || typeof filter !== 'object') {
+                return function alwaysTrue() { return true; };
+            }
+
+            if (typeof filter.predicate === 'function') {
+                return function predicateEvaluator(row) {
+                    return Boolean(filter.predicate(row));
+                };
+            }
+
+            var cacheKey;
+            try {
+                cacheKey = JSON.stringify(filter);
+            } catch (error) {
+                cacheKey = '';
+            }
+
+            if (cacheKey && predicateCache.has(cacheKey)) {
+                return predicateCache.get(cacheKey);
+            }
+
+            var compiled = function compiledEvaluator(row) {
                 return evaluateFilter(row, filter);
+            };
+
+            if (cacheKey) {
+                predicateCache.set(cacheKey, compiled);
+                pruneCache(predicateCache, QUERY_CACHE_LIMIT * 2);
+            }
+
+            return compiled;
+        }
+
+        var evaluators = filters.map(function (filter) {
+            return compileFilterEvaluator(filter);
+        });
+
+        return rows.filter(function (row) {
+            return evaluators.every(function (evaluate) {
+                return evaluate(row);
             });
         });
     }
@@ -425,6 +477,24 @@
         var opts = options || {};
         var normalizer = typeof opts.normalizeItem === 'function' ? opts.normalizeItem : function (item) { return item; };
 
+        var cacheKey = '';
+        if (opts.cache !== false) {
+            try {
+                cacheKey = JSON.stringify({
+                    query: query,
+                    totalCount: sourceItems.length,
+                    first: sourceItems[0] || null,
+                    last: sourceItems[sourceItems.length - 1] || null
+                });
+            } catch (error) {
+                cacheKey = '';
+            }
+        }
+
+        if (cacheKey && queryPipelineCache.has(cacheKey)) {
+            return cloneJsonSafe(queryPipelineCache.get(cacheKey));
+        }
+
         var normalized = sourceItems
             .map(function (item) {
                 return normalizer(item);
@@ -437,13 +507,20 @@
         var filtered = runFilter(searched, query);
         var sorted = runSort(filtered, query);
 
-        return {
+        var result = {
             descriptor: query,
             totalCount: sourceItems.length,
             normalizedCount: normalized.length,
             resultCount: sorted.length,
             results: sorted
         };
+
+        if (cacheKey) {
+            queryPipelineCache.set(cacheKey, cloneJsonSafe(result));
+            pruneCache(queryPipelineCache, QUERY_CACHE_LIMIT);
+        }
+
+        return result;
     }
 
     var api = {

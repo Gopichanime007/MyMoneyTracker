@@ -313,6 +313,7 @@ function renderOrders() {
   }
 
   container.innerHTML = "";
+  const fragment = document.createDocumentFragment();
 
   [...orders].reverse().forEach(order => {
     const div = document.createElement("div");
@@ -392,8 +393,10 @@ function renderOrders() {
       </div>
     `;
 
-    container.appendChild(div);
+    fragment.appendChild(div);
   });
+
+  container.appendChild(fragment);
 }
 
 function toggleOrder(id) {

@@ -79,3 +79,18 @@ test('SearchService restored persisted state after reload', () => {
     const state = window.SearchService.getState('quotations');
     expect(state.search.text).toBe('laptop');
 });
+
+test('SearchService scheduleSearch debounces rapid updates', () => {
+    jest.useFakeTimers();
+
+    window.SearchService.scheduleSearch('expenses', 'f', null, 120);
+    window.SearchService.scheduleSearch('expenses', 'fu', null, 120);
+    window.SearchService.scheduleSearch('expenses', 'fuel', null, 120);
+
+    expect(window.SearchService.getState('expenses').search.text).toBe('');
+
+    jest.advanceTimersByTime(140);
+
+    expect(window.SearchService.getState('expenses').search.text).toBe('fuel');
+    jest.useRealTimers();
+});

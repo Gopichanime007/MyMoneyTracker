@@ -82,7 +82,9 @@ function renderWorkspaceSection(containerId, list) {
     return;
   }
 
-  list.forEach((plan) => host.appendChild(renderPlanCard(plan)));
+  const fragment = document.createDocumentFragment();
+  list.forEach((plan) => fragment.appendChild(renderPlanCard(plan)));
+  host.appendChild(fragment);
 }
 
 function openQuotationsFilterModal() {

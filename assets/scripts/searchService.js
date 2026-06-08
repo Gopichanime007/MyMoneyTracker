@@ -111,6 +111,7 @@
 
         var adapters = {};
         var views = Array.isArray(persistedViews) ? persistedViews.slice() : [];
+        var debounceTimers = {};
 
         function registerAdapter(moduleName, config) {
             var key = normalizeModuleName(moduleName);
@@ -255,6 +256,23 @@
 
             persist();
             return next;
+        }
+
+        function scheduleSearch(moduleName, text, fields, delayMs, callback) {
+            var key = normalizeModuleName(moduleName);
+            var delay = Number.isFinite(Number(delayMs)) ? Math.max(0, Number(delayMs)) : 150;
+
+            if (debounceTimers[key]) {
+                clearTimeout(debounceTimers[key]);
+            }
+
+            debounceTimers[key] = setTimeout(function () {
+                debounceTimers[key] = null;
+                var state = setSearchText(key, text, fields);
+                if (typeof callback === 'function') {
+                    callback(state);
+                }
+            }, delay);
         }
 
         function clearSearch(moduleName) {
@@ -413,6 +431,7 @@
             getState: getState,
             setState: setState,
             setSearchText: setSearchText,
+            scheduleSearch: scheduleSearch,
             clearSearch: clearSearch,
             setFilters: setFilters,
             clearFilters: clearFilters,
