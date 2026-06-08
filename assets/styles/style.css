@@ -510,11 +510,34 @@ select:focus {
 }
 
 .filter-builder-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
   position: static;
   background: #ffffff;
   margin-top: 10px;
   padding-top: 8px;
   border-top: 1px solid #e5e7eb;
+}
+
+.filter-builder-actions button {
+  margin-top: 0;
+  width: 100%;
+  flex: none;
+}
+
+.filter-builder-actions .primary {
+  grid-column: 1 / -1;
+}
+
+@media (min-width: 640px) {
+  .filter-builder-actions {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .filter-builder-actions .primary {
+    grid-column: auto;
+  }
 }
 
 /* =========================
