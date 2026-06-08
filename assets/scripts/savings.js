@@ -1425,9 +1425,11 @@ function renderSavingsHistory(data) {
     let container = document.getElementById("savingsHistory");
     if (!container) return;
 
+    let sourceData = applySavingsSearch(data);
+
     container.innerHTML = "";
 
-    if (!Array.isArray(data) || !data.length) {
+    if (!Array.isArray(sourceData) || !sourceData.length) {
         container.innerHTML = `<p class="empty-state">No data yet</p>`;
         return;
     }
@@ -1439,7 +1441,7 @@ function renderSavingsHistory(data) {
         return String(a.id || "").localeCompare(String(b.id || ""));
     };
 
-    let chronological = data.slice().sort(compareTxn);
+    let chronological = sourceData.slice().sort(compareTxn);
     let persisted = ((typeof getSavings === "function") ? getSavings() : []) || [];
     let persistedById = new Map(persisted.map(x => [String(x && x.id), x]));
 
@@ -1704,6 +1706,17 @@ function setTodayDate() {
 
 //Filter
 let filteredSavingsData = [];
+
+function applySavingsSearch(rows) {
+    let list = Array.isArray(rows) ? rows : [];
+    if (!window.SearchService || typeof window.SearchService.applyModuleSearch !== "function") {
+        return list;
+    }
+
+    let queryResult = window.SearchService.applyModuleSearch("savings", list);
+    return Array.isArray(queryResult.results) ? queryResult.results : list;
+}
+
 // Filters savings data by time (today, week, month, all) and updates UI
 function handleSavingsFilter(type) {
 
@@ -1785,10 +1798,10 @@ function handleSavingsFilter(type) {
     // =========================
     // 📊 STORE + UPDATE UI
     // =========================
-    filteredSavingsData = result;
+    filteredSavingsData = applySavingsSearch(result);
 
-    renderSavingsHistory(result);
-    loadSavingsGraph(result);
+    renderSavingsHistory(filteredSavingsData);
+    loadSavingsGraph(filteredSavingsData);
 }
 // Generates income vs expense chart using filtered or full data
 function loadSavingsGraph(data) {
@@ -2224,7 +2237,7 @@ function applySavingsDateFilter() {
 
     let data = getSavings() || [];
 
-    filteredSavingsData = data.filter(t => {
+    let scoped = data.filter(t => {
         let d = new Date(t.date).toISOString().slice(0, 10);
 
         if (from && !to) return d === from;
@@ -2233,6 +2246,8 @@ function applySavingsDateFilter() {
 
         return true;
     });
+
+    filteredSavingsData = applySavingsSearch(scoped);
 
     renderSavingsHistory(filteredSavingsData);
     loadSavingsGraph(filteredSavingsData);

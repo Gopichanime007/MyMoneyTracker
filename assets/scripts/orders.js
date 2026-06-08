@@ -83,6 +83,11 @@ function renderOrders() {
     orders = allOrders.filter(o => getFilterStatus(o) === selectedStatus);
   }
 
+  if (window.SearchService && typeof window.SearchService.applyModuleSearch === "function") {
+    const queryResult = window.SearchService.applyModuleSearch("orders", orders);
+    orders = Array.isArray(queryResult.results) ? queryResult.results : orders;
+  }
+
   if (!orders.length) {
     container.innerHTML = `
       <div class="empty">

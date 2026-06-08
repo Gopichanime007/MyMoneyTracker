@@ -1376,19 +1376,25 @@ function showToast(msg) {
 function loadHistory(list = getExpenses()) {
 
     try {
-        currentFilteredExpenses = list;
+        let sourceList = Array.isArray(list) ? list : [];
+        let queryResult = (window.SearchService && typeof window.SearchService.applyModuleSearch === "function")
+            ? window.SearchService.applyModuleSearch("expenses", sourceList)
+            : { results: sourceList };
+        let finalList = Array.isArray(queryResult.results) ? queryResult.results : sourceList;
+
+        currentFilteredExpenses = finalList;
 
         let container = document.getElementById("historyList");
         if (!container) return;
 
         container.innerHTML = "";
 
-        if (!list.length) {
+        if (!finalList.length) {
             container.innerHTML = `<p class="empty-state">No data yet</p>`;
             return;
         }
 
-        let withRunning = rebalanceExpenseLedger(list, getBudgets()).slice().sort((a, b) => {
+        let withRunning = rebalanceExpenseLedger(finalList, getBudgets()).slice().sort((a, b) => {
             let da = new Date(a.date || 0).getTime();
             let db = new Date(b.date || 0).getTime();
             if (da !== db) return da - db;

@@ -86,7 +86,12 @@ function renderWorkspaceSection(containerId, list) {
 }
 
 function renderQuotationsWorkspace() {
-  const rows = getQuotationRegistryRows().slice().sort((a, b) => new Date(b.updatedAt || 0) - new Date(a.updatedAt || 0));
+  let rows = getQuotationRegistryRows().slice().sort((a, b) => new Date(b.updatedAt || 0) - new Date(a.updatedAt || 0));
+
+  if (window.SearchService && typeof window.SearchService.applyModuleSearch === "function") {
+    const queryResult = window.SearchService.applyModuleSearch("quotations", rows);
+    rows = Array.isArray(queryResult.results) ? queryResult.results : rows;
+  }
 
   const draft = [];
   const accepted = [];
