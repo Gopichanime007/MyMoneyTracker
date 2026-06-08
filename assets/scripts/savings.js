@@ -1426,6 +1426,7 @@ function renderSavingsHistory(data) {
     if (!container) return;
 
     let sourceData = applySavingsSearch(data);
+    updateSavingsSortIndicator();
 
     container.innerHTML = "";
 
@@ -1780,6 +1781,68 @@ function clearSavingsFilterModal() {
 
     closeSavingsFilterModal();
     filteredSavingsData = applySavingsSearch(getScopedSavings());
+    renderSavingsHistory(filteredSavingsData);
+    loadSavingsGraph(filteredSavingsData);
+}
+
+function updateSavingsSortIndicator() {
+    let indicator = document.getElementById("savingsSortIndicator");
+    if (!indicator || !window.SearchService || typeof window.SearchService.getState !== "function") {
+        return;
+    }
+
+    let state = window.SearchService.getState("savings");
+    let sort = Array.isArray(state.sort) ? state.sort : [];
+    if (!sort.length) {
+        indicator.textContent = "Sort: Default";
+        return;
+    }
+
+    let first = sort[0];
+    indicator.textContent = `Sort: ${String(first.field || "date")} (${String(first.direction || "asc")})`;
+}
+
+function openSavingsSortModal() {
+    let modal = document.getElementById("savingsSortModal");
+    if (modal) modal.classList.remove("hidden");
+}
+
+function closeSavingsSortModal() {
+    let modal = document.getElementById("savingsSortModal");
+    if (modal) modal.classList.add("hidden");
+}
+
+function applySavingsSortModal() {
+    let field = document.getElementById("savingsSortField")?.value || "date";
+    let direction = document.getElementById("savingsSortDirection")?.value || "desc";
+    let type = field === "amount" ? "number" : (field === "date" ? "date" : "string");
+
+    if (window.SearchService && typeof window.SearchService.setSort === "function") {
+        window.SearchService.setSort("savings", [{ field: field, direction: direction, type: type }]);
+    }
+
+    closeSavingsSortModal();
+    updateSavingsSortIndicator();
+    let base = filteredSavingsData.length ? filteredSavingsData : getScopedSavings();
+    filteredSavingsData = applySavingsSearch(base);
+    renderSavingsHistory(filteredSavingsData);
+    loadSavingsGraph(filteredSavingsData);
+}
+
+function clearSavingsSortModal() {
+    let fieldEl = document.getElementById("savingsSortField");
+    let directionEl = document.getElementById("savingsSortDirection");
+    if (fieldEl) fieldEl.value = "date";
+    if (directionEl) directionEl.value = "desc";
+
+    if (window.SearchService && typeof window.SearchService.clearSort === "function") {
+        window.SearchService.clearSort("savings");
+    }
+
+    closeSavingsSortModal();
+    updateSavingsSortIndicator();
+    let base = filteredSavingsData.length ? filteredSavingsData : getScopedSavings();
+    filteredSavingsData = applySavingsSearch(base);
     renderSavingsHistory(filteredSavingsData);
     loadSavingsGraph(filteredSavingsData);
 }

@@ -221,6 +221,8 @@
 
             <div class="inline-row history-tools">
               <button class="secondary" type="button" onclick="openExpenseFilterModal()">Filter</button>
+              <button class="secondary" type="button" onclick="openExpenseSortModal()">Sort</button>
+              <small id="expenseSortIndicator" class="muted-note">Sort: Default</small>
 
               <!-- DOWNLOAD -->
               <button class="icon-btn" onclick="exportPDF()" title="Download PDF">
@@ -585,6 +587,31 @@
       <div class="modal-actions">
         <button class="secondary" type="button" onclick="clearExpenseFilterModal()">Clear</button>
         <button class="primary" type="button" onclick="applyExpenseFilterModal()">Apply</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="expenseSortModal" class="modal hidden" onclick="closeExpenseSortModal()">
+    <div class="modal-content" onclick="event.stopPropagation()">
+      <h3>Expense Sort</h3>
+
+      <label for="expenseSortField">Field</label>
+      <select id="expenseSortField">
+        <option value="date">Date</option>
+        <option value="amount">Amount</option>
+        <option value="type">Type</option>
+        <option value="category">Category</option>
+      </select>
+
+      <label for="expenseSortDirection">Direction</label>
+      <select id="expenseSortDirection">
+        <option value="desc">Descending</option>
+        <option value="asc">Ascending</option>
+      </select>
+
+      <div class="modal-actions">
+        <button class="secondary" type="button" onclick="clearExpenseSortModal()">Clear</button>
+        <button class="primary" type="button" onclick="applyExpenseSortModal()">Apply</button>
       </div>
     </div>
   </div>

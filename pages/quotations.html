@@ -25,6 +25,8 @@
         <h3>Purchase Plan Workspace</h3>
         <div class="inline-row">
           <button class="secondary" type="button" onclick="openQuotationsFilterModal()">Filter</button>
+          <button class="secondary" type="button" onclick="openQuotationsSortModal()">Sort</button>
+          <small id="quotationsSortIndicator" class="muted-note">Sort: Default</small>
           <button class="primary" type="button" onclick="createNewPlan()">+ New Plan</button>
         </div>
       </div>
@@ -75,6 +77,31 @@
       <div class="modal-actions">
         <button class="secondary" type="button" onclick="clearQuotationsFilterModal()">Clear</button>
         <button class="primary" type="button" onclick="applyQuotationsFilterModal()">Apply</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="quotationsSortModal" class="modal hidden" onclick="closeQuotationsSortModal()">
+    <div class="modal-content" onclick="event.stopPropagation()">
+      <h3>Quotation Sort</h3>
+
+      <label for="quotationsSortField">Field</label>
+      <select id="quotationsSortField">
+        <option value="updatedAt">Last Updated</option>
+        <option value="total">Amount</option>
+        <option value="status">Status</option>
+        <option value="quotationNo">Quotation No</option>
+      </select>
+
+      <label for="quotationsSortDirection">Direction</label>
+      <select id="quotationsSortDirection">
+        <option value="desc">Descending</option>
+        <option value="asc">Ascending</option>
+      </select>
+
+      <div class="modal-actions">
+        <button class="secondary" type="button" onclick="clearQuotationsSortModal()">Clear</button>
+        <button class="primary" type="button" onclick="applyQuotationsSortModal()">Apply</button>
       </div>
     </div>
   </div>

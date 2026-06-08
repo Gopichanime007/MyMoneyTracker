@@ -47,6 +47,8 @@
       <div class="orders-toolbar">
         <h4>Order Execution Records</h4>
         <button class="secondary" type="button" onclick="openOrdersFilterModal()">Filter</button>
+        <button class="secondary" type="button" onclick="openOrdersSortModal()">Sort</button>
+        <small id="ordersSortIndicator" class="muted-note">Sort: Default</small>
         <select id="ordersStatusFilter" onchange="renderOrders()">
           <option value="all">All Statuses</option>
           <option value="draft">Draft</option>
@@ -87,6 +89,31 @@
       <div class="modal-actions">
         <button class="secondary" type="button" onclick="clearOrdersFilterModal()">Clear</button>
         <button class="primary" type="button" onclick="applyOrdersFilterModal()">Apply</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="ordersSortModal" class="modal hidden" onclick="closeOrdersSortModal()">
+    <div class="modal-content" onclick="event.stopPropagation()">
+      <h3>Order Sort</h3>
+
+      <label for="ordersSortField">Field</label>
+      <select id="ordersSortField">
+        <option value="updatedAt">Last Updated</option>
+        <option value="total">Amount</option>
+        <option value="status">Status</option>
+        <option value="orderNo">Order No</option>
+      </select>
+
+      <label for="ordersSortDirection">Direction</label>
+      <select id="ordersSortDirection">
+        <option value="desc">Descending</option>
+        <option value="asc">Ascending</option>
+      </select>
+
+      <div class="modal-actions">
+        <button class="secondary" type="button" onclick="clearOrdersSortModal()">Clear</button>
+        <button class="primary" type="button" onclick="applyOrdersSortModal()">Apply</button>
       </div>
     </div>
   </div>

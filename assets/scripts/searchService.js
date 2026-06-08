@@ -179,6 +179,24 @@
             return setFilters(moduleName, []);
         }
 
+        function setSort(moduleName, sortList) {
+            var key = normalizeModuleName(moduleName);
+            var current = store.getState(key);
+            var next = store.setState(key, {
+                version: 'v1',
+                module: key,
+                search: current.search || { text: '', fields: [] },
+                filters: Array.isArray(current.filters) ? current.filters : [],
+                sort: Array.isArray(sortList) ? sortList : []
+            });
+            persist();
+            return next;
+        }
+
+        function clearSort(moduleName) {
+            return setSort(moduleName, []);
+        }
+
         function buildPeriodFilterDescriptor(field, periodType, from, to, now) {
             return {
                 version: 'v1',
@@ -284,6 +302,8 @@
             clearSearch: clearSearch,
             setFilters: setFilters,
             clearFilters: clearFilters,
+            setSort: setSort,
+            clearSort: clearSort,
             buildPeriodFilterDescriptor: buildPeriodFilterDescriptor,
             applyModuleSearch: applyModuleSearch,
             applyLegacyDateFilter: applyLegacyDateFilter,

@@ -125,7 +125,59 @@ function clearQuotationsFilterModal() {
   renderQuotationsWorkspace();
 }
 
+function updateQuotationsSortIndicator() {
+  const indicator = document.getElementById("quotationsSortIndicator");
+  if (!indicator || !window.SearchService || typeof window.SearchService.getState !== "function") return;
+  const state = window.SearchService.getState("quotations");
+  const sort = Array.isArray(state.sort) ? state.sort : [];
+  if (!sort.length) {
+    indicator.textContent = "Sort: Default";
+    return;
+  }
+  indicator.textContent = `Sort: ${String(sort[0].field || "updatedAt")} (${String(sort[0].direction || "asc")})`;
+}
+
+function openQuotationsSortModal() {
+  const modal = document.getElementById("quotationsSortModal");
+  if (modal) modal.classList.remove("hidden");
+}
+
+function closeQuotationsSortModal() {
+  const modal = document.getElementById("quotationsSortModal");
+  if (modal) modal.classList.add("hidden");
+}
+
+function applyQuotationsSortModal() {
+  const field = document.getElementById("quotationsSortField")?.value || "updatedAt";
+  const direction = document.getElementById("quotationsSortDirection")?.value || "desc";
+  const type = field === "total" ? "number" : (field === "updatedAt" ? "date" : "string");
+
+  if (window.SearchService && typeof window.SearchService.setSort === "function") {
+    window.SearchService.setSort("quotations", [{ field, direction, type }]);
+  }
+
+  closeQuotationsSortModal();
+  updateQuotationsSortIndicator();
+  renderQuotationsWorkspace();
+}
+
+function clearQuotationsSortModal() {
+  const fieldEl = document.getElementById("quotationsSortField");
+  const directionEl = document.getElementById("quotationsSortDirection");
+  if (fieldEl) fieldEl.value = "updatedAt";
+  if (directionEl) directionEl.value = "desc";
+
+  if (window.SearchService && typeof window.SearchService.clearSort === "function") {
+    window.SearchService.clearSort("quotations");
+  }
+
+  closeQuotationsSortModal();
+  updateQuotationsSortIndicator();
+  renderQuotationsWorkspace();
+}
+
 function renderQuotationsWorkspace() {
+  updateQuotationsSortIndicator();
   let rows = getQuotationRegistryRows().slice().sort((a, b) => new Date(b.updatedAt || 0) - new Date(a.updatedAt || 0));
 
   if (window.SearchService && typeof window.SearchService.applyModuleSearch === "function") {

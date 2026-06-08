@@ -247,6 +247,12 @@
           Filter
         </button>
 
+        <button class="secondary" type="button" onclick="openSavingsSortModal()">
+          Sort
+        </button>
+
+        <small id="savingsSortIndicator" class="muted-note">Sort: Default</small>
+
         <div id="savingsHistory"></div>
       </div>
     </section>
@@ -417,6 +423,31 @@
       <div class="modal-actions">
         <button class="secondary" type="button" onclick="clearSavingsFilterModal()">Clear</button>
         <button class="primary" type="button" onclick="applySavingsFilterModal()">Apply</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="savingsSortModal" class="modal hidden" onclick="closeSavingsSortModal()">
+    <div class="modal-content" onclick="event.stopPropagation()">
+      <h3>Savings Sort</h3>
+
+      <label for="savingsSortField">Field</label>
+      <select id="savingsSortField">
+        <option value="date">Date</option>
+        <option value="amount">Amount</option>
+        <option value="type">Type</option>
+        <option value="note">Note</option>
+      </select>
+
+      <label for="savingsSortDirection">Direction</label>
+      <select id="savingsSortDirection">
+        <option value="desc">Descending</option>
+        <option value="asc">Ascending</option>
+      </select>
+
+      <div class="modal-actions">
+        <button class="secondary" type="button" onclick="clearSavingsSortModal()">Clear</button>
+        <button class="primary" type="button" onclick="applySavingsSortModal()">Apply</button>
       </div>
     </div>
   </div>

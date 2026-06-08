@@ -55,6 +55,20 @@ test('SearchService clearSearch keeps module fields and clears text', () => {
     expect(after.search.fields.length).toBeGreaterThan(0);
 });
 
+test('SearchService setSort persists and clearSort resets', () => {
+    window.SearchService.setSort('orders', [{ field: 'updatedAt', direction: 'desc', type: 'date' }]);
+
+    const state = window.SearchService.getState('orders');
+    expect(Array.isArray(state.sort)).toBe(true);
+    expect(state.sort.length).toBe(1);
+    expect(state.sort[0].field).toBe('updatedAt');
+
+    window.SearchService.clearSort('orders');
+    const after = window.SearchService.getState('orders');
+    expect(Array.isArray(after.sort)).toBe(true);
+    expect(after.sort.length).toBe(0);
+});
+
 test('SearchService restored persisted state after reload', () => {
     window.SearchService.setSearchText('quotations', 'laptop');
 

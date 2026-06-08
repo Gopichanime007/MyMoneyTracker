@@ -110,11 +110,63 @@ function clearOrdersFilterModal() {
   renderOrders();
 }
 
+function updateOrdersSortIndicator() {
+  const indicator = document.getElementById("ordersSortIndicator");
+  if (!indicator || !window.SearchService || typeof window.SearchService.getState !== "function") return;
+  const state = window.SearchService.getState("orders");
+  const sort = Array.isArray(state.sort) ? state.sort : [];
+  if (!sort.length) {
+    indicator.textContent = "Sort: Default";
+    return;
+  }
+  indicator.textContent = `Sort: ${String(sort[0].field || "updatedAt")} (${String(sort[0].direction || "asc")})`;
+}
+
+function openOrdersSortModal() {
+  const modal = document.getElementById("ordersSortModal");
+  if (modal) modal.classList.remove("hidden");
+}
+
+function closeOrdersSortModal() {
+  const modal = document.getElementById("ordersSortModal");
+  if (modal) modal.classList.add("hidden");
+}
+
+function applyOrdersSortModal() {
+  const field = document.getElementById("ordersSortField")?.value || "updatedAt";
+  const direction = document.getElementById("ordersSortDirection")?.value || "desc";
+  const type = field === "total" ? "number" : (field === "updatedAt" ? "date" : "string");
+
+  if (window.SearchService && typeof window.SearchService.setSort === "function") {
+    window.SearchService.setSort("orders", [{ field, direction, type }]);
+  }
+
+  closeOrdersSortModal();
+  updateOrdersSortIndicator();
+  renderOrders();
+}
+
+function clearOrdersSortModal() {
+  const fieldEl = document.getElementById("ordersSortField");
+  const directionEl = document.getElementById("ordersSortDirection");
+  if (fieldEl) fieldEl.value = "updatedAt";
+  if (directionEl) directionEl.value = "desc";
+
+  if (window.SearchService && typeof window.SearchService.clearSort === "function") {
+    window.SearchService.clearSort("orders");
+  }
+
+  closeOrdersSortModal();
+  updateOrdersSortIndicator();
+  renderOrders();
+}
+
 function renderOrders() {
   const allOrders = getOrders();
   if (!document.getElementById || !document.getElementById("ordersList")) return;
 
   const container = document.getElementById("ordersList");
+  updateOrdersSortIndicator();
   const filter = document.getElementById("ordersStatusFilter");
   const selectedStatus = filter ? filter.value : "all";
 

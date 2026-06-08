@@ -1383,6 +1383,7 @@ function loadHistory(list = getExpenses()) {
         let finalList = Array.isArray(queryResult.results) ? queryResult.results : sourceList;
 
         currentFilteredExpenses = finalList;
+        updateExpenseSortIndicator();
 
         let container = document.getElementById("historyList");
         if (!container) return;
@@ -9289,6 +9290,65 @@ function rerenderExpenseWithQueryState() {
         ? window.currentFilteredExpenses
         : getExpenses();
     loadHistory(fallback);
+}
+
+function updateExpenseSortIndicator() {
+    let indicator = document.getElementById("expenseSortIndicator");
+    if (!indicator || !window.SearchService || typeof window.SearchService.getState !== "function") {
+        return;
+    }
+
+    let state = window.SearchService.getState("expenses");
+    let sort = Array.isArray(state.sort) ? state.sort : [];
+    if (!sort.length) {
+        indicator.textContent = "Sort: Default";
+        return;
+    }
+
+    let first = sort[0];
+    let field = String(first.field || "date");
+    let direction = String(first.direction || "asc");
+    indicator.textContent = `Sort: ${field} (${direction})`;
+}
+
+function openExpenseSortModal() {
+    let modal = document.getElementById("expenseSortModal");
+    if (modal) modal.classList.remove("hidden");
+}
+
+function closeExpenseSortModal() {
+    let modal = document.getElementById("expenseSortModal");
+    if (modal) modal.classList.add("hidden");
+}
+
+function applyExpenseSortModal() {
+    let field = document.getElementById("expenseSortField")?.value || "date";
+    let direction = document.getElementById("expenseSortDirection")?.value || "desc";
+
+    let type = field === "amount" ? "number" : (field === "date" ? "date" : "string");
+
+    if (window.SearchService && typeof window.SearchService.setSort === "function") {
+        window.SearchService.setSort("expenses", [{ field: field, direction: direction, type: type }]);
+    }
+
+    closeExpenseSortModal();
+    updateExpenseSortIndicator();
+    rerenderExpenseWithQueryState();
+}
+
+function clearExpenseSortModal() {
+    let fieldEl = document.getElementById("expenseSortField");
+    let directionEl = document.getElementById("expenseSortDirection");
+    if (fieldEl) fieldEl.value = "date";
+    if (directionEl) directionEl.value = "desc";
+
+    if (window.SearchService && typeof window.SearchService.clearSort === "function") {
+        window.SearchService.clearSort("expenses");
+    }
+
+    closeExpenseSortModal();
+    updateExpenseSortIndicator();
+    rerenderExpenseWithQueryState();
 }
 
 function applyExpenseFilterModal() {
