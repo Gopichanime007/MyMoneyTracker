@@ -1744,6 +1744,7 @@ let savingsFilterBuilderInstance = null;
 
 function getSavingsFilterTemplates() {
     return [
+        { key: "date", label: "Date", field: "date", type: "date", hint: "Use Equals, Before, After, or Between" },
         { key: "category", label: "Category", field: "type", type: "text", hint: "Savings, reserve, emergency" },
         { key: "type", label: "Type", field: "type", type: "text", hint: "deposit, withdrawal" },
         { key: "amount", label: "Amount", field: "amount", type: "number", hint: "5000, 10000, 25000" },

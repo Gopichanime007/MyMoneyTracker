@@ -112,6 +112,7 @@ let quotationsFilterBuilderInstance = null;
 
 function getQuotationsFilterTemplates() {
   return [
+    { key: "date", label: "Date", field: "updatedAt", type: "date", hint: "Use Equals, Before, After, or Between" },
     { key: "quotationNo", label: "Quotation No", field: "quotationNo", type: "text", hint: "QUO-2001" },
     { key: "purpose", label: "Purpose", field: "purpose", type: "text", hint: "Shopping, Hardware, Travel" },
     { key: "status", label: "Status", field: "status", type: "enum", hint: "draft, accepted, expired, converted" },

@@ -95,6 +95,7 @@ let ordersFilterBuilderInstance = null;
 
 function getOrdersFilterTemplates() {
   return [
+    { key: "date", label: "Date", field: "updatedAt", type: "date", hint: "Use Equals, Before, After, or Between" },
     { key: "orderNo", label: "Order No", field: "orderNo", type: "text", hint: "ORD-1001" },
     { key: "purpose", label: "Purpose", field: "purpose", type: "text", hint: "Office, Travel, Equipment" },
     { key: "status", label: "Status", field: "status", type: "enum", hint: "draft, open, completed, cancelled" },
