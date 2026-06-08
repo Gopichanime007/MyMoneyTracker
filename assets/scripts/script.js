@@ -1383,6 +1383,7 @@ function loadHistory(list = getExpenses()) {
         let finalList = Array.isArray(queryResult.results) ? queryResult.results : sourceList;
 
         currentFilteredExpenses = finalList;
+        syncExpenseHistorySearchInput();
         updateExpenseSortIndicator();
         renderExpenseQueryChips();
         updateFilteredViewActiveIndicator();
@@ -1457,6 +1458,34 @@ function loadHistory(list = getExpenses()) {
 
     } catch (err) {
         console.error("History error:", err);
+    }
+}
+
+function syncExpenseHistorySearchInput() {
+    let input = document.getElementById("historySearchInput");
+    if (!input || !window.SearchService || typeof window.SearchService.getState !== "function") {
+        return;
+    }
+    let state = window.SearchService.getState("expenses");
+    let text = String((state.search && state.search.text) || "");
+    if (input.value !== text) {
+        input.value = text;
+    }
+}
+
+function onExpenseHistorySearchInput(value) {
+    if (!window.SearchService) {
+        return;
+    }
+    if (typeof window.SearchService.scheduleSearch === "function") {
+        window.SearchService.scheduleSearch("expenses", String(value || ""), null, 120, function () {
+            loadHistory(getExpenses());
+        });
+        return;
+    }
+    if (typeof window.SearchService.setSearchText === "function") {
+        window.SearchService.setSearchText("expenses", String(value || ""));
+        loadHistory(getExpenses());
     }
 }
 
@@ -9300,6 +9329,7 @@ let expenseFilterBuilderInstance = null;
 
 function getExpenseFilterTemplates() {
     return [
+        { key: "date", label: "Date", field: "date", type: "date", hint: "Use Equals, Before, After, or Between" },
         { key: "category", label: "Category", field: "category", type: "text", hint: "Shopping, Food, Travel, Medical, Bills" },
         { key: "type", label: "Type", field: "type", type: "text", hint: "expense, income" },
         { key: "amount", label: "Amount", field: "amount", type: "number", hint: "5000, 10000, 25000" },
@@ -9345,12 +9375,6 @@ function buildExpenseFilterDescriptorsFromModal() {
 }
 
 function rerenderExpenseWithQueryState() {
-    let period = document.getElementById("filterType")?.value || "all";
-    if (period && period !== "period") {
-        handleFilter(period);
-        return;
-    }
-
     let fallback = (window.currentFilteredExpenses && window.currentFilteredExpenses.length)
         ? window.currentFilteredExpenses
         : getExpenses();
@@ -9386,6 +9410,14 @@ function getExpenseFilterChipLabel(filter) {
             return `Period: ${filter.value.from || "-"} to ${filter.value.to || "-"}`;
         }
         return `Period: ${type}`;
+    }
+    if (String(filter.field || "") === "date") {
+        if (filter.op === "between") {
+            return `Date Between ${String(filter.from || "-")} and ${String(filter.to || "-")}`;
+        }
+        if (filter.op === "gt") return `Date After ${String(filter.value || "-")}`;
+        if (filter.op === "lt") return `Date Before ${String(filter.value || "-")}`;
+        if (filter.op === "eq") return `Date Equals ${String(filter.value || "-")}`;
     }
     return `${String(filter.field || "field")} ${String(filter.op || "eq")} ${String(filter.value || "")}`;
 }
@@ -9552,6 +9584,11 @@ function clearExpenseFilterModal(closeAfterClear = true) {
 
 function handleFilter(type) {
 
+    if (!document.getElementById("filterType")) {
+        loadHistory(getExpenses());
+        return;
+    }
+
     if (type === "period") {
 
         openPeriod();
@@ -9596,7 +9633,13 @@ function formatDateLabel(dateStr) {
 
 function updateCustomPeriodLabel(from, to) {
     const select = document.getElementById("filterType");
+    if (!select) {
+        return;
+    }
     const option = select.querySelector('option[value="period"]');
+    if (!option) {
+        return;
+    }
 
     if (from && to) {
         option.textContent = `Custom Period (${formatDateLabel(from)} → ${formatDateLabel(to)})`;
