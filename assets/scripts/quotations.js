@@ -190,11 +190,49 @@ function countQuotationsFilterConditions(filters) {
   if (!Array.isArray(filters)) return 0;
   return filters.reduce((sum, filter) => {
     if (!filter || typeof filter !== "object") return sum;
-    if (String(filter.op || "") === "group_any" && Array.isArray(filter.conditions)) {
-      return sum + countQuotationsFilterConditions(filter.conditions);
+    if (String(filter.op || "") === "group_any" && filter.value && Array.isArray(filter.value.conditions)) {
+      return sum + countQuotationsFilterConditions(filter.value.conditions);
     }
     return sum + 1;
   }, 0);
+}
+
+function getQuotationsSortState() {
+  if (!window.SearchService || typeof window.SearchService.getState !== "function") {
+    return null;
+  }
+  const state = window.SearchService.getState("quotations");
+  const list = Array.isArray(state.sort) ? state.sort : [];
+  return list.length ? list[0] : null;
+}
+
+function toComparableSortValue(row, field, type) {
+  const value = row ? row[field] : null;
+  if (type === "number") return Number(value || 0);
+  if (type === "date") return new Date(value || 0).getTime();
+  if (field === "status") {
+    const order = { draft: 1, accepted: 2, expired: 3, converted: 4 };
+    return order[String(resolvePlanStatus(row)).toLowerCase()] || 99;
+  }
+  return String(value == null ? "" : value).toLowerCase();
+}
+
+function applyLocalQuotationsSort(rows) {
+  const source = Array.isArray(rows) ? rows.slice() : [];
+  const sortItem = getQuotationsSortState();
+  if (!sortItem) return source;
+
+  const field = String(sortItem.field || "updatedAt");
+  const direction = String(sortItem.direction || "desc").toLowerCase();
+  const type = String(sortItem.type || (field === "updatedAt" ? "date" : (field === "total" ? "number" : "string")));
+
+  return source.sort((left, right) => {
+    const a = toComparableSortValue(left, field, type);
+    const b = toComparableSortValue(right, field, type);
+    if (a === b) return 0;
+    if (direction === "asc") return a > b ? 1 : -1;
+    return a < b ? 1 : -1;
+  });
 }
 
 function isDefaultQuotationsSort(sortItem) {
@@ -337,6 +375,17 @@ function deleteQuotationsSavedView() {
 }
 
 function openQuotationsSortModal() {
+  const activeSort = getQuotationsSortState();
+  const fieldEl = document.getElementById("quotationsSortField");
+  const directionEl = document.getElementById("quotationsSortDirection");
+  if (activeSort) {
+    if (fieldEl) fieldEl.value = String(activeSort.field || "updatedAt");
+    if (directionEl) directionEl.value = String(activeSort.direction || "desc");
+  } else {
+    if (fieldEl) fieldEl.value = "updatedAt";
+    if (directionEl) directionEl.value = "desc";
+  }
+
   const modal = document.getElementById("quotationsSortModal");
   if (modal) {
     modal.classList.remove("hidden");
@@ -392,6 +441,8 @@ function renderQuotationsWorkspace() {
     rows = Array.isArray(queryResult.results) ? queryResult.results : rows;
   }
 
+  rows = applyLocalQuotationsSort(rows);
+
   const draft = [];
   const accepted = [];
   const expired = [];
@@ -413,6 +464,10 @@ function renderQuotationsWorkspace() {
 
 function createNewPlan() {
   localStorage.removeItem("activeQuotationId");
+  localStorage.removeItem("quotationMeta");
+  localStorage.removeItem("quotationData");
+  localStorage.removeItem("quotationItems");
+  localStorage.removeItem("quotationCharges");
   window.location.href = "quotation.html";
 }
 
@@ -423,6 +478,10 @@ function openPlan(quotationId) {
   const linkedOrder = resolveLinkedOrder(row);
   if (!linkedOrder) {
     localStorage.setItem("activeQuotationId", JSON.stringify(String(quotationId)));
+    localStorage.removeItem("quotationMeta");
+    localStorage.removeItem("quotationData");
+    localStorage.removeItem("quotationItems");
+    localStorage.removeItem("quotationCharges");
     window.location.href = "quotation.html";
     return;
   }
@@ -437,6 +496,10 @@ function openPlan(quotationId) {
   info.textContent = `${row.quotationNo || row.id} has a linked order ${linkedOrder.orderNo || linkedOrder.id}.`;
   openPlanBtn.onclick = () => {
     localStorage.setItem("activeQuotationId", JSON.stringify(String(quotationId)));
+    localStorage.removeItem("quotationMeta");
+    localStorage.removeItem("quotationData");
+    localStorage.removeItem("quotationItems");
+    localStorage.removeItem("quotationCharges");
     window.location.href = "quotation.html";
   };
   openOrderBtn.onclick = () => {
@@ -454,6 +517,10 @@ function closePlanNavigationModal() {
 
 function continueEditingPlan(quotationId) {
   localStorage.setItem("activeQuotationId", JSON.stringify(String(quotationId)));
+  localStorage.removeItem("quotationMeta");
+  localStorage.removeItem("quotationData");
+  localStorage.removeItem("quotationItems");
+  localStorage.removeItem("quotationCharges");
   window.location.href = "quotation.html";
 }
 

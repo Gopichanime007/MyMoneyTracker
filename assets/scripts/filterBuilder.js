@@ -150,11 +150,13 @@
             });
         }
 
-        function emitChange() {
+        function emitChange(options) {
             if (typeof cfg.onChange === 'function') {
                 cfg.onChange(getState());
             }
-            render();
+            if (!options || options.render !== false) {
+                render();
+            }
         }
 
         function addCondition(templateKey) {
@@ -173,7 +175,7 @@
             emitChange();
         }
 
-        function updateCondition(conditionId, patch) {
+        function updateCondition(conditionId, patch, options) {
             state.activeConditions = state.activeConditions.map(function (condition) {
                 if (String(condition.id) !== String(conditionId)) {
                     return condition;
@@ -190,7 +192,7 @@
                 }
                 return next;
             });
-            emitChange();
+            emitChange(options);
         }
 
         function clearAll() {
@@ -546,7 +548,7 @@
                 fromInput.placeholder = condition.type === 'date' ? 'From Date' : 'From';
                 fromInput.value = condition.from;
                 fromInput.addEventListener('input', function () {
-                    updateCondition(condition.id, { from: fromInput.value });
+                    updateCondition(condition.id, { from: fromInput.value }, { render: false });
                 });
                 betweenRow.appendChild(fromInput);
 
@@ -555,7 +557,7 @@
                 toInput.placeholder = condition.type === 'date' ? 'To Date' : 'To';
                 toInput.value = condition.to;
                 toInput.addEventListener('input', function () {
-                    updateCondition(condition.id, { to: toInput.value });
+                    updateCondition(condition.id, { to: toInput.value }, { render: false });
                 });
                 betweenRow.appendChild(toInput);
                 card.appendChild(betweenRow);
@@ -565,7 +567,7 @@
                 valueInput.value = condition.value;
                 valueInput.placeholder = condition.type === 'date' ? 'Date' : 'Value';
                 valueInput.addEventListener('input', function () {
-                    updateCondition(condition.id, { value: valueInput.value });
+                    updateCondition(condition.id, { value: valueInput.value }, { render: false });
                 });
                 card.appendChild(valueInput);
             }

@@ -93,21 +93,19 @@ function getCurrentMeta() {
     const row = registry.find((x) => String(x.id) === String(activeId));
     if (row) {
       const existing = JSON.parse(localStorage.getItem(Q_META_STORAGE_KEY) || "null");
-      if (existing && String(existing.id) === String(row.id)) return existing;
-
       const rebuilt = {
         id: row.id,
-        quotationNo: row.quotationNo || (window.DocWorkflow ? window.DocWorkflow.generateDocumentNumber("quotation") : createEntityId("QT")),
-        purpose: row.purpose || "",
-        status: row.status || "draft",
-        createdAt: row.createdAt || new Date().toISOString(),
-        updatedAt: row.updatedAt || new Date().toISOString(),
-        validUntil: row.validUntil || null,
-        convertedOrderId: row.convertedOrderId || row.orderId || null,
-        fundingSourceType: row.fundingSourceType || null,
-        fundingSourceId: row.fundingSourceId || null,
-        fundingSourceName: row.fundingSourceName || null,
-        history: Array.isArray(row.history) ? row.history : []
+        quotationNo: row.quotationNo || (existing && existing.quotationNo) || (window.DocWorkflow ? window.DocWorkflow.generateDocumentNumber("quotation") : createEntityId("QT")),
+        purpose: row.purpose || (existing && existing.purpose) || "",
+        status: row.status || (existing && existing.status) || "draft",
+        createdAt: row.createdAt || (existing && existing.createdAt) || new Date().toISOString(),
+        updatedAt: row.updatedAt || (existing && existing.updatedAt) || new Date().toISOString(),
+        validUntil: row.validUntil || (existing && existing.validUntil) || null,
+        convertedOrderId: row.convertedOrderId || row.orderId || (existing && existing.convertedOrderId) || null,
+        fundingSourceType: row.fundingSourceType || (existing && existing.fundingSourceType) || null,
+        fundingSourceId: row.fundingSourceId || (existing && existing.fundingSourceId) || null,
+        fundingSourceName: row.fundingSourceName || (existing && existing.fundingSourceName) || null,
+        history: Array.isArray(row.history) ? row.history : (Array.isArray(existing && existing.history) ? existing.history : [])
       };
 
       quotationItems = Array.isArray(row.items) ? row.items.slice() : [];
