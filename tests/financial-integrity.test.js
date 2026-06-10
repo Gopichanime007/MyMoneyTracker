@@ -496,6 +496,54 @@ test('Add Expense budget dropdown shows budget entries regardless of budget peri
     });
 });
 
+test('Add Expense budget dropdown auto-selects budget matching expense date without filtering choices', () => {
+    window.saveBudgets([
+        { budgetId: 'b-jun', totalAllocated: 3000, entity: 'June Wallet', periodKey: '2026-06-01_to_2026-06-30' },
+        { budgetId: 'b-jul', totalAllocated: 2000, entity: 'July Wallet', periodKey: '2026-07-01_to_2026-07-31' },
+        { budgetId: 'b-legacy', totalAllocated: 1000, entity: 'Legacy Wallet', monthKey: '2026-05' }
+    ]);
+    window.saveExpenses([]);
+
+    document.getElementById('entryType').value = 'expense';
+    document.getElementById('expenseDate').value = '2026-06-15';
+
+    window.loadBudgetOptions();
+
+    const select = document.getElementById('budgetSelect');
+    const options = Array.from(select.querySelectorAll('option')).map(o => String(o.value));
+
+    expect(options).toEqual(expect.arrayContaining(['b-jun', 'b-jul', 'b-legacy']));
+    expect(String(select.value)).toBe('b-jun');
+});
+
+test('Add Expense budget suggestion updates with date until user manually selects budget', () => {
+    window.saveBudgets([
+        { budgetId: 'b-jun', totalAllocated: 3000, entity: 'June Wallet', periodKey: '2026-06-01_to_2026-06-30' },
+        { budgetId: 'b-jul', totalAllocated: 2000, entity: 'July Wallet', periodKey: '2026-07-01_to_2026-07-31' }
+    ]);
+    window.saveExpenses([]);
+
+    document.getElementById('entryType').value = 'expense';
+    document.getElementById('expenseDate').value = '2026-06-15';
+
+    window.resetExpenseBudgetSelectionState();
+    window.loadBudgetOptions();
+
+    const select = document.getElementById('budgetSelect');
+    expect(String(select.value)).toBe('b-jun');
+
+    document.getElementById('expenseDate').value = '2026-07-15';
+    window.autoSelectExpenseBudget({ respectManual: true });
+    expect(String(select.value)).toBe('b-jul');
+
+    select.value = 'b-jun';
+    window.markExpenseBudgetManuallySelected();
+
+    document.getElementById('expenseDate').value = '2026-07-20';
+    window.autoSelectExpenseBudget({ respectManual: true });
+    expect(String(select.value)).toBe('b-jun');
+});
+
 test('Add Expense save works even when no active budget period exists', async () => {
     localStorage.setItem('bp', JSON.stringify([
         { id: 'p-none', start: '2026-06-01', end: '2026-06-30', status: 'archived', extraDays: 0 }

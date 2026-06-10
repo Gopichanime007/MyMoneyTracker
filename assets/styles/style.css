@@ -1946,7 +1946,23 @@ body {
 
   .entry-details-grid,
   .transaction-meta-grid {
-    grid-template-columns: 110px minmax(0, 1fr);
+    grid-template-columns: minmax(0, 1fr) auto;
+    column-gap: 8px;
+    row-gap: 8px;
+    align-items: start;
+  }
+
+  .entry-label {
+    min-width: 0;
+  }
+
+  .entry-value {
+    justify-self: end;
+    text-align: right;
+    max-width: min(56vw, 260px);
+    white-space: normal;
+    overflow-wrap: anywhere;
+    word-break: break-word;
   }
 
   .entry-summary-grid {

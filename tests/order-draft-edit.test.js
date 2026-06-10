@@ -56,7 +56,12 @@ function buildOrderDom() {
     <input id="oiLink" />
 
     <div id="orderChargeModal"></div>
-    <select id="ocType"><option value="delivery">delivery</option><option value="custom">custom</option></select>
+    <select id="ocType">
+      <option value="delivery">delivery</option>
+      <option value="gst">gst</option>
+      <option value="discount">discount</option>
+      <option value="custom">custom</option>
+    </select>
     <input id="ocLabel" />
     <select id="ocAdjustmentType"><option value="add">add</option><option value="deduct">deduct</option></select>
     <input id="ocValue" />
@@ -155,6 +160,34 @@ test("Draft order item and charge edits persist after render cycle", () => {
   expect(rows[0].charges.some((c) => c.label === "Negotiation")).toBe(true);
   expect(Number(rows[0].subtotal)).toBeCloseTo(300, 2);
   expect(Number(rows[0].total)).toBeCloseTo(290, 2);
+});
+
+test("Order add-charge custom label visibility follows charge type", () => {
+  const type = document.getElementById("ocType");
+  const label = document.getElementById("ocLabel");
+
+  window.openOrderChargeModal();
+  expect(label.style.display).toBe("none");
+
+  type.value = "delivery";
+  type.dispatchEvent(new Event("change"));
+  expect(label.style.display).toBe("none");
+
+  type.value = "gst";
+  type.dispatchEvent(new Event("change"));
+  expect(label.style.display).toBe("none");
+
+  type.value = "discount";
+  type.dispatchEvent(new Event("change"));
+  expect(label.style.display).toBe("none");
+
+  type.value = "custom";
+  type.dispatchEvent(new Event("change"));
+  expect(label.style.display).toBe("block");
+
+  window.closeOrderChargeModal();
+  window.openOrderChargeModal();
+  expect(label.style.display).toBe("none");
 });
 
 test("Budget-funded confirm still shows daily-limit warning", async () => {
@@ -260,6 +293,65 @@ test("Complete creates exactly one financial transaction and repeat complete can
   expect(orders[0].financialPosted).toBe(true);
   expect(expenses.filter((row) => row.type === "expense" && row.linkedOrderId === "ord_draft_1")).toHaveLength(1);
   expect(savings.filter((row) => row.type === "expense" && row.linkedOrderId === "ord_draft_1")).toHaveLength(1);
+});
+
+test("Cancel posted savings-funded order creates one refund and repeat cancel is blocked", async () => {
+  seedSavingsWallet(1000);
+  window.AppDialog.confirm = jest.fn(async () => true);
+  window.AppDialog.prompt = jest.fn(async () => "User requested cancellation");
+
+  updateSeedOrder({
+    status: "confirmed",
+    financialPosted: true,
+    sourceType: "savings",
+    sourceId: "sav-1",
+    sourceName: "Main Savings",
+    paymentType: "UPI"
+  });
+
+  await window.cancelOrder();
+
+  let orders = JSON.parse(localStorage.getItem("orders") || "[]");
+  let expenses = JSON.parse(localStorage.getItem("expenses") || "[]");
+  let savings = JSON.parse(localStorage.getItem("savingsTransactions") || "[]");
+
+  expect(orders[0].status).toBe("cancelled");
+  expect(expenses.filter((row) => row.type === "refund" && row.linkedOrderId === "ord_draft_1")).toHaveLength(1);
+  expect(savings.filter((row) => row.type === "refund" && row.linkedOrderId === "ord_draft_1")).toHaveLength(1);
+
+  await window.cancelOrder();
+
+  orders = JSON.parse(localStorage.getItem("orders") || "[]");
+  expenses = JSON.parse(localStorage.getItem("expenses") || "[]");
+  savings = JSON.parse(localStorage.getItem("savingsTransactions") || "[]");
+
+  expect(orders[0].status).toBe("cancelled");
+  expect(expenses.filter((row) => row.type === "refund" && row.linkedOrderId === "ord_draft_1")).toHaveLength(1);
+  expect(savings.filter((row) => row.type === "refund" && row.linkedOrderId === "ord_draft_1")).toHaveLength(1);
+});
+
+test("Cancel posted budget-funded order creates expense refund only", async () => {
+  window.AppDialog.confirm = jest.fn(async () => true);
+  window.AppDialog.prompt = jest.fn(async () => "Budget cancellation");
+
+  updateSeedOrder({
+    status: "processing",
+    financialPosted: true,
+    sourceType: "budget",
+    sourceId: "budget-1",
+    sourceName: "Ops Budget",
+    paymentType: "UPI"
+  });
+
+  await window.cancelOrder();
+
+  const orders = JSON.parse(localStorage.getItem("orders") || "[]");
+  const expenses = JSON.parse(localStorage.getItem("expenses") || "[]");
+  const savings = JSON.parse(localStorage.getItem("savingsTransactions") || "[]");
+
+  expect(orders[0].status).toBe("cancelled");
+  expect(expenses.filter((row) => row.type === "refund" && row.linkedOrderId === "ord_draft_1")).toHaveLength(1);
+  expect(savings.filter((row) => row.type === "refund" && row.linkedOrderId === "ord_draft_1")).toHaveLength(0);
 });
 
 test("Timeline accordion expands and collapses", async () => {

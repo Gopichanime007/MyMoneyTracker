@@ -466,6 +466,8 @@ function renderOrder() {
   const container = document.getElementById("orderItems");
   const chargesHost = document.getElementById("orderChargesList");
 
+  toggleOrderCustomChargeField();
+
   if (!container) return;
   if (!order) {
     container.innerHTML = `<p class="empty">No order data found</p>`;
@@ -527,43 +529,77 @@ function renderOrder() {
     if (!charges.length) {
       chargesHost.innerHTML = '<p class="empty">No charges added</p>';
     } else {
-      chargesHost.innerHTML = charges.map((charge) => {
-        const chargeId = escapeOrderHtml(charge.id);
-        const type = String(charge.type || "delivery");
-        const label = escapeOrderHtml(String(charge.label || type));
-        const mode = String(charge.mode || "fixed");
-        const direction = getOrderChargeDirection(charge);
-        const value = Number(charge.value || 0);
-        const amount = Number(getOrderChargeAmount(charge, Number(hydrated.subtotal || 0), items) || 0);
-        const amountLabel = direction === "deduct" ? `-${formatCurrency(amount)}` : `+${formatCurrency(amount)}`;
-
-        if (editable) {
+      if (editable) {
+        const rowsHtml = charges.map((charge) => {
+          const chargeId = escapeOrderHtml(charge.id);
+          const type = String(charge.type || "delivery");
+          const label = escapeOrderHtml(String(charge.label || type));
+          const mode = String(charge.mode || "fixed");
+          const direction = getOrderChargeDirection(charge);
+          const value = Number(charge.value || 0);
+          const modeLabel = mode === "percent" ? "%" : (typeof getCurrency === "function" ? getCurrency() : "₹");
+          const amount = Number(getOrderChargeAmount(charge, Number(hydrated.subtotal || 0), items) || 0);
+          const amountLabel = direction === "deduct" ? `-${formatCurrency(amount)}` : `+${formatCurrency(amount)}`;
           return `
-            <div class="charge-editor-row">
+            <div class="charge-table-row">
               <input class="inline-input" value="${label}" onchange="updateOrderChargeField('${chargeId}', 'label', this.value)">
-              <input class="inline-input" type="number" value="${value}" onchange="updateOrderChargeField('${chargeId}', 'value', this.value)">
-              <select class="inline-input" onchange="updateOrderChargeField('${chargeId}', 'mode', this.value)">
-                <option value="fixed" ${mode === "fixed" ? "selected" : ""}>Fixed</option>
-                <option value="percent" ${mode === "percent" ? "selected" : ""}>%</option>
-              </select>
-              <select class="inline-input" onchange="updateOrderChargeField('${chargeId}', 'adjustmentType', this.value)">
+              <span class="charge-value-editor">
+                <input class="inline-input charge-value-input" type="number" value="${value}" onchange="updateOrderChargeField('${chargeId}', 'value', this.value)">
+                <button type="button" class="charge-mode-toggle" onclick="toggleOrderChargeMode('${chargeId}')" aria-label="Toggle charge mode">${modeLabel}</button>
+              </span>
+              <select class="inline-input charge-type-select" onchange="updateOrderChargeField('${chargeId}', 'adjustmentType', this.value)">
                 <option value="add" ${direction === "add" ? "selected" : ""}>Add</option>
                 <option value="deduct" ${direction === "deduct" ? "selected" : ""}>Deduct</option>
               </select>
-              <span>${amountLabel}</span>
-              <button type="button" class="secondary tiny-btn" onclick="removeOrderCharge('${chargeId}')">Remove</button>
+              <span class="charge-applied">${amountLabel}</span>
+              <span class="charge-action-cell"><button type="button" class="charge-row-delete" onclick="removeOrderCharge('${chargeId}')" aria-label="Remove charge">✕</button></span>
             </div>
           `;
-        }
+        }).join("");
 
-        return `
-          <div class="charge-editor-row readonly">
-            <span>${label}</span>
-            <span>${mode === "percent" ? `${value}%` : formatCurrency(value)}</span>
-            <span>${amountLabel}</span>
+        chargesHost.innerHTML = `
+          <div class="charge-table editable" role="table" aria-label="Order charges">
+            <div class="charge-table-header" role="row">
+              <span role="columnheader">Charge Name</span>
+              <span role="columnheader">Value</span>
+              <span role="columnheader">Type</span>
+              <span role="columnheader">Applied Price</span>
+              <span role="columnheader">Action</span>
+            </div>
+            <div class="charge-table-body" role="rowgroup">${rowsHtml}</div>
           </div>
         `;
-      }).join("");
+      } else {
+        const rowsHtml = charges.map((charge) => {
+          const type = String(charge.type || "delivery");
+          const label = escapeOrderHtml(String(charge.label || type));
+          const mode = String(charge.mode || "fixed");
+          const direction = getOrderChargeDirection(charge);
+          const value = Number(charge.value || 0);
+          const amount = Number(getOrderChargeAmount(charge, Number(hydrated.subtotal || 0), items) || 0);
+          const amountLabel = direction === "deduct" ? `-${formatCurrency(amount)}` : `+${formatCurrency(amount)}`;
+          return `
+            <div class="charge-table-row">
+              <span class="charge-name">${label}</span>
+              <span class="charge-value">${mode === "percent" ? `${value}%` : formatCurrency(value)}</span>
+              <span class="charge-applied">${amountLabel}</span>
+              <span class="charge-action-cell"><button type="button" class="charge-row-delete" disabled aria-label="Charge action unavailable">✕</button></span>
+            </div>
+          `;
+        }).join("");
+
+        chargesHost.innerHTML = `
+          <div class="charge-table" role="table" aria-label="Order charges">
+            <div class="charge-table-header" role="row">
+              <span role="columnheader">Charge Name</span>
+              <span role="columnheader">Value</span>
+              <span role="columnheader">Applied Price</span>
+              <span role="columnheader">Action</span>
+            </div>
+            <div class="charge-table-body" role="rowgroup">${rowsHtml}</div>
+          </div>
+        `;
+      }
     }
   }
 
@@ -581,6 +617,16 @@ function renderOrder() {
   }
 
   if (paymentEl) paymentEl.disabled = !isDraft;
+}
+
+function toggleOrderCustomChargeField() {
+  const typeEl = document.getElementById("ocType");
+  const customEl = document.getElementById("ocLabel");
+  if (!typeEl || !customEl) return;
+
+  const visible = String(typeEl.value || "") === "custom";
+  customEl.style.display = visible ? "block" : "none";
+  if (!visible) customEl.value = "";
 }
 
 function updateOrderItemField(itemId, field, value) {
@@ -660,6 +706,19 @@ function removeOrderCharge(chargeId) {
   };
   saveDraftOrderChanges(next, `Charge removed: ${row ? row.label || row.type : chargeId}`);
   renderOrder();
+}
+
+function toggleOrderChargeMode(chargeId) {
+  const order = ensureActiveOrder();
+  if (!order || !isOrderDraft(order)) return;
+
+  const charges = Array.isArray(order.charges) ? order.charges : [];
+  const charge = charges.find((row) => String(row.id || "") === String(chargeId || ""));
+  if (!charge) return;
+
+  const current = String(charge.mode || "fixed");
+  const next = current === "percent" ? "fixed" : "percent";
+  updateOrderChargeField(chargeId, "mode", next);
 }
 
 function updateTotals(subtotal, gst, total) {
@@ -848,6 +907,10 @@ function openOrderChargeModal() {
       applyTo.appendChild(opt);
     });
   }
+
+  toggleOrderCustomChargeField();
+  const typeEl = document.getElementById("ocType");
+  if (typeEl) typeEl.onchange = toggleOrderCustomChargeField;
 }
 
 function closeOrderChargeModal() {
@@ -859,6 +922,7 @@ function closeOrderChargeModal() {
   if (document.getElementById("ocValue")) document.getElementById("ocValue").value = "";
   if (document.getElementById("ocMode")) document.getElementById("ocMode").value = "fixed";
   if (document.getElementById("ocApplyTo")) document.getElementById("ocApplyTo").value = "all";
+  toggleOrderCustomChargeField();
 }
 
 function addOrderCharge() {
@@ -1217,23 +1281,25 @@ function installOrderAccordionFallback() {
     const summary = details.querySelector("summary");
     if (!summary) return;
 
-    let beforeClickOpen = null;
-    summary.addEventListener("pointerdown", () => {
-      beforeClickOpen = details.hasAttribute("open");
+    if (summary.dataset.accordionBound === "true") return;
+    summary.dataset.accordionBound = "true";
+
+    const toggle = () => {
+      if (details.hasAttribute("open")) details.removeAttribute("open");
+      else details.setAttribute("open", "");
+    };
+
+    // Use explicit toggling for consistent behavior across browsers/input methods.
+    summary.addEventListener("click", (event) => {
+      event.preventDefault();
+      toggle();
     });
 
-    summary.addEventListener("click", () => {
-      const before = beforeClickOpen == null ? details.hasAttribute("open") : beforeClickOpen;
-      beforeClickOpen = null;
-
-      setTimeout(() => {
-        const after = details.hasAttribute("open");
-        // Fallback for environments that do not toggle native details/summary.
-        if (after === before) {
-          if (after) details.removeAttribute("open");
-          else details.setAttribute("open", "");
-        }
-      }, 0);
+    summary.addEventListener("keydown", (event) => {
+      if (event.key === "Enter" || event.key === " ") {
+        event.preventDefault();
+        toggle();
+      }
     });
   });
 }
@@ -1274,4 +1340,5 @@ if (typeof window !== "undefined") {
   window.addOrderCharge = addOrderCharge;
   window.updateOrderChargeField = updateOrderChargeField;
   window.removeOrderCharge = removeOrderCharge;
+  window.toggleOrderChargeMode = toggleOrderChargeMode;
 }

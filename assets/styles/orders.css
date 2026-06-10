@@ -269,6 +269,10 @@ h4 {
     margin: 8px 0;
 }
 
+.order-inline-accordion {
+    margin: 2px 0;
+}
+
 .order-amount {
     margin-top: 4px;
     font-size: 20px;
@@ -300,6 +304,85 @@ h4 {
     justify-content: space-between;
     font-size: 14px;
     margin-bottom: 6px;
+}
+
+.charge-table {
+    border: 1px solid #e5ebf2;
+    border-radius: 10px;
+    background: #fbfcfe;
+    overflow: hidden;
+    width: 100%;
+}
+
+.charge-table-header,
+.charge-table-row {
+    display: grid;
+    grid-template-columns: 1.8fr 0.9fr 1fr 36px;
+    column-gap: 12px;
+    align-items: center;
+    padding: 7px 8px;
+}
+
+.charge-table-header {
+    font-size: 11px;
+    font-weight: 700;
+    color: #475569;
+    background: #f1f5f9;
+    border-bottom: 1px solid #e2e8f0;
+}
+
+.charge-table-row {
+    font-size: 12px;
+    color: #1f2937;
+}
+
+.charge-table-row + .charge-table-row {
+    border-top: 1px solid #edf2f7;
+}
+
+.charge-value,
+.charge-applied {
+    white-space: nowrap;
+    text-align: right;
+}
+
+.charge-table-header span:nth-child(2),
+.charge-table-header span:nth-child(3),
+.charge-value,
+.charge-applied {
+    justify-self: end;
+}
+
+.charge-table-header span:nth-child(4),
+.charge-action-cell {
+    justify-self: center;
+    text-align: center;
+    color: #94a3b8;
+}
+
+.charge-name {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.charge-row-delete {
+    width: 24px;
+    height: 24px;
+    min-width: 24px;
+    padding: 0;
+    border-radius: 999px;
+    line-height: 1;
+    font-size: 12px;
+    border: 1px solid #e2e8f0;
+    background: #f8fafc;
+    color: #94a3b8;
+}
+
+.charge-row-delete:disabled {
+    cursor: not-allowed;
+    opacity: 0.85;
 }
 
 /* =========================
@@ -551,5 +634,12 @@ h4 {
 
     .order-amount {
         font-size: 18px;
+    }
+
+    .charge-table-header,
+    .charge-table-row {
+        grid-template-columns: 1.8fr 0.9fr 1fr 32px;
+        column-gap: 10px;
+        padding: 6px 7px;
     }
 }

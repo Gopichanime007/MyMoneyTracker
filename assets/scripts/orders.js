@@ -448,20 +448,37 @@ function renderOrderChargeRows(order) {
     return '<div class="order-subsection-empty">No charges</div>';
   }
 
-  return charges.map((charge) => {
+  const rowsHtml = charges.map((charge) => {
     const amount = Number(getOrderChargeAmount(charge, items, subtotal) || 0);
     const direction = getOrderChargeDirection(charge);
     const amountLabel = direction === "deduct"
       ? `-${formatCurrency(amount)}`
       : (direction === "add" ? `+${formatCurrency(amount)}` : `${formatCurrency(amount)} (legacy excluded)`);
+    const valueLabel = String(charge.mode || "fixed") === "percent"
+      ? `${Number(charge.value || 0)}%`
+      : formatCurrency(Number(charge.value || 0));
     const label = String(charge.label || charge.type || "Charge").replace(/</g, "&lt;").replace(/>/g, "&gt;");
     return `
-      <div class="item-row">
-        <span>${label}</span>
-        <span>${amountLabel}</span>
+      <div class="charge-table-row">
+        <span class="charge-name">${label}</span>
+        <span class="charge-value">${valueLabel}</span>
+        <span class="charge-applied">${amountLabel}</span>
+        <span class="charge-action-cell"><button type="button" class="charge-row-delete" disabled aria-label="Charge action unavailable">✕</button></span>
       </div>
     `;
   }).join("");
+
+  return `
+    <div class="charge-table" role="table" aria-label="Order charges">
+      <div class="charge-table-header" role="row">
+        <span role="columnheader">Charge Name</span>
+        <span role="columnheader">Value</span>
+        <span role="columnheader">Applied Price</span>
+        <span role="columnheader">Action</span>
+      </div>
+      <div class="charge-table-body" role="rowgroup">${rowsHtml}</div>
+    </div>
+  `;
 }
 
 function renderOrders() {
@@ -529,6 +546,8 @@ function renderOrders() {
     const varianceAmount = varianceRaw > 0
       ? `+${formatCurrency(varianceRaw)}`
       : (varianceRaw < 0 ? `-${formatCurrency(Math.abs(varianceRaw))}` : formatCurrency(0));
+    const timelineHtml = renderOrderTimelineRows(order);
+    const auditHtml = renderOrderAuditRows(order);
 
     div.innerHTML = `
       <div class="order-header" onclick="toggleOrder('${order.id}')">
@@ -583,6 +602,22 @@ function renderOrders() {
 
         <div class="order-divider"></div>
 
+        <details class="secondary-accordion order-inline-accordion">
+          <summary>Timeline</summary>
+          <div class="accordion-body">
+            ${timelineHtml}
+          </div>
+        </details>
+
+        <details class="secondary-accordion order-inline-accordion">
+          <summary>Audit and Activity</summary>
+          <div class="accordion-body">
+            ${auditHtml}
+          </div>
+        </details>
+
+        <div class="order-divider"></div>
+
         <div class="order-section">
           <div class="order-subsection-title">Actions</div>
           <div class="order-actions-row">
@@ -596,6 +631,7 @@ function renderOrders() {
   });
 
   container.appendChild(fragment);
+  installOrdersAccordionBehavior();
 }
 
 function toggleOrder(id) {
@@ -660,6 +696,30 @@ function getOrderFundingSummary(order) {
     ? `+${formatCurrency(variance)}`
     : (variance < 0 ? `-${formatCurrency(Math.abs(variance))}` : formatCurrency(0));
   return `Funding Source ${sourceName} | Quoted Amount ${planned} | Order Amount ${total} | Variance ${varianceLabel}`;
+}
+
+function renderOrderTimelineRows(order) {
+  const history = Array.isArray(order && order.statusHistory) ? order.statusHistory : [];
+  if (!history.length) return '<div class="order-meta">No timeline events</div>';
+
+  return history.slice().reverse().map((entry) => {
+    const at = entry && entry.at ? new Date(entry.at).toLocaleString("en-IN") : "-";
+    const fromLabel = entry && entry.from ? formatOrderStatus(entry.from) : "-";
+    const toLabel = formatOrderStatus(entry && entry.to ? entry.to : (order && order.status ? order.status : "draft"));
+    const note = String(entry && entry.note ? entry.note : "").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    return `<div class="order-meta"><strong>${String(at).replace(/</g, "&lt;").replace(/>/g, "&gt;")}</strong> | ${fromLabel} → ${toLabel}${note ? ` | ${note}` : ""}</div>`;
+  }).join("");
+}
+
+function renderOrderAuditRows(order) {
+  const rows = [];
+  if (order && order.quotationNo) rows.push(`<div class="order-meta"><strong>Quotation:</strong> ${String(order.quotationNo).replace(/</g, "&lt;").replace(/>/g, "&gt;")}</div>`);
+  if (order && order.paymentType) rows.push(`<div class="order-meta"><strong>Payment:</strong> ${String(order.paymentType).replace(/</g, "&lt;").replace(/>/g, "&gt;")}</div>`);
+  if (order && order.cancelledAt) rows.push(`<div class="order-meta"><strong>Cancelled At:</strong> ${new Date(order.cancelledAt).toLocaleString("en-IN")}</div>`);
+  if (order && order.cancellationReason) rows.push(`<div class="order-meta"><strong>Reason:</strong> ${String(order.cancellationReason).replace(/</g, "&lt;").replace(/>/g, "&gt;")}</div>`);
+  if (order && order.updatedAt) rows.push(`<div class="order-meta"><strong>Last Updated:</strong> ${new Date(order.updatedAt).toLocaleString("en-IN")}</div>`);
+  if (!rows.length) rows.push('<div class="order-meta">No audit records</div>');
+  return rows.join("");
 }
 
 async function deleteOrder(orderId) {
@@ -789,7 +849,37 @@ function confirmDelete() {
   showOrdersNotice("Order cancelled and audit logged.", "success");
 }
 
-document.addEventListener("DOMContentLoaded", renderOrders);
+function installOrdersAccordionBehavior() {
+  const accordions = Array.from(document.querySelectorAll("details.secondary-accordion"));
+  accordions.forEach((details) => {
+    const summary = details.querySelector("summary");
+    if (!summary) return;
+    if (summary.dataset.accordionBound === "true") return;
+    summary.dataset.accordionBound = "true";
+
+    const toggle = () => {
+      if (details.hasAttribute("open")) details.removeAttribute("open");
+      else details.setAttribute("open", "");
+    };
+
+    summary.addEventListener("click", (event) => {
+      event.preventDefault();
+      toggle();
+    });
+
+    summary.addEventListener("keydown", (event) => {
+      if (event.key === "Enter" || event.key === " ") {
+        event.preventDefault();
+        toggle();
+      }
+    });
+  });
+}
+
+document.addEventListener("DOMContentLoaded", () => {
+  installOrdersAccordionBehavior();
+  renderOrders();
+});
 
 if (typeof window !== "undefined") {
   window.openOrder = openOrder;
