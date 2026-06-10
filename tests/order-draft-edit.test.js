@@ -1,0 +1,187 @@
+function buildOrderDom() {
+  document.body.innerHTML = `
+    <span id="orderStatusLabel"></span>
+    <span id="orderIdLabel"></span>
+    <span id="orderNoLabel"></span>
+    <span id="orderCreatedLabel"></span>
+    <span id="orderTotalAmount"></span>
+    <span id="orderQuotationLabel"></span>
+    <span id="orderPurposeLabel"></span>
+    <span id="orderSourceLabel"></span>
+
+    <input id="oPurposeInput" />
+    <select id="oSourceType"><option value=""></option><option value="savings">savings</option></select>
+    <select id="oSourceValue"><option value=""></option></select>
+
+    <button id="addOrderItemBtn"></button>
+    <button id="addOrderChargeBtn"></button>
+
+    <div data-order-step="draft"></div>
+    <div data-order-step="confirmed"></div>
+    <div data-order-step="processing"></div>
+    <div data-order-step="completed"></div>
+
+    <button data-order-action="confirmed"></button>
+    <button data-order-action="processing"></button>
+    <button data-order-action="completed"></button>
+    <button data-order-action="cancelled"></button>
+
+    <div id="orderAuditTrail"></div>
+    <div id="orderItems"></div>
+    <div id="orderChargesList"></div>
+
+    <span id="oSubtotal"></span>
+    <span id="oGSTAmount"></span>
+    <span id="oFinalTotal"></span>
+    <div id="sourcePreview"></div>
+
+    <select id="oPaymentType"><option value=""></option><option value="UPI">UPI</option></select>
+
+    <div id="orderItemModal"></div>
+    <input id="oiName" />
+    <input id="oiPrice" />
+    <input id="oiQty" />
+    <input id="oiSource" />
+    <input id="oiLink" />
+
+    <div id="orderChargeModal"></div>
+    <select id="ocType"><option value="delivery">delivery</option><option value="custom">custom</option></select>
+    <input id="ocLabel" />
+    <select id="ocAdjustmentType"><option value="add">add</option><option value="deduct">deduct</option></select>
+    <input id="ocValue" />
+    <select id="ocMode"><option value="fixed">fixed</option><option value="percent">percent</option></select>
+    <select id="ocApplyTo"><option value="all">all</option></select>
+  `;
+}
+
+function installOrderDeps() {
+  window.showToast = jest.fn();
+  window.formatCurrency = (v) => `INR ${Number(v || 0).toFixed(2)}`;
+  window.getDailyLimit = () => 0;
+  window.AppDialog = {
+    confirm: jest.fn(async () => true),
+    prompt: jest.fn(async () => "")
+  };
+  window.DocWorkflow = {
+    findOrderForQuotation: jest.fn(() => null),
+    getRelationByQuotationId: jest.fn(() => null)
+  };
+}
+
+function seedDraftOrder() {
+  const now = new Date().toISOString();
+  const row = {
+    id: "ord_draft_1",
+    orderNo: "ORD-DRAFT-1",
+    quotationId: "qt_1",
+    quotationNo: "QT-1",
+    status: "draft",
+    statusHistory: [{ at: now, from: null, to: "draft", note: "created" }],
+    purpose: "Office setup",
+    items: [{ id: "i1", name: "Chair", price: 100, qty: 1, source: "Store", link: "", total: 100 }],
+    charges: [{ id: "c1", type: "delivery", label: "delivery", adjustmentType: "add", value: 20, mode: "fixed", appliesTo: "all" }],
+    subtotal: 100,
+    gst: 0,
+    total: 120,
+    plannedAmount: 120,
+    sourceType: "savings",
+    sourceId: "sav-1",
+    sourceName: "Main Savings",
+    paymentType: null,
+    createdAt: now,
+    updatedAt: now,
+    financialPosted: false
+  };
+
+  localStorage.setItem("orders", JSON.stringify([row]));
+  localStorage.setItem("activeOrderId", JSON.stringify("ord_draft_1"));
+}
+
+function updateSeedOrder(patch) {
+  const rows = JSON.parse(localStorage.getItem("orders") || "[]");
+  if (!rows.length) return;
+  rows[0] = { ...rows[0], ...patch };
+  localStorage.setItem("orders", JSON.stringify(rows));
+}
+
+beforeEach(() => {
+  localStorage.clear();
+  jest.resetModules();
+  buildOrderDom();
+  installOrderDeps();
+  seedDraftOrder();
+  require("../assets/scripts/order.js");
+  document.dispatchEvent(new Event("DOMContentLoaded"));
+});
+
+test("Draft order item and charge edits persist after render cycle", () => {
+  window.updateOrderItemField("i1", "qty", "2");
+  window.updateOrderItemField("i1", "price", "150");
+
+  document.getElementById("ocType").value = "custom";
+  document.getElementById("ocLabel").value = "Negotiation";
+  document.getElementById("ocAdjustmentType").value = "deduct";
+  document.getElementById("ocValue").value = "30";
+  document.getElementById("ocMode").value = "fixed";
+  document.getElementById("ocApplyTo").value = "all";
+  window.addOrderCharge();
+
+  const rows = JSON.parse(localStorage.getItem("orders") || "[]");
+  expect(rows).toHaveLength(1);
+  expect(Number(rows[0].items[0].qty)).toBe(2);
+  expect(Number(rows[0].items[0].price)).toBe(150);
+  expect(rows[0].charges.some((c) => c.label === "Negotiation")).toBe(true);
+  expect(Number(rows[0].subtotal)).toBeCloseTo(300, 2);
+  expect(Number(rows[0].total)).toBeCloseTo(290, 2);
+});
+
+test("Budget-funded confirm still shows daily-limit warning", async () => {
+  window.getDailyLimit = () => 10;
+  window.AppDialog.confirm = jest.fn(async () => true);
+
+  localStorage.setItem("budgets", JSON.stringify([
+    {
+      id: "budget-1",
+      budgetId: "budget-1",
+      name: "Ops Budget",
+      totalAllocated: 1000
+    }
+  ]));
+
+  updateSeedOrder({
+    sourceType: "budget",
+    sourceId: "budget-1",
+    sourceName: "Ops Budget"
+  });
+
+  document.getElementById("oPaymentType").value = "UPI";
+  await window.completePurchase();
+
+  expect(window.AppDialog.confirm).toHaveBeenCalledWith(expect.stringContaining("Daily limit exceeded."));
+});
+
+test("Savings-funded confirm skips daily-limit warning", async () => {
+  window.getDailyLimit = () => 10;
+  window.AppDialog.confirm = jest.fn(async () => true);
+
+  const now = new Date().toISOString();
+  localStorage.setItem("savingsTransactions", JSON.stringify([
+    {
+      id: "sav-1",
+      amount: 1000,
+      note: "Main Savings",
+      date: now
+    }
+  ]));
+
+  updateSeedOrder({
+    sourceType: "savings",
+    sourceId: "sav-1",
+    sourceName: "Main Savings"
+  });
+
+  document.getElementById("oPaymentType").value = "UPI";
+  await window.completePurchase();
+
+  expect(window.AppDialog.confirm).not.toHaveBeenCalledWith(expect.stringContaining("Daily limit exceeded."));
+});
