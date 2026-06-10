@@ -977,45 +977,6 @@ async function completePurchase() {
   let target = { ...orders[idx] };
   let now = new Date().toISOString();
 
-  if (!target.financialPosted) {
-    let purpose = (target.items || []).map(i => i.name).join(", ") || "Order Purchase";
-    let expenseEntryId = createOrderId();
-
-    expenses.push({
-      id: expenseEntryId,
-      amount: -Math.abs(total),
-      type: "expense",
-      category: "Orders",
-      purpose: "Order Purchase: " + purpose,
-      sourceId: selectedSourceId,
-      sourceName: summary.name,
-      sourceType,
-      paymentType,
-      date: now,
-      linkedOrderId: target.id
-    });
-
-    localStorage.setItem("expenses", JSON.stringify(expenses));
-
-    if (sourceType === "savings") {
-      let savings = JSON.parse(localStorage.getItem("savingsTransactions") || "[]");
-      savings.push({
-        id: createOrderId(),
-        type: "expense",
-        amount: -Math.abs(total),
-        note: summary.name,
-        sourceId: selectedSourceId,
-        paymentType,
-        date: now,
-        linkedOrderId: target.id
-      });
-      localStorage.setItem("savingsTransactions", JSON.stringify(savings));
-    }
-
-    target.financialPosted = true;
-    target.financialEntryId = expenseEntryId;
-  }
-
   target.status = "confirmed";
   target.sourceId = order.sourceId;
   target.sourceName = order.sourceName || summary.name;
@@ -1065,6 +1026,79 @@ async function advanceOrderStatus(nextStatus) {
 
   const now = new Date().toISOString();
   const row = { ...orders[idx] };
+
+  if (nextStatus === "completed" && !row.financialPosted) {
+    const sourceId = String(row.sourceId || "");
+    const sourceType = String(row.sourceType || "");
+    const paymentType = String(row.paymentType || "");
+
+    if (!sourceType || !sourceId) {
+      showOrderNotice("Funding source must be selected before completion.", "warning");
+      return;
+    }
+
+    if (!paymentType) {
+      showOrderNotice("Payment type must be selected before completion.", "warning");
+      return;
+    }
+
+    const summary = getLedgerSummary(sourceId, sourceType);
+    if (!summary) {
+      showOrderNotice("Selected source is invalid.", "error");
+      return;
+    }
+
+    const total = Number(row.total || 0);
+    if (Number(summary.remaining || 0) < total) {
+      showOrderNotice(`Not enough balance. Available ${formatCurrency(summary.remaining)} | Needed ${formatCurrency(total)}.`, "warning");
+      return;
+    }
+
+    const expenses = JSON.parse(localStorage.getItem("expenses") || "[]");
+    const purpose = (row.items || []).map(i => i.name).join(", ") || "Order Purchase";
+    const expenseEntryId = createOrderId();
+
+    expenses.push({
+      id: expenseEntryId,
+      amount: -Math.abs(total),
+      type: "expense",
+      category: "Orders",
+      purpose: "Order Purchase: " + purpose,
+      sourceId,
+      sourceName: row.sourceName || summary.name,
+      sourceType,
+      paymentType,
+      date: now,
+      linkedOrderId: row.id
+    });
+    localStorage.setItem("expenses", JSON.stringify(expenses));
+
+    if (sourceType === "savings") {
+      const savings = JSON.parse(localStorage.getItem("savingsTransactions") || "[]");
+      savings.push({
+        id: createOrderId(),
+        type: "expense",
+        amount: -Math.abs(total),
+        note: row.sourceName || summary.name,
+        sourceId,
+        paymentType,
+        date: now,
+        linkedOrderId: row.id
+      });
+      localStorage.setItem("savingsTransactions", JSON.stringify(savings));
+    }
+
+    row.financialPosted = true;
+    row.financialEntryId = expenseEntryId;
+    if (!Array.isArray(row.statusHistory)) row.statusHistory = [];
+    row.statusHistory.push({
+      at: now,
+      from: current,
+      to: current,
+      note: "Financial transaction posted"
+    });
+  }
+
   if (!Array.isArray(row.statusHistory)) row.statusHistory = [];
   row.statusHistory.push({
     at: now,

@@ -104,6 +104,17 @@ function updateSeedOrder(patch) {
   localStorage.setItem("orders", JSON.stringify(rows));
 }
 
+function seedSavingsWallet(amount = 1000) {
+  localStorage.setItem("savingsTransactions", JSON.stringify([
+    {
+      id: "sav-1",
+      amount,
+      note: "Main Savings",
+      date: new Date().toISOString()
+    }
+  ]));
+}
+
 beforeEach(() => {
   localStorage.clear();
   jest.resetModules();
@@ -164,15 +175,7 @@ test("Savings-funded confirm skips daily-limit warning", async () => {
   window.getDailyLimit = () => 10;
   window.AppDialog.confirm = jest.fn(async () => true);
 
-  const now = new Date().toISOString();
-  localStorage.setItem("savingsTransactions", JSON.stringify([
-    {
-      id: "sav-1",
-      amount: 1000,
-      note: "Main Savings",
-      date: now
-    }
-  ]));
+  seedSavingsWallet(1000);
 
   updateSeedOrder({
     sourceType: "savings",
@@ -184,4 +187,66 @@ test("Savings-funded confirm skips daily-limit warning", async () => {
   await window.completePurchase();
 
   expect(window.AppDialog.confirm).not.toHaveBeenCalledWith(expect.stringContaining("Daily limit exceeded."));
+});
+
+test("Confirm transitions status but does not create financial transactions", async () => {
+  seedSavingsWallet(1000);
+  updateSeedOrder({
+    sourceType: "savings",
+    sourceId: "sav-1",
+    sourceName: "Main Savings",
+    financialPosted: false,
+    financialEntryId: null
+  });
+
+  document.getElementById("oPaymentType").value = "UPI";
+  await window.completePurchase();
+
+  const orders = JSON.parse(localStorage.getItem("orders") || "[]");
+  expect(orders[0].status).toBe("confirmed");
+  expect(orders[0].financialPosted).toBe(false);
+  expect(orders[0].financialEntryId).toBeNull();
+
+  const expenses = JSON.parse(localStorage.getItem("expenses") || "[]");
+  expect(expenses.length).toBe(0);
+
+  const savings = JSON.parse(localStorage.getItem("savingsTransactions") || "[]");
+  expect(savings.length).toBe(1);
+});
+
+test("Complete creates exactly one financial transaction and repeat complete cannot double-post", async () => {
+  seedSavingsWallet(1000);
+  updateSeedOrder({
+    sourceType: "savings",
+    sourceId: "sav-1",
+    sourceName: "Main Savings",
+    financialPosted: false,
+    financialEntryId: null
+  });
+
+  document.getElementById("oPaymentType").value = "UPI";
+  await window.completePurchase();
+  await window.advanceOrderStatus("processing");
+  await window.advanceOrderStatus("completed");
+
+  let orders = JSON.parse(localStorage.getItem("orders") || "[]");
+  expect(orders[0].status).toBe("completed");
+  expect(orders[0].financialPosted).toBe(true);
+  expect(typeof orders[0].financialEntryId).toBe("string");
+
+  let expenses = JSON.parse(localStorage.getItem("expenses") || "[]");
+  expect(expenses.filter((row) => row.type === "expense" && row.linkedOrderId === "ord_draft_1")).toHaveLength(1);
+
+  let savings = JSON.parse(localStorage.getItem("savingsTransactions") || "[]");
+  expect(savings.filter((row) => row.type === "expense" && row.linkedOrderId === "ord_draft_1")).toHaveLength(1);
+
+  await window.advanceOrderStatus("completed");
+
+  orders = JSON.parse(localStorage.getItem("orders") || "[]");
+  expenses = JSON.parse(localStorage.getItem("expenses") || "[]");
+  savings = JSON.parse(localStorage.getItem("savingsTransactions") || "[]");
+
+  expect(orders[0].financialPosted).toBe(true);
+  expect(expenses.filter((row) => row.type === "expense" && row.linkedOrderId === "ord_draft_1")).toHaveLength(1);
+  expect(savings.filter((row) => row.type === "expense" && row.linkedOrderId === "ord_draft_1")).toHaveLength(1);
 });
