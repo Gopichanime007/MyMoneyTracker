@@ -16,24 +16,35 @@ function buildOrderDom() {
     <button id="addOrderItemBtn"></button>
     <button id="addOrderChargeBtn"></button>
 
-    <div data-order-step="draft"></div>
-    <div data-order-step="confirmed"></div>
-    <div data-order-step="processing"></div>
-    <div data-order-step="completed"></div>
+    <details class="secondary-accordion" id="fundingAccordion">
+      <summary>Funding Diagnostics</summary>
+      <div id="sourcePreview"></div>
+    </details>
+
+    <details class="secondary-accordion" id="timelineAccordion">
+      <summary>Timeline</summary>
+      <div data-order-step="draft"></div>
+      <div data-order-step="confirmed"></div>
+      <div data-order-step="processing"></div>
+      <div data-order-step="completed"></div>
+    </details>
+
+    <details class="secondary-accordion" id="auditAccordion">
+      <summary>Audit and Activity</summary>
+      <div id="orderAuditTrail"></div>
+    </details>
 
     <button data-order-action="confirmed"></button>
     <button data-order-action="processing"></button>
     <button data-order-action="completed"></button>
     <button data-order-action="cancelled"></button>
 
-    <div id="orderAuditTrail"></div>
     <div id="orderItems"></div>
     <div id="orderChargesList"></div>
 
     <span id="oSubtotal"></span>
     <span id="oGSTAmount"></span>
     <span id="oFinalTotal"></span>
-    <div id="sourcePreview"></div>
 
     <select id="oPaymentType"><option value=""></option><option value="UPI">UPI</option></select>
 
@@ -249,4 +260,32 @@ test("Complete creates exactly one financial transaction and repeat complete can
   expect(orders[0].financialPosted).toBe(true);
   expect(expenses.filter((row) => row.type === "expense" && row.linkedOrderId === "ord_draft_1")).toHaveLength(1);
   expect(savings.filter((row) => row.type === "expense" && row.linkedOrderId === "ord_draft_1")).toHaveLength(1);
+});
+
+test("Timeline accordion expands and collapses", async () => {
+  const details = document.getElementById("timelineAccordion");
+  const summary = details.querySelector("summary");
+
+  expect(details.hasAttribute("open")).toBe(false);
+  summary.click();
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  expect(details.hasAttribute("open")).toBe(true);
+
+  summary.click();
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  expect(details.hasAttribute("open")).toBe(false);
+});
+
+test("Audit accordion expands and collapses", async () => {
+  const details = document.getElementById("auditAccordion");
+  const summary = details.querySelector("summary");
+
+  expect(details.hasAttribute("open")).toBe(false);
+  summary.click();
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  expect(details.hasAttribute("open")).toBe(true);
+
+  summary.click();
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  expect(details.hasAttribute("open")).toBe(false);
 });

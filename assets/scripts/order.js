@@ -1211,9 +1211,37 @@ function getLedgerSummary(sourceId, type) {
   return getSourceSummaryById(sourceId, type);
 }
 
+function installOrderAccordionFallback() {
+  const accordions = Array.from(document.querySelectorAll("details.secondary-accordion"));
+  accordions.forEach((details) => {
+    const summary = details.querySelector("summary");
+    if (!summary) return;
+
+    let beforeClickOpen = null;
+    summary.addEventListener("pointerdown", () => {
+      beforeClickOpen = details.hasAttribute("open");
+    });
+
+    summary.addEventListener("click", () => {
+      const before = beforeClickOpen == null ? details.hasAttribute("open") : beforeClickOpen;
+      beforeClickOpen = null;
+
+      setTimeout(() => {
+        const after = details.hasAttribute("open");
+        // Fallback for environments that do not toggle native details/summary.
+        if (after === before) {
+          if (after) details.removeAttribute("open");
+          else details.setAttribute("open", "");
+        }
+      }, 0);
+    });
+  });
+}
+
 document.addEventListener("DOMContentLoaded", () => {
   if (document.getElementById && document.getElementById("orderItems")) {
     renderOrder();
+    installOrderAccordionFallback();
 
     const purposeInput = document.getElementById("oPurposeInput");
     if (purposeInput) purposeInput.addEventListener("blur", updateOrderPurpose);
