@@ -1,5 +1,9 @@
 const isSavingsPage = (typeof window !== 'undefined' && window.location && typeof window.location.pathname === 'string' && window.location.pathname.includes("savings")) || false;
 let currentFilteredExpenses = [];
+let expenseBudgetSelectionState = {
+    userSelectedBudget: false,
+    lastSuggestedBudgetId: ""
+};
 // =========================
 // 💱 CURRENCY CORE SYSTEM
 // =========================
@@ -497,6 +501,9 @@ if (typeof window !== 'undefined') {
     window.updateBudgetEfficiency = window.updateBudgetEfficiency || updateBudgetEfficiency;
     window.computeBudgetEfficiencyMetrics = window.computeBudgetEfficiencyMetrics || computeBudgetEfficiencyMetrics;
     window.loadBudgetOptions = window.loadBudgetOptions || loadBudgetOptions;
+    window.autoSelectExpenseBudget = window.autoSelectExpenseBudget || autoSelectExpenseBudget;
+    window.resetExpenseBudgetSelectionState = window.resetExpenseBudgetSelectionState || resetExpenseBudgetSelectionState;
+    window.markExpenseBudgetManuallySelected = window.markExpenseBudgetManuallySelected || markExpenseBudgetManuallySelected;
     window.setupAttachmentInputs = window.setupAttachmentInputs || setupAttachmentInputs;
     window.clearExpenseAttachmentState = window.clearExpenseAttachmentState || clearExpenseAttachmentState;
     window.clearSavingsAttachmentState = window.clearSavingsAttachmentState || clearSavingsAttachmentState;
@@ -1515,13 +1522,8 @@ function loadHistory(list = getExpenses()) {
             return;
         }
 
-        let withRunning = rebalanceExpenseLedger(finalList, getBudgets()).slice().sort((a, b) => {
-            let da = new Date(a.date || 0).getTime();
-            let db = new Date(b.date || 0).getTime();
-            if (da !== db) return da - db;
-            return String(a.id || "").localeCompare(String(b.id || ""));
-        });
-        withRunning.slice().reverse().forEach((e) => {
+        let withRunning = rebalanceExpenseLedger(finalList, getBudgets());
+        withRunning.forEach((e) => {
 
             let div = document.createElement("div");
             div.className = "expense-item transaction-card";
@@ -1654,6 +1656,7 @@ async function deleteExpenseUI(id) {
         loadGraph();
         updateBudgetEfficiency();
         renderBudgetEntries();
+        resetExpenseBudgetSelectionState();
         loadBudgetOptions();
 
         showToast("Deleted");
@@ -1683,14 +1686,10 @@ function getLinkedPendingAmount(originalId, linkedTypes) {
 }
 
 const REFUND_TYPE_LABELS = {
-    cancellation: "Ticket Cancellation",
-    return: "Product Return",
-    recovery: "Expense Recovery",
-    reversal: "Bank Reversal",
-    adjustment: "Salary Adjustment",
-    cashback: "Cashback",
-    correction: "Transfer Correction",
-    loan_recovery: "Loan Recovery",
+    refund: "Refund",
+    correction: "Correction",
+    recovery: "Recovery",
+    cancellation: "Cancellation",
     custom: "Custom"
 };
 
@@ -1709,23 +1708,35 @@ function normalizeRefundType(value) {
     if (!raw) return "custom";
 
     const mapped = {
-        cancellation: "cancellation",
-        cancelled: "cancellation",
-        ticket_cancellation: "cancellation",
-        return: "return",
-        returned: "return",
-        product_return: "return",
+        refund: "refund",
+        refunded: "refund",
+        product_return: "refund",
+        return: "refund",
+        returned: "refund",
+        cashback: "refund",
+        bank_reversal: "refund",
+        reversal: "refund",
+
+        correction: "correction",
+        transfer_correction: "correction",
+        adjustment: "correction",
+        salary_adjustment: "correction",
+        adjustment_entry: "correction",
+        adjustment_entries: "correction",
+        correction_entry: "correction",
+        correction_entries: "correction",
+
         recovery: "recovery",
         expense_recovery: "recovery",
         reimbursement: "recovery",
-        reversal: "reversal",
-        bank_reversal: "reversal",
-        adjustment: "adjustment",
-        salary_adjustment: "adjustment",
-        cashback: "cashback",
-        correction: "correction",
-        transfer_correction: "correction",
-        loan_recovery: "loan_recovery",
+        loan_recovery: "recovery",
+
+        cancellation: "cancellation",
+        cancelled: "cancellation",
+        ticket_cancellation: "cancellation",
+        booking_cancellation: "cancellation",
+        order_cancellation: "cancellation",
+
         custom: "custom"
     };
 
@@ -1835,14 +1846,10 @@ function formatResolutionStatus(status) {
 function getRefundTypeGuidance(refundType) {
     const key = normalizeRefundType(refundType);
     const guidance = {
-        cancellation: "Money returned because a booking was cancelled (train, bus, flight).",
-        return: "Returned an item and received money back.",
-        cashback: "Reward or cashback received after spending.",
-        reversal: "Bank reversed an incorrect charge.",
-        recovery: "Someone repaid an expense you originally paid.",
-        correction: "Correction of an incorrect transfer.",
-        adjustment: "Additional salary or payroll correction.",
-        loan_recovery: "Money recovered from a loan previously given.",
+        refund: "Money returned from returns, cashback, or bank reversals.",
+        correction: "Correction entry for an earlier accounting or transfer mistake.",
+        recovery: "Money recovered from prior expenses or receivables.",
+        cancellation: "Money returned because a booking/order was cancelled.",
         custom: "Any refund not covered above."
     };
     return guidance[key] || guidance.custom;
@@ -2169,10 +2176,6 @@ async function handleAddExpense() {
             return;
         }
 
-        if (refundType === "loan_recovery" && !person) {
-            showToast("Select person for Loan Recovery");
-            return;
-        }
     }
 
     // ✅ SIGN FIX
@@ -2425,6 +2428,8 @@ function resetForm() {
 
     let today = new Date().toISOString().split("T")[0];
     if (document.getElementById("expenseDate")) document.getElementById("expenseDate").value = today;
+
+    resetExpenseBudgetSelectionState();
 
     clearExpenseAttachmentState();
 
@@ -2728,13 +2733,21 @@ window.addEventListener("load", function () {
 
         let today = new Date().toISOString().split("T")[0];
         let dateInput = document.getElementById("expenseDate");
-        if (dateInput) dateInput.value = today;
+        if (dateInput) {
+            dateInput.value = today;
+            dateInput.addEventListener("change", () => {
+                autoSelectExpenseBudget({ respectManual: true });
+            });
+        }
 
         handleEntryTypeUIChange();
         refreshExpenseRefundGuidance();
 
         let refundTypeSelect = document.getElementById("refundType");
         if (refundTypeSelect) refundTypeSelect.addEventListener("change", refreshExpenseRefundGuidance);
+
+        let budgetSelect = document.getElementById("budgetSelect");
+        if (budgetSelect) budgetSelect.addEventListener("change", markExpenseBudgetManuallySelected);
 
         let resolutionTypeSelect = document.getElementById("refundResolutionType");
         if (resolutionTypeSelect) resolutionTypeSelect.addEventListener("change", refreshExpenseRefundGuidance);
@@ -5551,6 +5564,7 @@ function loadBudgetOptions(options = null) {
     let budgets = getSelectableBudgetEntries(getBudgets());
     let expenses = getExpenses();
     let savingsEntries = (typeof getSavings === "function") ? getSavings() : [];
+    let previousValue = String(select.value || "");
 
     select.innerHTML = "";
 
@@ -5611,6 +5625,14 @@ function loadBudgetOptions(options = null) {
 
         select.appendChild(opt);
     });
+
+    if (previousValue && filtered.some(b => String((b && b.budgetId) || "") === previousValue)) {
+        select.value = previousValue;
+    }
+
+    if (mode === "expense") {
+        autoSelectExpenseBudget({ respectManual: true });
+    }
 }
 
 function getSelectableBudgetEntries(budgets) {
@@ -5620,6 +5642,117 @@ function getSelectableBudgetEntries(budgets) {
         if (!b || typeof b !== "object") return false;
         return !!String(b.budgetId || "").trim();
     });
+}
+
+function parseDateToDayStart(value) {
+    let d = value ? new Date(value) : new Date();
+    if (!Number.isFinite(d.getTime())) d = new Date();
+    d.setHours(0, 0, 0, 0);
+    return d;
+}
+
+function getExpenseDateForBudgetSelection() {
+    let raw = document.getElementById("expenseDate")?.value || "";
+    return parseDateToDayStart(raw);
+}
+
+function resolveBudgetDateRange(budget) {
+    if (!budget || typeof budget !== "object") return null;
+
+    if (budget.periodKey && String(budget.periodKey).includes("_to_")) {
+        let [startRaw, endRaw] = String(budget.periodKey).split("_to_");
+        let start = parseDateToDayStart(startRaw);
+        let end = parseDateToDayStart(endRaw);
+        if (!Number.isFinite(start.getTime()) || !Number.isFinite(end.getTime())) return null;
+        return { start, end };
+    }
+
+    if (budget.monthKey) {
+        let m = String(budget.monthKey);
+        if (/^\d{4}-\d{2}$/.test(m)) {
+            let start = parseDateToDayStart(`${m}-01`);
+            let end = new Date(start.getFullYear(), start.getMonth() + 1, 0);
+            end.setHours(0, 0, 0, 0);
+            return { start, end };
+        }
+    }
+
+    return null;
+}
+
+function findSuggestedBudgetForExpenseDate(budgets, expenseDate) {
+    let list = Array.isArray(budgets) ? budgets : [];
+    let target = parseDateToDayStart(expenseDate);
+
+    let matches = list
+        .map((budget) => {
+            let range = resolveBudgetDateRange(budget);
+            if (!range) return null;
+            if (target < range.start || target > range.end) return null;
+            return { budget, range };
+        })
+        .filter(Boolean);
+
+    if (!matches.length) return null;
+
+    matches.sort((a, b) => {
+        let startDiff = b.range.start.getTime() - a.range.start.getTime();
+        if (startDiff !== 0) return startDiff;
+
+        let updatedA = new Date((a.budget && (a.budget.updatedAt || a.budget.createdAt)) || 0).getTime();
+        let updatedB = new Date((b.budget && (b.budget.updatedAt || b.budget.createdAt)) || 0).getTime();
+        if (updatedB !== updatedA) return updatedB - updatedA;
+
+        return String((a.budget && a.budget.budgetId) || "").localeCompare(String((b.budget && b.budget.budgetId) || ""));
+    });
+
+    return matches[0].budget || null;
+}
+
+function resetExpenseBudgetSelectionState() {
+    expenseBudgetSelectionState.userSelectedBudget = false;
+    expenseBudgetSelectionState.lastSuggestedBudgetId = "";
+}
+
+function markExpenseBudgetManuallySelected() {
+    let type = String(document.getElementById("entryType")?.value || "expense");
+    if (type !== "expense") return;
+
+    let current = String(document.getElementById("budgetSelect")?.value || "").trim();
+    if (!current) return;
+
+    if (expenseBudgetSelectionState.lastSuggestedBudgetId && current === expenseBudgetSelectionState.lastSuggestedBudgetId) {
+        return;
+    }
+
+    expenseBudgetSelectionState.userSelectedBudget = true;
+}
+
+function autoSelectExpenseBudget(options = {}) {
+    let select = document.getElementById("budgetSelect");
+    if (!select) return;
+
+    let type = String(document.getElementById("entryType")?.value || "expense");
+    if (type !== "expense") return;
+
+    let respectManual = options && Object.prototype.hasOwnProperty.call(options, "respectManual")
+        ? Boolean(options.respectManual)
+        : true;
+
+    if (respectManual && expenseBudgetSelectionState.userSelectedBudget) return;
+
+    let budgets = getSelectableBudgetEntries(getBudgets());
+    if (!budgets.length) return;
+
+    let suggestion = findSuggestedBudgetForExpenseDate(budgets, getExpenseDateForBudgetSelection());
+    if (!suggestion || !suggestion.budgetId) return;
+
+    let suggestedId = String(suggestion.budgetId);
+    let hasOption = Array.from(select.options || []).some(opt => String(opt.value || "") === suggestedId);
+    if (!hasOption) return;
+
+    select.value = suggestedId;
+    expenseBudgetSelectionState.lastSuggestedBudgetId = suggestedId;
 }
 
 function formatDateShort(date) {

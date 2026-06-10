@@ -59,14 +59,19 @@
         </select>
       </div>
 
-      <div id="ordersQueryChips" class="query-chip-row"></div>
+      <details class="secondary-accordion advanced-controls">
+        <summary>Advanced Filters and Views</summary>
+        <div class="accordion-body">
+          <div id="ordersQueryChips" class="query-chip-row"></div>
 
-      <div class="inline-row">
-        <select id="ordersSavedView"></select>
-        <button class="secondary" type="button" onclick="saveOrdersCurrentView()">Save View</button>
-        <button class="secondary" type="button" onclick="applyOrdersSavedView()">Apply View</button>
-        <button class="danger" type="button" onclick="deleteOrdersSavedView()">Delete View</button>
-      </div>
+          <div class="inline-row">
+            <select id="ordersSavedView"></select>
+            <button class="secondary" type="button" onclick="saveOrdersCurrentView()">Save View</button>
+            <button class="secondary" type="button" onclick="applyOrdersSavedView()">Apply View</button>
+            <button class="danger" type="button" onclick="deleteOrdersSavedView()">Delete View</button>
+          </div>
+        </div>
+      </details>
 
       <!-- Orders will be injected here -->
       <div id="ordersList"></div>

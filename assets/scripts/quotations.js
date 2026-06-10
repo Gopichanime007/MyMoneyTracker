@@ -40,7 +40,27 @@ function resolvePlanStatus(plan) {
 function resolveLinkedOrder(plan) {
   const orders = getOrderRows();
   if (!plan) return null;
-  return orders.find((row) => String(row.quotationId || "") === String(plan.id || "")) || null;
+
+  const byQuotationId = orders.find((row) => String(row.quotationId || "") === String(plan.id || ""));
+  if (byQuotationId) return byQuotationId;
+
+  const convertedOrderId = String(plan.convertedOrderId || plan.orderId || "");
+  if (convertedOrderId) {
+    const byConvertedId = orders.find((row) => String(row.id || "") === convertedOrderId);
+    if (byConvertedId) return byConvertedId;
+  }
+
+  if (window.DocWorkflow && typeof window.DocWorkflow.getRelationByQuotationId === "function") {
+    const relation = window.DocWorkflow.getRelationByQuotationId(plan.id);
+    if (relation && relation.orderId) {
+      const relationOrderId = String(relation.orderId);
+      const byRelation = orders.find((row) => String(row.id || "") === relationOrderId);
+      if (byRelation) return byRelation;
+      return { id: relationOrderId, status: relation.relationshipStatus || "linked" };
+    }
+  }
+
+  return null;
 }
 
 function renderPlanCard(plan) {
@@ -48,6 +68,17 @@ function renderPlanCard(plan) {
   const effectiveStatus = resolvePlanStatus(plan);
   const fundingType = plan && plan.fundingSourceType ? String(plan.fundingSourceType) : "-";
   const fundingAccount = plan && plan.fundingSourceName ? String(plan.fundingSourceName) : "-";
+  const actionsHtml = linkedOrder
+    ? `
+      <button class="secondary tiny-btn" type="button" onclick="openPlan('${String(plan.id)}')">Open</button>
+      <button class="secondary tiny-btn" type="button" onclick="openLinkedOrderFromPlan('${String(linkedOrder.id)}')">Open Order</button>
+      <button class="danger tiny-btn" type="button" onclick="deletePlan('${String(plan.id)}')">Delete</button>
+    `
+    : `
+      <button class="secondary tiny-btn" type="button" onclick="openPlan('${String(plan.id)}')">Open</button>
+      <button class="secondary tiny-btn" type="button" onclick="continueEditingPlan('${String(plan.id)}')">Continue Editing</button>
+      <button class="danger tiny-btn" type="button" onclick="deletePlan('${String(plan.id)}')">Delete</button>
+    `;
 
   const card = document.createElement("div");
   card.className = "plan-card";
@@ -63,9 +94,7 @@ function renderPlanCard(plan) {
     <div class="plan-meta"><strong>Created:</strong> ${toDateLabel(plan.createdAt)} | <strong>Modified:</strong> ${toDateLabel(plan.updatedAt)}</div>
     <div class="plan-meta"><strong>Linked Order Status:</strong> ${linkedOrder ? String(linkedOrder.status || "draft") : "Not created"}</div>
     <div class="plan-actions">
-      <button class="secondary tiny-btn" type="button" onclick="openPlan('${String(plan.id)}')">Open</button>
-      <button class="secondary tiny-btn" type="button" onclick="continueEditingPlan('${String(plan.id)}')">Continue Editing</button>
-      <button class="danger tiny-btn" type="button" onclick="deletePlan('${String(plan.id)}')">Delete</button>
+      ${actionsHtml}
     </div>
   `;
 
@@ -190,11 +219,49 @@ function countQuotationsFilterConditions(filters) {
   if (!Array.isArray(filters)) return 0;
   return filters.reduce((sum, filter) => {
     if (!filter || typeof filter !== "object") return sum;
-    if (String(filter.op || "") === "group_any" && Array.isArray(filter.conditions)) {
-      return sum + countQuotationsFilterConditions(filter.conditions);
+    if (String(filter.op || "") === "group_any" && filter.value && Array.isArray(filter.value.conditions)) {
+      return sum + countQuotationsFilterConditions(filter.value.conditions);
     }
     return sum + 1;
   }, 0);
+}
+
+function getQuotationsSortState() {
+  if (!window.SearchService || typeof window.SearchService.getState !== "function") {
+    return null;
+  }
+  const state = window.SearchService.getState("quotations");
+  const list = Array.isArray(state.sort) ? state.sort : [];
+  return list.length ? list[0] : null;
+}
+
+function toComparableSortValue(row, field, type) {
+  const value = row ? row[field] : null;
+  if (type === "number") return Number(value || 0);
+  if (type === "date") return new Date(value || 0).getTime();
+  if (field === "status") {
+    const order = { draft: 1, accepted: 2, expired: 3, converted: 4 };
+    return order[String(resolvePlanStatus(row)).toLowerCase()] || 99;
+  }
+  return String(value == null ? "" : value).toLowerCase();
+}
+
+function applyLocalQuotationsSort(rows) {
+  const source = Array.isArray(rows) ? rows.slice() : [];
+  const sortItem = getQuotationsSortState();
+  if (!sortItem) return source;
+
+  const field = String(sortItem.field || "updatedAt");
+  const direction = String(sortItem.direction || "desc").toLowerCase();
+  const type = String(sortItem.type || (field === "updatedAt" ? "date" : (field === "total" ? "number" : "string")));
+
+  return source.sort((left, right) => {
+    const a = toComparableSortValue(left, field, type);
+    const b = toComparableSortValue(right, field, type);
+    if (a === b) return 0;
+    if (direction === "asc") return a > b ? 1 : -1;
+    return a < b ? 1 : -1;
+  });
 }
 
 function isDefaultQuotationsSort(sortItem) {
@@ -337,6 +404,17 @@ function deleteQuotationsSavedView() {
 }
 
 function openQuotationsSortModal() {
+  const activeSort = getQuotationsSortState();
+  const fieldEl = document.getElementById("quotationsSortField");
+  const directionEl = document.getElementById("quotationsSortDirection");
+  if (activeSort) {
+    if (fieldEl) fieldEl.value = String(activeSort.field || "updatedAt");
+    if (directionEl) directionEl.value = String(activeSort.direction || "desc");
+  } else {
+    if (fieldEl) fieldEl.value = "updatedAt";
+    if (directionEl) directionEl.value = "desc";
+  }
+
   const modal = document.getElementById("quotationsSortModal");
   if (modal) {
     modal.classList.remove("hidden");
@@ -385,7 +463,7 @@ function renderQuotationsWorkspace() {
   updateQuotationsSortIndicator();
   renderQuotationsQueryChips();
   refreshQuotationsSavedViews();
-  let rows = getQuotationRegistryRows().slice().sort((a, b) => new Date(b.updatedAt || 0) - new Date(a.updatedAt || 0));
+  let rows = getQuotationRegistryRows().slice();
 
   if (window.SearchService && typeof window.SearchService.applyModuleSearch === "function") {
     const queryResult = window.SearchService.applyModuleSearch("quotations", rows);
@@ -413,6 +491,10 @@ function renderQuotationsWorkspace() {
 
 function createNewPlan() {
   localStorage.removeItem("activeQuotationId");
+  localStorage.removeItem("quotationMeta");
+  localStorage.removeItem("quotationData");
+  localStorage.removeItem("quotationItems");
+  localStorage.removeItem("quotationCharges");
   window.location.href = "quotation.html";
 }
 
@@ -420,31 +502,18 @@ function openPlan(quotationId) {
   const row = getQuotationRegistryRows().find((x) => String(x.id) === String(quotationId));
   if (!row) return;
 
-  const linkedOrder = resolveLinkedOrder(row);
-  if (!linkedOrder) {
-    localStorage.setItem("activeQuotationId", JSON.stringify(String(quotationId)));
-    window.location.href = "quotation.html";
-    return;
-  }
+  localStorage.setItem("activeQuotationId", JSON.stringify(String(quotationId)));
+  localStorage.removeItem("quotationMeta");
+  localStorage.removeItem("quotationData");
+  localStorage.removeItem("quotationItems");
+  localStorage.removeItem("quotationCharges");
+  window.location.href = "quotation.html";
+}
 
-  const modal = document.getElementById("planNavigationModal");
-  const info = document.getElementById("planNavigationInfo");
-  const openPlanBtn = document.getElementById("openPlanBtn");
-  const openOrderBtn = document.getElementById("openLinkedOrderBtn");
-
-  if (!modal || !info || !openPlanBtn || !openOrderBtn) return;
-
-  info.textContent = `${row.quotationNo || row.id} has a linked order ${linkedOrder.orderNo || linkedOrder.id}.`;
-  openPlanBtn.onclick = () => {
-    localStorage.setItem("activeQuotationId", JSON.stringify(String(quotationId)));
-    window.location.href = "quotation.html";
-  };
-  openOrderBtn.onclick = () => {
-    localStorage.setItem("activeOrderId", JSON.stringify(String(linkedOrder.id)));
-    window.location.href = "order.html";
-  };
-
-  modal.classList.remove("hidden");
+function openLinkedOrderFromPlan(orderId) {
+  if (!orderId) return;
+  localStorage.setItem("activeOrderId", JSON.stringify(String(orderId)));
+  window.location.href = "order.html";
 }
 
 function closePlanNavigationModal() {
@@ -454,6 +523,10 @@ function closePlanNavigationModal() {
 
 function continueEditingPlan(quotationId) {
   localStorage.setItem("activeQuotationId", JSON.stringify(String(quotationId)));
+  localStorage.removeItem("quotationMeta");
+  localStorage.removeItem("quotationData");
+  localStorage.removeItem("quotationItems");
+  localStorage.removeItem("quotationCharges");
   window.location.href = "quotation.html";
 }
 

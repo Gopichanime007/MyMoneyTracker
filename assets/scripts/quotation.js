@@ -5,6 +5,8 @@ const Q_ACTIVE_STORAGE_KEY = Q_WORKFLOW_KEYS.activeQuotation || "activeQuotation
 
 let quotationItems = [];
 let quotationCharges = [];
+let hydratedQuotationId = null;
+let showFullAuditTrail = false;
 
 function createEntityId(prefix) {
   return `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
@@ -60,12 +62,141 @@ function saveCurrentMeta(meta) {
   localStorage.setItem(Q_META_STORAGE_KEY, JSON.stringify(meta));
 }
 
+function getStoredMeta() {
+  return JSON.parse(localStorage.getItem(Q_META_STORAGE_KEY) || "null");
+}
+
 function getStatusOrder() {
   return ["draft", "accepted", "converted"];
 }
 
 function isQuotationEditable(status) {
   return String(status || "draft") === "draft";
+}
+
+function getOrderRows() {
+  return JSON.parse(localStorage.getItem("orders") || "[]");
+}
+
+function findOrderById(rows, id) {
+  const key = String(id || "");
+  if (!key) return null;
+  return rows.find((row) => String(row && row.id) === key) || null;
+}
+
+function hasOrderCreationHistory(meta) {
+  const rows = Array.isArray(meta && meta.history) ? meta.history : [];
+  return rows.some((row) => {
+    const action = String(row && row.action || "").toLowerCase();
+    const note = String(row && row.note || "").toLowerCase();
+    return action === "converted" || note.includes("created order") || note.includes("converted");
+  });
+}
+
+function getQuotationLockState(metaInput) {
+  const meta = metaInput || getCurrentMeta();
+  const orders = getOrderRows();
+  const relation = window.DocWorkflow && typeof window.DocWorkflow.getRelationByQuotationId === "function"
+    ? window.DocWorkflow.getRelationByQuotationId(meta.id)
+    : null;
+
+  const linkedByQuotationId = orders.find((row) => String(row && row.quotationId || "") === String(meta.id || "")) || null;
+  const linkedByConvertedId = findOrderById(orders, meta && meta.convertedOrderId);
+  const linkedByRelationId = findOrderById(orders, relation && relation.orderId);
+
+  const relationStatus = String(relation && relation.relationshipStatus || "").toLowerCase();
+  const hasRelationEvidence = Boolean(relation && (String(relation.orderId || "") || relationStatus === "linked" || relationStatus === "archived"));
+  const hasConvertedOrderIdEvidence = Boolean(String(meta && meta.convertedOrderId || ""));
+  const hasOrderRefEvidence = Boolean(linkedByQuotationId || linkedByConvertedId || linkedByRelationId);
+  const hasHistoryEvidence = hasOrderCreationHistory(meta);
+
+  const locked = hasRelationEvidence || hasConvertedOrderIdEvidence || hasOrderRefEvidence || hasHistoryEvidence;
+  const linkedOrder = linkedByQuotationId || linkedByConvertedId || linkedByRelationId || null;
+  const orderId = linkedOrder && linkedOrder.id
+    ? String(linkedOrder.id)
+    : (String((relation && relation.orderId) || (meta && meta.convertedOrderId) || "") || null);
+  const orderNo = linkedOrder && linkedOrder.orderNo ? String(linkedOrder.orderNo) : null;
+
+  return {
+    locked,
+    orderId,
+    orderNo,
+    relationStatus: relationStatus || null
+  };
+}
+
+function getExistingOrderForQuotation(meta) {
+  if (!meta || !meta.id) return null;
+
+  if (window.DocWorkflow && typeof window.DocWorkflow.findOrderForQuotation === "function") {
+    return window.DocWorkflow.findOrderForQuotation(meta.id, {
+      orderId: meta.convertedOrderId || null
+    });
+  }
+
+  const orders = getOrderRows();
+  const byQuotationId = orders.find((row) => String(row && row.quotationId || "") === String(meta.id || ""));
+  if (byQuotationId) return byQuotationId;
+
+  const convertedId = String(meta.convertedOrderId || "");
+  if (convertedId) {
+    return orders.find((row) => String(row && row.id || "") === convertedId) || null;
+  }
+
+  return null;
+}
+
+function isQuotationMetaEditable(meta) {
+  if (!meta) return false;
+  if (!isQuotationEditable(meta.status)) return false;
+  return !getQuotationLockState(meta).locked;
+}
+
+function getQuotationLockMessage(lockState) {
+  if (!lockState || !lockState.locked) return "Only draft plans can be edited.";
+  const ref = lockState.orderNo || lockState.orderId || "a linked order";
+  return `Quotation is locked because it is linked to ${ref}. Edit the order instead.`;
+}
+
+function openLockedOrderFromQuotation() {
+  const meta = getCurrentMeta();
+  const lockState = getQuotationLockState(meta);
+  if (!lockState.orderId) {
+    showNotice("Linked order reference is unavailable.", "warning");
+    return;
+  }
+  localStorage.setItem("activeOrderId", JSON.stringify(String(lockState.orderId)));
+  window.location.href = "order.html";
+}
+
+function renderQuotationLockBanner(lockState) {
+  const card = document.querySelector(".card");
+  if (!card) return;
+
+  let banner = document.getElementById("quotationLockBanner");
+  if (!lockState || !lockState.locked) {
+    if (banner) banner.remove();
+    return;
+  }
+
+  if (!banner) {
+    banner = document.createElement("div");
+    banner.id = "quotationLockBanner";
+    banner.className = "lock-banner";
+    card.insertBefore(banner, card.firstChild);
+  }
+
+  const orderRef = lockState.orderNo || lockState.orderId || "linked order";
+  const openBtn = lockState.orderId
+    ? '<button type="button" class="secondary tiny-btn" onclick="openLockedOrderFromQuotation()">Open Order</button>'
+    : "";
+
+  banner.innerHTML = `
+    <div class="lock-banner-title">🔒 Quotation Locked</div>
+    <div class="lock-banner-copy">This quotation is linked to Order ${escapeQuotationHtml(orderRef)}.</div>
+    <div class="lock-banner-copy">To make changes, edit the Order instead.</div>
+    ${openBtn}
+  `;
 }
 
 function getStatusLabel(status) {
@@ -85,6 +216,59 @@ function getAllowedStatusTransitions() {
   };
 }
 
+function getLatestStatusFromHistory(source) {
+  const rows = Array.isArray(source && source.history) ? source.history : [];
+  for (let i = rows.length - 1; i >= 0; i -= 1) {
+    const status = rows[i] && rows[i].status;
+    if (status) return String(status);
+  }
+  return null;
+}
+
+function resolveMetaStatus(row, existing) {
+  const existingStatus = existing && String(existing.id || "") === String(row.id || "")
+    ? String(existing.status || "")
+    : "";
+  const historyStatus = getLatestStatusFromHistory(existing) || getLatestStatusFromHistory(row) || "";
+  return existingStatus || historyStatus || String(row.status || "draft") || "draft";
+}
+
+function hydrateQuotationLines(metaId, options = {}) {
+  const force = Boolean(options.force);
+  const key = String(metaId || "");
+  if (!key) {
+    quotationItems = [];
+    quotationCharges = [];
+    hydratedQuotationId = null;
+    return;
+  }
+
+  if (!force && hydratedQuotationId === key) return;
+
+  const rows = getRegistry();
+  const row = rows.find((x) => String(x && x.id) === key);
+  if (row) {
+    quotationItems = Array.isArray(row.items) ? row.items.slice() : [];
+    quotationCharges = Array.isArray(row.charges) ? row.charges.slice() : [];
+    hydratedQuotationId = key;
+    return;
+  }
+
+  const payload = JSON.parse(localStorage.getItem("quotationData") || "null");
+  if (payload && String(payload.id || "") === key) {
+    quotationItems = Array.isArray(payload.items) ? payload.items.slice() : [];
+    quotationCharges = Array.isArray(payload.charges) ? payload.charges.slice() : [];
+    hydratedQuotationId = key;
+    return;
+  }
+
+  const storedItems = JSON.parse(localStorage.getItem("quotationItems") || "null");
+  const storedCharges = JSON.parse(localStorage.getItem("quotationCharges") || "null");
+  quotationItems = Array.isArray(storedItems) ? storedItems.slice() : [];
+  quotationCharges = Array.isArray(storedCharges) ? storedCharges.slice() : [];
+  hydratedQuotationId = key;
+}
+
 function getCurrentMeta() {
   const activeId = getActiveQuotationId();
   const registry = getRegistry();
@@ -92,33 +276,28 @@ function getCurrentMeta() {
   if (activeId) {
     const row = registry.find((x) => String(x.id) === String(activeId));
     if (row) {
-      const existing = JSON.parse(localStorage.getItem(Q_META_STORAGE_KEY) || "null");
-      if (existing && String(existing.id) === String(row.id)) return existing;
-
+      const existing = getStoredMeta();
       const rebuilt = {
         id: row.id,
-        quotationNo: row.quotationNo || (window.DocWorkflow ? window.DocWorkflow.generateDocumentNumber("quotation") : createEntityId("QT")),
-        purpose: row.purpose || "",
-        status: row.status || "draft",
-        createdAt: row.createdAt || new Date().toISOString(),
-        updatedAt: row.updatedAt || new Date().toISOString(),
-        validUntil: row.validUntil || null,
-        convertedOrderId: row.convertedOrderId || row.orderId || null,
-        fundingSourceType: row.fundingSourceType || null,
-        fundingSourceId: row.fundingSourceId || null,
-        fundingSourceName: row.fundingSourceName || null,
-        history: Array.isArray(row.history) ? row.history : []
+        quotationNo: row.quotationNo || (existing && existing.quotationNo) || (window.DocWorkflow ? window.DocWorkflow.generateDocumentNumber("quotation") : createEntityId("QT")),
+        purpose: row.purpose || (existing && existing.purpose) || "",
+        status: resolveMetaStatus(row, existing),
+        createdAt: row.createdAt || (existing && existing.createdAt) || new Date().toISOString(),
+        updatedAt: row.updatedAt || (existing && existing.updatedAt) || new Date().toISOString(),
+        validUntil: row.validUntil || (existing && existing.validUntil) || null,
+        convertedOrderId: row.convertedOrderId || row.orderId || (existing && existing.convertedOrderId) || null,
+        fundingSourceType: row.fundingSourceType || (existing && existing.fundingSourceType) || null,
+        fundingSourceId: row.fundingSourceId || (existing && existing.fundingSourceId) || null,
+        fundingSourceName: row.fundingSourceName || (existing && existing.fundingSourceName) || null,
+        history: Array.isArray(row.history) ? row.history : (Array.isArray(existing && existing.history) ? existing.history : [])
       };
-
-      quotationItems = Array.isArray(row.items) ? row.items.slice() : [];
-      quotationCharges = Array.isArray(row.charges) ? row.charges.slice() : [];
 
       saveCurrentMeta(rebuilt);
       return rebuilt;
     }
   }
 
-  let meta = JSON.parse(localStorage.getItem(Q_META_STORAGE_KEY) || "null");
+  let meta = getStoredMeta();
   if (meta && meta.id) return meta;
 
   const now = new Date().toISOString();
@@ -145,6 +324,7 @@ function getCurrentMeta() {
 
   quotationItems = [];
   quotationCharges = [];
+  hydratedQuotationId = String(meta.id || "");
   localStorage.setItem(Q_ACTIVE_STORAGE_KEY, JSON.stringify(meta.id));
   saveCurrentMeta(meta);
   return meta;
@@ -157,33 +337,84 @@ function addHistory(meta, action, note) {
   meta.updatedAt = now;
 }
 
+function getDefaultAdjustmentTypeForChargeType(type) {
+  const normalized = String(type || "").toLowerCase();
+  if (normalized === "discount") return "deduct";
+  if (normalized === "gst" || normalized === "delivery") return "add";
+  return null;
+}
+
+function normalizeChargeAdjustmentType(charge) {
+  if (!charge || typeof charge !== "object") return null;
+
+  const explicit = String(charge.adjustmentType || "").toLowerCase();
+  if (explicit === "add" || explicit === "deduct") return explicit;
+
+  return getDefaultAdjustmentTypeForChargeType(charge.type);
+}
+
+function getChargeBaseAmount(charge, subtotal, items) {
+  if (!charge || !Array.isArray(items)) return 0;
+  if (String(charge.appliesTo || "all") === "all") return subtotal;
+
+  const target = items.find((x) => String(x.id) === String(charge.appliesTo));
+  return target ? Number(target.total || 0) : 0;
+}
+
+function getChargeAmount(charge, subtotal, items) {
+  const baseAmount = getChargeBaseAmount(charge, subtotal, items);
+  const value = Number(charge && charge.value || 0);
+  if (String(charge && charge.mode || "fixed") === "percent") {
+    return (baseAmount * value) / 100;
+  }
+  return value;
+}
+
+function getChargeSignedAmount(charge, subtotal, items) {
+  const amount = Number(getChargeAmount(charge, subtotal, items) || 0);
+  const adjustmentType = normalizeChargeAdjustmentType(charge);
+  if (adjustmentType === "deduct") return -amount;
+  if (adjustmentType === "add") return amount;
+  // Migration-safe behavior: unresolved legacy custom charges remain excluded.
+  return 0;
+}
+
+function hasLegacyCustomCharges() {
+  return quotationCharges.some((charge) => {
+    const isCustom = String(charge && charge.type || "") === "custom";
+    return isCustom && !normalizeChargeAdjustmentType(charge);
+  });
+}
+
 function getTotals() {
   const subtotal = quotationItems.reduce((sum, item) => sum + Number(item.total || 0), 0);
 
   let gstAmount = 0;
-  let delivery = 0;
-  let discount = 0;
+  let chargeAdds = 0;
+  let chargeDeductions = 0;
+  let legacyCustomCount = 0;
 
   quotationCharges.forEach((charge) => {
-    let baseAmount = 0;
-    if (charge.appliesTo === "all") {
-      baseAmount = subtotal;
-    } else {
-      const item = quotationItems.find((x) => String(x.id) === String(charge.appliesTo));
-      baseAmount = item ? Number(item.total || 0) : 0;
+    const amount = Number(getChargeAmount(charge, subtotal, quotationItems) || 0);
+    const direction = normalizeChargeAdjustmentType(charge);
+
+    if (direction === "add") {
+      chargeAdds += amount;
+      if (String(charge.type || "") === "gst") gstAmount += amount;
+      return;
     }
 
-    const amount = charge.mode === "percent"
-      ? (baseAmount * Number(charge.value || 0)) / 100
-      : Number(charge.value || 0);
+    if (direction === "deduct") {
+      chargeDeductions += amount;
+      if (String(charge.type || "") === "gst") gstAmount -= amount;
+      return;
+    }
 
-    if (charge.type === "gst") gstAmount += amount;
-    if (charge.type === "delivery") delivery += amount;
-    if (charge.type === "discount") discount += amount;
+    if (String(charge && charge.type || "") === "custom") legacyCustomCount += 1;
   });
 
-  const total = subtotal + gstAmount + delivery - discount;
-  return { subtotal, gstAmount, total };
+  const total = subtotal + chargeAdds - chargeDeductions;
+  return { subtotal, gstAmount, total, chargeAdds, chargeDeductions, legacyCustomCount };
 }
 
 function upsertRegistry(meta, totals) {
@@ -217,8 +448,8 @@ function upsertRegistry(meta, totals) {
   saveRegistry(rows);
 }
 
-function syncQuotationData() {
-  const meta = getCurrentMeta();
+function syncQuotationData(metaInput) {
+  const meta = metaInput || getStoredMeta() || getCurrentMeta();
   const totals = getTotals();
 
   const payload = {
@@ -257,6 +488,7 @@ function syncQuotationData() {
 
 function renderLifecycle() {
   const meta = getCurrentMeta();
+  const lockState = getQuotationLockState(meta);
   const statusEl = document.getElementById("quotationStatusLabel");
   const noEl = document.getElementById("quotationNoLabel");
   const dateEl = document.getElementById("quotationValidityDate");
@@ -289,7 +521,7 @@ function renderLifecycle() {
     btn.style.display = allowed.includes(action) ? "inline-flex" : "none";
   });
 
-  const editable = isQuotationEditable(meta.status);
+  const editable = isQuotationMetaEditable(meta);
   const addItemBtn = document.getElementById("addQuotationItemBtn");
   const addChargeBtn = document.getElementById("addQuotationChargeBtn");
   const clearBtn = document.getElementById("clearQuotationBtn");
@@ -304,25 +536,68 @@ function renderLifecycle() {
   if (addChargeBtn) addChargeBtn.disabled = !editable;
   if (clearBtn) clearBtn.disabled = !editable;
   if (saveDraftBtn) saveDraftBtn.disabled = !editable;
-  if (convertBtn) convertBtn.style.display = String(meta.status || "draft") === "accepted" ? "inline-flex" : "none";
+  if (convertBtn) {
+    const showConvert = String(meta.status || "draft") === "accepted" && !lockState.locked;
+    convertBtn.style.display = showConvert ? "inline-flex" : "none";
+  }
   if (sourceType) sourceType.disabled = !editable;
   if (sourceValue) sourceValue.disabled = !editable;
   if (validityDate) validityDate.disabled = !editable;
   if (purposeInput) purposeInput.disabled = !editable;
 
+  statusActions.forEach((btn) => {
+    if (lockState.locked) {
+      btn.style.display = "none";
+      btn.disabled = true;
+    }
+  });
+
+  renderQuotationLockBanner(lockState);
+
   const audit = document.getElementById("quotationAuditTrail");
   if (audit) {
-    const rows = (meta.history || []).slice(-5).reverse();
-    if (!rows.length) {
+    const allRows = Array.isArray(meta.history) ? meta.history.slice() : [];
+    const totalRows = allRows.length;
+    if (!totalRows) {
       audit.innerHTML = "";
     } else {
-      audit.innerHTML = rows.map((row) => {
-        const when = new Date(row.at).toLocaleString("en-IN");
-        const note = row.note ? ` - ${escapeQuotationHtml(row.note)}` : "";
-        return `<div class="audit-row"><small>${escapeQuotationHtml(when)} - ${escapeQuotationHtml(getStatusLabel(row.status))}${note}</small></div>`;
-      }).join("");
+      const latest = allRows[totalRows - 1];
+      const latestWhen = new Date(latest.at).toLocaleString("en-IN");
+      const latestStatus = escapeQuotationHtml(getStatusLabel(latest.status));
+      const latestNote = latest.note ? escapeQuotationHtml(latest.note) : "";
+
+      if (!showFullAuditTrail) {
+        audit.innerHTML = `
+          <div class="audit-compact">
+            <div class="audit-compact-title">Recent Activity (${totalRows})</div>
+            <div class="audit-compact-body">
+              <small><strong>Last Action:</strong> ${latestStatus}${latestNote ? ` - ${latestNote}` : ""}</small><br>
+              <small>${escapeQuotationHtml(latestWhen)}</small>
+            </div>
+            <button type="button" class="audit-toggle-link" onclick="toggleAuditTrailView()">View Full Activity</button>
+          </div>
+        `;
+      } else {
+        const rows = allRows.slice(-5).reverse();
+        const listHtml = rows.map((row) => {
+          const when = new Date(row.at).toLocaleString("en-IN");
+          const note = row.note ? ` - ${escapeQuotationHtml(row.note)}` : "";
+          return `<div class="audit-row"><small>${escapeQuotationHtml(when)} - ${escapeQuotationHtml(getStatusLabel(row.status))}${note}</small></div>`;
+        }).join("");
+
+        audit.innerHTML = `
+          <div class="audit-compact-title">Recent Activity (${totalRows})</div>
+          ${listHtml}
+          <button type="button" class="audit-toggle-link" onclick="toggleAuditTrailView()">Show Latest Only</button>
+        `;
+      }
     }
   }
+}
+
+function toggleAuditTrailView() {
+  showFullAuditTrail = !showFullAuditTrail;
+  renderLifecycle();
 }
 
 function setQuotationPurpose() {
@@ -330,13 +605,16 @@ function setQuotationPurpose() {
   if (!input) return;
 
   const meta = getCurrentMeta();
-  if (!isQuotationEditable(meta.status)) return;
+  if (!isQuotationMetaEditable(meta)) {
+    showNotice(getQuotationLockMessage(getQuotationLockState(meta)), "warning");
+    return;
+  }
 
   const purpose = String(input.value || "").trim();
   meta.purpose = purpose;
   addHistory(meta, "purpose_updated", purpose ? `Purpose set to ${purpose}` : "Purpose cleared");
   saveCurrentMeta(meta);
-  syncQuotationData();
+  syncQuotationData(meta);
   renderLifecycle();
 }
 
@@ -345,8 +623,8 @@ function updateQuotationValidityDate() {
   if (!dateInput) return;
   const meta = getCurrentMeta();
 
-  if (!isQuotationEditable(meta.status)) {
-    showNotice("Only draft plans can be edited.", "warning");
+  if (!isQuotationMetaEditable(meta)) {
+    showNotice(getQuotationLockMessage(getQuotationLockState(meta)), "warning");
     dateInput.value = meta.validUntil || "";
     return;
   }
@@ -360,7 +638,7 @@ function updateQuotationValidityDate() {
   meta.validUntil = dateInput.value || null;
   addHistory(meta, "validity_updated", meta.validUntil ? `Valid until ${meta.validUntil}` : "Validity cleared");
   saveCurrentMeta(meta);
-  syncQuotationData();
+  syncQuotationData(meta);
   renderLifecycle();
 }
 
@@ -398,16 +676,43 @@ function renderQuotationFundingPreview() {
   const preview = document.getElementById("qFundingPreview");
   if (!typeEl || !valueEl || !preview) return;
 
+  const totals = getTotals();
+  const quotationTotal = Number(totals.total || 0);
+
   const selected = valueEl.options[valueEl.selectedIndex];
   if (!selected || !selected.value) {
-    preview.innerHTML = "<small>Select source type and account with available balance.</small>";
+    preview.innerHTML = `
+      <div class="funding-preview">
+        <small class="funding-account-label">Funding Account</small>
+        <div class="funding-account-name">Select source type and account</div>
+        <div class="funding-metrics">
+          <small><strong>Quote:</strong> ${formatCurrency(quotationTotal)}</small>
+        </div>
+      </div>
+    `;
+    preview.classList.remove("funding-shortfall");
     return;
   }
 
+  const available = Number(selected.dataset.remaining || 0);
+  const remaining = Number((available - quotationTotal).toFixed(2));
+  const hasShortfall = remaining < 0;
+  const remainingLabel = hasShortfall
+    ? `After Quote: -${formatCurrency(Math.abs(remaining))}`
+    : `After Quote: ${formatCurrency(remaining)}`;
+
+  preview.classList.toggle("funding-shortfall", hasShortfall);
+
   preview.innerHTML = `
-    <small><strong>Funding Type:</strong> ${escapeQuotationHtml(typeEl.value)}</small><br>
-    <small><strong>Account:</strong> ${escapeQuotationHtml(selected.dataset.name || selected.textContent)}</small><br>
-    <small><strong>Available:</strong> ${formatCurrency(Number(selected.dataset.remaining || 0))}</small>
+    <div class="funding-preview">
+      <small class="funding-account-label">Funding Account</small>
+      <div class="funding-account-name">${escapeQuotationHtml(selected.dataset.name || selected.textContent)}</div>
+      <div class="funding-metrics">
+        <small><strong>Available:</strong> ${formatCurrency(available)}</small>
+        <small><strong>Quote:</strong> ${formatCurrency(quotationTotal)}</small>
+        <small><strong>${remainingLabel}</strong></small>
+      </div>
+    </div>
   `;
 }
 
@@ -417,7 +722,10 @@ function setQuotationFunding() {
   if (!typeEl || !valueEl) return;
 
   const meta = getCurrentMeta();
-  if (!isQuotationEditable(meta.status)) return;
+  if (!isQuotationMetaEditable(meta)) {
+    showNotice(getQuotationLockMessage(getQuotationLockState(meta)), "warning");
+    return;
+  }
 
   const selected = valueEl.options[valueEl.selectedIndex];
   meta.fundingSourceType = typeEl.value || null;
@@ -426,7 +734,7 @@ function setQuotationFunding() {
 
   addHistory(meta, "funding_updated", meta.fundingSourceName ? `Funding set to ${meta.fundingSourceType} → ${meta.fundingSourceName}` : "Funding cleared");
   saveCurrentMeta(meta);
-  syncQuotationData();
+  syncQuotationData(meta);
   renderLifecycle();
 }
 
@@ -446,13 +754,18 @@ function validatePlanCore(meta) {
     return false;
   }
 
+  if (hasLegacyCustomCharges()) {
+    showNotice("Set Add Amount or Deduct Amount for legacy custom charges before saving.", "warning");
+    return false;
+  }
+
   return true;
 }
 
 function savePurchasePlanDraft() {
   const meta = getCurrentMeta();
-  if (!isQuotationEditable(meta.status)) {
-    showNotice("Only draft plans can be edited.", "warning");
+  if (!isQuotationMetaEditable(meta)) {
+    showNotice(getQuotationLockMessage(getQuotationLockState(meta)), "warning");
     return;
   }
 
@@ -460,13 +773,18 @@ function savePurchasePlanDraft() {
 
   addHistory(meta, "draft_saved", "Draft saved");
   saveCurrentMeta(meta);
-  syncQuotationData();
+  syncQuotationData(meta);
   renderLifecycle();
   showNotice("Purchase plan draft saved.", "success");
 }
 
 function setQuotationStatus(nextStatus) {
   const meta = getCurrentMeta();
+  const lockState = getQuotationLockState(meta);
+  if (lockState.locked) {
+    showNotice(getQuotationLockMessage(lockState), "warning");
+    return;
+  }
   const current = String(meta.status || "draft");
   if (current === nextStatus) return;
 
@@ -488,7 +806,7 @@ function setQuotationStatus(nextStatus) {
   meta.status = nextStatus;
   addHistory(meta, "status_changed", `Moved to ${getStatusLabel(nextStatus)}`);
   saveCurrentMeta(meta);
-  syncQuotationData();
+  syncQuotationData(meta);
   renderLifecycle();
   showNotice(`Plan moved to ${getStatusLabel(nextStatus)}.`);
 }
@@ -512,8 +830,8 @@ function openItemModal() {
   if (!modal) return;
 
   const meta = getCurrentMeta();
-  if (!isQuotationEditable(meta.status)) {
-    showNotice("Only draft plans can be edited.", "warning");
+  if (!isQuotationMetaEditable(meta)) {
+    showNotice(getQuotationLockMessage(getQuotationLockState(meta)), "warning");
     return;
   }
 
@@ -531,8 +849,8 @@ function openChargeModal() {
   if (!modal) return;
 
   const meta = getCurrentMeta();
-  if (!isQuotationEditable(meta.status)) {
-    showNotice("Only draft plans can be edited.", "warning");
+  if (!isQuotationMetaEditable(meta)) {
+    showNotice(getQuotationLockMessage(getQuotationLockState(meta)), "warning");
     return;
   }
 
@@ -559,23 +877,27 @@ function closeChargeModal() {
   if (modal) modal.style.display = "none";
   if (document.getElementById("cValue")) document.getElementById("cValue").value = "";
   if (document.getElementById("cCustomLabel")) document.getElementById("cCustomLabel").value = "";
+  if (document.getElementById("cAdjustmentType")) document.getElementById("cAdjustmentType").value = "add";
   if (document.getElementById("cApplyTo")) document.getElementById("cApplyTo").value = "all";
 }
 
 function toggleCustomChargeField() {
   const typeEl = document.getElementById("cType");
   const customEl = document.getElementById("cCustomLabel");
-  if (!typeEl || !customEl) return;
+  const adjustmentEl = document.getElementById("cAdjustmentType");
+  if (!typeEl || !customEl || !adjustmentEl) return;
 
   const visible = typeEl.value === "custom";
   customEl.style.display = visible ? "block" : "none";
+  adjustmentEl.style.display = visible ? "block" : "none";
   if (!visible) customEl.value = "";
+  if (!visible) adjustmentEl.value = "add";
 }
 
 function addItemFromModal() {
   const meta = getCurrentMeta();
-  if (!isQuotationEditable(meta.status)) {
-    showNotice("Only draft plans can be edited.", "warning");
+  if (!isQuotationMetaEditable(meta)) {
+    showNotice(getQuotationLockMessage(getQuotationLockState(meta)), "warning");
     closeItemModal();
     return;
   }
@@ -644,8 +966,8 @@ function addItemFromModal() {
 
 function deleteItem(id) {
   const meta = getCurrentMeta();
-  if (!isQuotationEditable(meta.status)) {
-    showNotice("Only draft plans can be edited.", "warning");
+  if (!isQuotationMetaEditable(meta)) {
+    showNotice(getQuotationLockMessage(getQuotationLockState(meta)), "warning");
     return;
   }
 
@@ -670,8 +992,8 @@ function clearItemModal() {
 
 function addCharge() {
   const meta = getCurrentMeta();
-  if (!isQuotationEditable(meta.status)) {
-    showNotice("Only draft plans can be edited.", "warning");
+  if (!isQuotationMetaEditable(meta)) {
+    showNotice(getQuotationLockMessage(getQuotationLockState(meta)), "warning");
     closeChargeModal();
     return;
   }
@@ -681,6 +1003,10 @@ function addCharge() {
   const value = Number((document.getElementById("cValue") || {}).value || 0);
   const mode = String((document.getElementById("cMode") || {}).value || "fixed");
   const appliesTo = String((document.getElementById("cApplyTo") || {}).value || "all");
+  const selectedAdjustment = String((document.getElementById("cAdjustmentType") || {}).value || "add");
+  const adjustmentType = type === "custom"
+    ? (selectedAdjustment === "deduct" ? "deduct" : "add")
+    : getDefaultAdjustmentTypeForChargeType(type);
 
   if (!(value > 0)) {
     showNotice("Charge value must be greater than zero.", "warning");
@@ -695,16 +1021,23 @@ function addCharge() {
     return;
   }
 
+  if (type === "custom" && !(adjustmentType === "add" || adjustmentType === "deduct")) {
+    showNotice("Select Add Amount or Deduct Amount.", "warning");
+    return;
+  }
+
   quotationCharges.push({
     id: createEntityId("qc"),
     type,
     label: type === "custom" ? customLabel : type,
     value,
     mode,
-    appliesTo
+    appliesTo,
+    adjustmentType: adjustmentType || null
   });
 
-  addHistory(meta, "charge_added", `${type.toUpperCase()} ${mode === "percent" ? `${value}%` : formatCurrency(value)}`);
+  const directionLabel = adjustmentType === "deduct" ? "Deduct Amount" : "Add Amount";
+  addHistory(meta, "charge_added", `${type.toUpperCase()} ${mode === "percent" ? `${value}%` : formatCurrency(value)} (${directionLabel})`);
   saveCurrentMeta(meta);
   closeChargeModal();
   renderQuotation();
@@ -712,8 +1045,8 @@ function addCharge() {
 
 function deleteCharge(id) {
   const meta = getCurrentMeta();
-  if (!isQuotationEditable(meta.status)) {
-    showNotice("Only draft plans can be edited.", "warning");
+  if (!isQuotationMetaEditable(meta)) {
+    showNotice(getQuotationLockMessage(getQuotationLockState(meta)), "warning");
     return;
   }
 
@@ -726,6 +1059,7 @@ function deleteCharge(id) {
 
 function renderCharges() {
   const host = document.getElementById("chargesList");
+  const editable = isQuotationMetaEditable(getCurrentMeta());
   if (!host) return;
 
   host.innerHTML = "";
@@ -734,34 +1068,51 @@ function renderCharges() {
     return;
   }
 
+  host.innerHTML = `
+    <div class="charge-table" role="table" aria-label="Quotation charges">
+      <div class="charge-table-header" role="row">
+        <span role="columnheader">Charge Name</span>
+        <span role="columnheader">Value</span>
+        <span role="columnheader">Applied Price</span>
+        <span role="columnheader">Action</span>
+      </div>
+      <div id="chargeTableBody" role="rowgroup"></div>
+    </div>
+  `;
+
+  const body = document.getElementById("chargeTableBody");
+  if (!body) return;
+
   const subtotal = quotationItems.reduce((sum, item) => sum + Number(item.total || 0), 0);
   quotationCharges.forEach((charge) => {
-    let baseAmount = 0;
     let serial = "";
 
-    if (charge.appliesTo === "all") {
-      baseAmount = subtotal;
-    } else {
+    if (charge.appliesTo !== "all") {
       const item = quotationItems.find((x) => String(x.id) === String(charge.appliesTo));
-      baseAmount = item ? Number(item.total || 0) : 0;
       const index = quotationItems.findIndex((x) => String(x.id) === String(charge.appliesTo));
       serial = index !== -1 ? `(Item ${index + 1})` : "";
     }
 
-    const amount = charge.mode === "percent"
-      ? (baseAmount * Number(charge.value || 0)) / 100
-      : Number(charge.value || 0);
+    const amount = Number(getChargeAmount(charge, subtotal, quotationItems) || 0);
+    const direction = normalizeChargeAdjustmentType(charge);
+    const amountLabel = direction === "deduct"
+      ? `-${formatCurrency(amount)}`
+      : (direction === "add" ? `+${formatCurrency(amount)}` : `${formatCurrency(amount)} (excluded)`);
+    const valueLabel = charge.mode === "percent"
+      ? `${Number(charge.value || 0)}%`
+      : formatCurrency(Number(charge.value || 0));
 
     const row = document.createElement("div");
+    row.className = "charge-table-row";
     row.innerHTML = `
-      <div class="charge-row">
-        <span class="charge-name">${escapeQuotationHtml(String((charge.label || charge.type || "")).toUpperCase())} ${escapeQuotationHtml(serial)}</span>
-        <span class="charge-percent">${charge.mode === "percent" ? `${Number(charge.value || 0)}%` : ""}</span>
-        <span class="charge-amount">${formatCurrency(Number(amount || 0))}</span>
-        <button type="button" onclick="deleteCharge('${escapeQuotationHtml(charge.id)}')" class="delete-btn">✕</button>
-      </div>
+      <span class="charge-name">${escapeQuotationHtml(String((charge.label || charge.type || "")).toUpperCase())} ${escapeQuotationHtml(serial)}</span>
+      <span class="charge-value">${escapeQuotationHtml(valueLabel)}</span>
+      <span class="charge-applied">${escapeQuotationHtml(amountLabel)}</span>
+      <span class="charge-action-cell">${editable
+    ? `<button type="button" onclick="deleteCharge('${escapeQuotationHtml(charge.id)}')" class="delete-btn charge-row-delete" aria-label="Delete charge">✕</button>`
+    : "-"}</span>
     `;
-    host.appendChild(row);
+    body.appendChild(row);
   });
 }
 
@@ -770,9 +1121,12 @@ function updateTotals() {
   if (document.getElementById("qSubtotal")) document.getElementById("qSubtotal").innerText = formatCurrency(Number(totals.subtotal || 0));
   if (document.getElementById("qGSTAmount")) document.getElementById("qGSTAmount").innerText = formatCurrency(Number(totals.gstAmount || 0));
   if (document.getElementById("qFinalTotal")) document.getElementById("qFinalTotal").innerText = formatCurrency(Number(totals.total || 0));
+  renderQuotationFundingPreview();
 }
 
 function renderQuotation() {
+  const meta = getCurrentMeta();
+  const editable = isQuotationMetaEditable(meta);
   const host = document.getElementById("quotationItems");
   if (!host) return;
 
@@ -793,15 +1147,18 @@ function renderQuotation() {
     const safeName = escapeQuotationHtml(item.name);
     const safeSource = escapeQuotationHtml(item.source || "-");
     const safeLink = escapeQuotationHtml(item.link || "");
+    const hasSource = safeSource !== "-";
+    const hasLink = Boolean(safeLink);
+    const itemMetaHtml = hasSource || hasLink
+      ? `<small class="item-inline-meta">${hasSource ? `Source: ${safeSource}` : ""}${hasSource && hasLink ? " | " : ""}${hasLink ? `<a href="${safeLink}" target="_blank" rel="noopener noreferrer">Link</a>` : ""}</small>`
+      : "";
 
     row.innerHTML = `
-      <span>${safeName}</span>
+      <span>${safeName}${itemMetaHtml}</span>
       <span>${formatCurrency(Number(item.price || 0))}</span>
       <span>${Number(item.qty || 0)} ${escapeQuotationHtml(item.unit || "")}</span>
-      <span>${safeSource}</span>
-      <span>${safeLink ? `<button type="button" class="secondary tiny-btn" onclick="window.open('${safeLink}','_blank','noopener,noreferrer')">View</button>` : "-"}</span>
       <span>${formatCurrency(Number(item.total || 0))}</span>
-      <span><button type="button" class="secondary tiny-btn" onclick="deleteItem('${escapeQuotationHtml(item.id)}')">Remove</button></span>
+      <span><button type="button" class="secondary tiny-btn" onclick="deleteItem('${escapeQuotationHtml(item.id)}')" ${editable ? "" : "disabled"}>Remove</button></span>
     `;
 
     host.appendChild(row);
@@ -816,6 +1173,27 @@ function renderQuotation() {
 
 function convertToOrder() {
   const meta = getCurrentMeta();
+  const existingOrder = getExistingOrderForQuotation(meta);
+  const lockState = getQuotationLockState(meta);
+
+  if (existingOrder && existingOrder.id) {
+    localStorage.setItem("activeOrderId", JSON.stringify(String(existingOrder.id)));
+    showNotice("Order already exists for this quotation. Opening linked order.", "info");
+    window.location.href = "order.html";
+    return;
+  }
+
+  if (lockState.locked) {
+    if (lockState.orderId) {
+      localStorage.setItem("activeOrderId", JSON.stringify(String(lockState.orderId)));
+      showNotice("Order already exists for this quotation. Opening linked order.", "info");
+      window.location.href = "order.html";
+      return;
+    }
+
+    showNotice("Quotation is locked with order history. Duplicate order creation is blocked.", "warning");
+    return;
+  }
 
   if (meta.status !== "accepted") {
     showNotice("Plan must be accepted before creating order.", "warning");
@@ -836,6 +1214,14 @@ function convertToOrder() {
     : createEntityId("ORD");
 
   const orders = JSON.parse(localStorage.getItem("orders") || "[]");
+  const duplicateByQuotation = orders.find((row) => String(row && row.quotationId || "") === String(meta.id || ""));
+  if (duplicateByQuotation && duplicateByQuotation.id) {
+    localStorage.setItem("activeOrderId", JSON.stringify(String(duplicateByQuotation.id)));
+    showNotice("Order already exists for this quotation. Opening linked order.", "info");
+    window.location.href = "order.html";
+    return;
+  }
+
   const now = new Date().toISOString();
 
   const orderRow = {
@@ -872,7 +1258,7 @@ function convertToOrder() {
   meta.convertedOrderId = orderId;
   addHistory(meta, "converted", `Created order ${orderNo}`);
   saveCurrentMeta(meta);
-  syncQuotationData();
+  syncQuotationData(meta);
 
   if (window.DocWorkflow) {
     window.DocWorkflow.upsertRelation({
@@ -890,6 +1276,10 @@ function convertToOrder() {
 
 async function clearQuotation() {
   const meta = getCurrentMeta();
+  if (!isQuotationMetaEditable(meta)) {
+    showNotice(getQuotationLockMessage(getQuotationLockState(meta)), "warning");
+    return;
+  }
   const ok = await window.AppDialog.confirm("Delete this draft purchase plan?", "Confirm Deletion");
   if (!ok) return;
 
@@ -898,6 +1288,7 @@ async function clearQuotation() {
 
   quotationItems = [];
   quotationCharges = [];
+  hydratedQuotationId = null;
   localStorage.removeItem(Q_META_STORAGE_KEY);
   localStorage.removeItem("quotationData");
   localStorage.removeItem("quotationItems");
@@ -912,8 +1303,38 @@ async function clearQuotation() {
   window.location.href = "quotations.html";
 }
 
+function installQuotationAccordionBehavior() {
+  const accordions = Array.from(document.querySelectorAll("details.secondary-accordion"));
+  accordions.forEach((details) => {
+    const summary = details.querySelector("summary");
+    if (!summary) return;
+    if (summary.dataset.accordionBound === "true") return;
+    summary.dataset.accordionBound = "true";
+
+    const toggle = () => {
+      if (details.hasAttribute("open")) details.removeAttribute("open");
+      else details.setAttribute("open", "");
+    };
+
+    summary.addEventListener("click", (event) => {
+      event.preventDefault();
+      toggle();
+    });
+
+    summary.addEventListener("keydown", (event) => {
+      if (event.key === "Enter" || event.key === " ") {
+        event.preventDefault();
+        toggle();
+      }
+    });
+  });
+}
+
 function initializeQuotationModule() {
+  installQuotationAccordionBehavior();
+
   const meta = getCurrentMeta();
+  hydrateQuotationLines(meta.id, { force: true });
   if (!meta.validUntil) {
     const d = new Date();
     d.setDate(d.getDate() + 7);
@@ -1015,9 +1436,11 @@ if (typeof window !== "undefined") {
   window.setQuotationStatus = setQuotationStatus;
   window.savePurchasePlanDraft = savePurchasePlanDraft;
   window.convertToOrder = convertToOrder;
+  window.openLockedOrderFromQuotation = openLockedOrderFromQuotation;
   window.clearQuotation = clearQuotation;
   window.loadQuotationFundingOptions = loadQuotationFundingOptions;
   window.renderQuotationFundingPreview = renderQuotationFundingPreview;
+  window.toggleAuditTrailView = toggleAuditTrailView;
   window.openItemModal = openItemModal;
   window.closeItemModal = closeItemModal;
   window.addItemFromModal = addItemFromModal;

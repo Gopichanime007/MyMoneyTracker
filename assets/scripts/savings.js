@@ -1436,18 +1436,10 @@ function renderSavingsHistory(data) {
         return;
     }
 
-    let compareTxn = (a, b) => {
-        let da = new Date(a.date || 0).getTime();
-        let db = new Date(b.date || 0).getTime();
-        if (da !== db) return da - db;
-        return String(a.id || "").localeCompare(String(b.id || ""));
-    };
-
-    let chronological = sourceData.slice().sort(compareTxn);
     let persisted = ((typeof getSavings === "function") ? getSavings() : []) || [];
     let persistedById = new Map(persisted.map(x => [String(x && x.id), x]));
 
-    let withRunning = chronological.map(t => {
+    let withRunning = sourceData.map(t => {
         let p = persistedById.get(String(t.id));
         let persistedAfter = Number(p && p.BalanceAfterTransaction);
         if (Number.isFinite(persistedAfter)) {
@@ -1457,7 +1449,7 @@ function renderSavingsHistory(data) {
         return Object.assign({}, t, { runningBalance: Number.isFinite(fallback) ? fallback : Number(t.amount || 0) });
     });
 
-    withRunning.slice().reverse().forEach((t) => {
+    withRunning.forEach((t) => {
 
         let div = document.createElement("div");
         div.className = "expense-item transaction-card";
@@ -2136,6 +2128,10 @@ function loadSavingsGraph(data) {
                 data: [income, expense],
                 backgroundColor: ["#4caf50", "#ff5252"]
             }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false
         }
     });
 }
@@ -2408,17 +2404,27 @@ function renderIncomeList() {
                 <span class="entry-status-pill ${statusClass}">${statusText}</span>
             </div>
 
-            <div class="entry-details-grid">
-                <span class="entry-label">Target Amount</span>
-                <span class="entry-value">${escapeSavingsHtml(formatCurrency(i.amount))}</span>
-                <span class="entry-label">Saved Amount</span>
-                <span class="entry-value">${escapeSavingsHtml(formatCurrency(Number(i.amount || 0) - Math.max(0, remaining)))}</span>
-                <span class="entry-label">Remaining</span>
-                <span class="entry-value">${escapeSavingsHtml(formatCurrency(remaining))}</span>
-                <span class="entry-label">Transactions</span>
-                <span class="entry-value">${escapeSavingsHtml(String(txCount))}</span>
-                <span class="entry-label">Created Date</span>
-                <span class="entry-value">${escapeSavingsHtml(createdDate)}</span>
+            <div class="source-entry-details">
+                <div class="source-entry-row">
+                    <span class="source-entry-key">Target Amount</span>
+                    <span class="source-entry-value">${escapeSavingsHtml(formatCurrency(i.amount))}</span>
+                </div>
+                <div class="source-entry-row">
+                    <span class="source-entry-key">Saved Amount</span>
+                    <span class="source-entry-value">${escapeSavingsHtml(formatCurrency(Number(i.amount || 0) - Math.max(0, remaining)))}</span>
+                </div>
+                <div class="source-entry-row">
+                    <span class="source-entry-key">Remaining</span>
+                    <span class="source-entry-value">${escapeSavingsHtml(formatCurrency(remaining))}</span>
+                </div>
+                <div class="source-entry-row">
+                    <span class="source-entry-key">Transactions</span>
+                    <span class="source-entry-value">${escapeSavingsHtml(String(txCount))}</span>
+                </div>
+                <div class="source-entry-row">
+                    <span class="source-entry-key">Created Date</span>
+                    <span class="source-entry-value">${escapeSavingsHtml(createdDate)}</span>
+                </div>
             </div>
 
             <div class="entry-actions">

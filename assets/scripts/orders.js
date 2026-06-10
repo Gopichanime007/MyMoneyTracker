@@ -368,6 +368,119 @@ function clearOrdersSortModal() {
   renderOrders();
 }
 
+function getOrderChargeAmount(charge, items, subtotal) {
+  if (!charge) return 0;
+
+  let baseAmount = 0;
+  if (String(charge.appliesTo || "all") === "all") {
+    baseAmount = subtotal;
+  } else {
+    const target = (items || []).find((x) => String(x.id) === String(charge.appliesTo));
+    baseAmount = target ? Number(target.total || 0) : 0;
+  }
+
+  const value = Number(charge.value || 0);
+  if (String(charge.mode || "fixed") === "percent") {
+    return (baseAmount * value) / 100;
+  }
+
+  return value;
+}
+
+function getOrderChargeDirection(charge) {
+  const explicit = String(charge && charge.adjustmentType || "").toLowerCase();
+  if (explicit === "add" || explicit === "deduct") return explicit;
+
+  const type = String(charge && charge.type || "").toLowerCase();
+  if (type === "discount") return "deduct";
+  if (type === "gst" || type === "delivery") return "add";
+  return null;
+}
+
+function getOrderChargeSignedAmount(charge, items, subtotal) {
+  const amount = Number(getOrderChargeAmount(charge, items, subtotal) || 0);
+  const direction = getOrderChargeDirection(charge);
+  if (direction === "deduct") return -amount;
+  if (direction === "add") return amount;
+  return 0;
+}
+
+function getOrderChargeSummary(order) {
+  const items = Array.isArray(order && order.items) ? order.items : [];
+  const charges = Array.isArray(order && order.charges) ? order.charges : [];
+  const subtotal = Number(order && order.subtotal || 0);
+
+  const computedTotal = charges.reduce((sum, charge) => {
+    const amount = getOrderChargeSignedAmount(charge, items, subtotal);
+    return sum + Number(amount || 0);
+  }, 0);
+
+  return {
+    count: charges.length,
+    total: Number(computedTotal.toFixed(2))
+  };
+}
+
+function getFundingAmountForOrder(order) {
+  if (!order || !order.sourceId || !order.sourceType) return null;
+
+  if (String(order.sourceType) === "savings") {
+    const rows = JSON.parse(localStorage.getItem("savingsTransactions") || "[]");
+    const root = rows.find((row) => String(row && row.id || "") === String(order.sourceId || ""));
+    return root ? Number(root.amount || 0) : null;
+  }
+
+  if (String(order.sourceType) === "budget") {
+    const rows = JSON.parse(localStorage.getItem("budgets") || "[]");
+    const target = rows.find((row) => String((row && (row.budgetId || row.id)) || "") === String(order.sourceId || ""));
+    return target ? Number(target.totalAllocated || target.amount || 0) : null;
+  }
+
+  return null;
+}
+
+function renderOrderChargeRows(order) {
+  const items = Array.isArray(order && order.items) ? order.items : [];
+  const charges = Array.isArray(order && order.charges) ? order.charges : [];
+  const subtotal = Number(order && order.subtotal || 0);
+
+  if (!charges.length) {
+    return '<div class="order-subsection-empty">No charges</div>';
+  }
+
+  const rowsHtml = charges.map((charge) => {
+    const amount = Number(getOrderChargeAmount(charge, items, subtotal) || 0);
+    const direction = getOrderChargeDirection(charge);
+    const amountLabel = direction === "deduct"
+      ? `-${formatCurrency(amount)}`
+      : (direction === "add" ? `+${formatCurrency(amount)}` : `${formatCurrency(amount)} (legacy excluded)`);
+    const valueLabel = String(charge.mode || "fixed") === "percent"
+      ? `${Number(charge.value || 0)}%`
+      : formatCurrency(Number(charge.value || 0));
+    const label = String(charge.label || charge.type || "Charge").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    return `
+      <div class="charge-table-row">
+        <span class="charge-name">${label}</span>
+        <span class="charge-value">${valueLabel}</span>
+        <span class="charge-applied">${amountLabel}</span>
+        <span class="charge-action-cell"><button type="button" class="charge-row-delete" disabled aria-label="Charge action unavailable">✕</button></span>
+      </div>
+    `;
+  }).join("");
+
+  return `
+    <div class="charge-table" role="table" aria-label="Order charges">
+      <div class="charge-table-header" role="row">
+        <span role="columnheader">Charge Name</span>
+        <span role="columnheader">Value</span>
+        <span role="columnheader">Applied Price</span>
+        <span role="columnheader">Action</span>
+      </div>
+      <div class="charge-table-body" role="rowgroup">${rowsHtml}</div>
+    </div>
+  `;
+}
+
 function renderOrders() {
   const allOrders = getOrders();
   if (!document.getElementById || !document.getElementById("ordersList")) return;
@@ -402,7 +515,7 @@ function renderOrders() {
   container.innerHTML = "";
   const fragment = document.createDocumentFragment();
 
-  [...orders].reverse().forEach(order => {
+  orders.forEach(order => {
     const div = document.createElement("div");
     div.className = "order-card";
 
@@ -410,72 +523,106 @@ function renderOrders() {
       ? new Date(order.updatedAt || order.date || order.createdAt).toLocaleString("en-IN")
       : "-";
 
-    const itemsHTML = (order.items || []).map(i => `
+    const items = Array.isArray(order.items) ? order.items : [];
+    const itemsHTML = items.map(i => `
       <div class="item-row">
         <span>${String(i.name || "-").replace(/</g, "&lt;").replace(/>/g, "&gt;")}</span>
         <span>${Number(i.qty || 0)} × ${formatCurrency(Number(i.price || 0))}</span>
       </div>
     `).join("");
-
-    const allowed = getAllowedOrderTransitions(String(order.status || "draft"));
-
-    const transitionButtons = allowed
-      .filter(state => state !== "cancelled")
-      .map(state => `<button type="button" class="secondary tiny-btn" onclick="event.stopPropagation(); transitionOrderStatus('${order.id}','${state}')">${formatOrderStatus(state)}</button>`)
-      .join("");
-
-    const cancelBtn = allowed.includes("cancelled")
-      ? `<button type="button" class="danger tiny-btn" onclick="event.stopPropagation(); openDeleteModal('${order.id}')">Cancel</button>`
-      : "";
-
+    const chargeSummary = getOrderChargeSummary(order);
+    const chargesHTML = renderOrderChargeRows(order);
     const openBtn = `<button type="button" class="secondary tiny-btn" onclick="event.stopPropagation(); openOrder('${order.id}')">Open</button>`;
-    const editBtn = `<button type="button" class="secondary tiny-btn" onclick="event.stopPropagation(); openOrder('${order.id}')">Edit</button>`;
-    const fundingBtn = `<button type="button" class="secondary tiny-btn" onclick="event.stopPropagation(); viewFundingDetails('${order.id}')">View Funding</button>`;
     const deleteBtn = `<button type="button" class="danger tiny-btn" onclick="event.stopPropagation(); deleteOrder('${order.id}')">Delete</button>`;
 
     const purpose = String(order.purpose || "-").replace(/</g, "&lt;").replace(/>/g, "&gt;");
     const quotationNo = String(order.quotationNo || order.quotationId || "-").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-    const funding = `${String(order.sourceType || "-").replace(/</g, "&lt;").replace(/>/g, "&gt;")} → ${String(order.sourceName || "-").replace(/</g, "&lt;").replace(/>/g, "&gt;")}`;
+    const fundingSource = String(order.sourceName || "-").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    const fundingAmountRaw = getFundingAmountForOrder(order);
+    const fundingAmount = fundingAmountRaw == null ? "-" : formatCurrency(Number(fundingAmountRaw || 0));
+    const quotedAmount = formatCurrency(Number(order.plannedAmount || order.total || 0));
+    const orderAmount = formatCurrency(Number(order.total || 0));
+    const varianceRaw = Number(order.total || 0) - Number(order.plannedAmount || order.total || 0);
+    const varianceAmount = varianceRaw > 0
+      ? `+${formatCurrency(varianceRaw)}`
+      : (varianceRaw < 0 ? `-${formatCurrency(Math.abs(varianceRaw))}` : formatCurrency(0));
+    const timelineHtml = renderOrderTimelineRows(order);
+    const auditHtml = renderOrderAuditRows(order);
 
     div.innerHTML = `
       <div class="order-header" onclick="toggleOrder('${order.id}')">
         <div>
-          <strong>${String(order.orderNo || order.id).replace(/</g, "&lt;").replace(/>/g, "&gt;")} • ${formatCurrency(Number(order.total || 0))}</strong>
+          <strong>${String(order.orderNo || order.id).replace(/</g, "&lt;").replace(/>/g, "&gt;")}</strong>
           <small>${date}</small>
+          <small>Purpose: ${purpose}</small>
+          <small>Items: ${items.length} | Charges: ${chargeSummary.count}</small>
+          <div class="order-amount">${formatCurrency(Number(order.total || 0))}</div>
         </div>
 
         <div class="header-right">
+          <span class="collapsed-open">${openBtn}</span>
           <span class="badge status-${String(order.status || "draft")}">${formatOrderStatus(order.status || "draft")}</span>
           <span class="arrow">▼</span>
         </div>
       </div>
 
       <div class="order-items" id="items-${order.id}">
-        <div class="order-meta">
-          Purpose: ${purpose}
+        <div class="order-section order-funding-summary">
+          <div class="order-subsection-title">Funding Summary</div>
+          <div class="order-meta">Funding Source: ${fundingSource}</div>
+          <div class="order-meta">Funding Amount: ${fundingAmount}</div>
+          <div class="order-meta">Quoted Amount: ${quotedAmount}</div>
+          <div class="order-meta">Order Amount: ${orderAmount}</div>
+          <div class="order-meta">Variance: ${varianceAmount}</div>
         </div>
 
-        <div class="order-meta">
-          Linked Quotation: ${quotationNo}
+        <div class="order-divider"></div>
+
+        <div class="order-section">
+          <div class="order-subsection-title">Items</div>
+          <div class="order-meta"><strong>Count:</strong> ${items.length}</div>
+          ${itemsHTML || '<div class="order-subsection-empty">No items</div>'}
         </div>
 
-        <div class="order-meta">
-          Funding: ${funding}
+        <div class="order-divider"></div>
+
+        <div class="order-section">
+          <div class="order-subsection-title">Charges</div>
+          <div class="order-meta"><strong>Count:</strong> ${chargeSummary.count}</div>
+          ${chargesHTML}
         </div>
 
-        <div class="order-meta">
-          ${getPaymentIcon(order.paymentType)} ${String(order.paymentType || "-").replace(/</g, "&lt;").replace(/>/g, "&gt;")}
+        <div class="order-divider"></div>
+
+        <div class="order-section">
+          <div class="order-subsection-title">References</div>
+          <div class="order-meta">Linked Quotation: ${quotationNo}</div>
+          <div class="order-meta">${getPaymentIcon(order.paymentType)} ${String(order.paymentType || "-").replace(/</g, "&lt;").replace(/>/g, "&gt;")}</div>
         </div>
 
-        ${itemsHTML}
+        <div class="order-divider"></div>
 
-        <div class="order-actions-row">
-          ${openBtn}
-          ${editBtn}
-          ${transitionButtons}
-          ${cancelBtn}
-          ${fundingBtn}
-          ${deleteBtn}
+        <details class="secondary-accordion order-inline-accordion">
+          <summary>Timeline</summary>
+          <div class="accordion-body">
+            ${timelineHtml}
+          </div>
+        </details>
+
+        <details class="secondary-accordion order-inline-accordion">
+          <summary>Audit and Activity</summary>
+          <div class="accordion-body">
+            ${auditHtml}
+          </div>
+        </details>
+
+        <div class="order-divider"></div>
+
+        <div class="order-section">
+          <div class="order-subsection-title">Actions</div>
+          <div class="order-actions-row">
+            ${deleteBtn}
+          </div>
         </div>
       </div>
     `;
@@ -484,6 +631,7 @@ function renderOrders() {
   });
 
   container.appendChild(fragment);
+  installOrdersAccordionBehavior();
 }
 
 function toggleOrder(id) {
@@ -540,11 +688,38 @@ function viewFundingDetails(orderId) {
 }
 
 function getOrderFundingSummary(order) {
-  const sourceType = String(order.sourceType || "-");
   const sourceName = String(order.sourceName || "-");
   const total = formatCurrency(Number(order.total || 0));
   const planned = formatCurrency(Number(order.plannedAmount || order.total || 0));
-  return `Funding ${sourceType} → ${sourceName} | Planned ${planned} | Order ${total}`;
+  const variance = Number(order.total || 0) - Number(order.plannedAmount || order.total || 0);
+  const varianceLabel = variance > 0
+    ? `+${formatCurrency(variance)}`
+    : (variance < 0 ? `-${formatCurrency(Math.abs(variance))}` : formatCurrency(0));
+  return `Funding Source ${sourceName} | Quoted Amount ${planned} | Order Amount ${total} | Variance ${varianceLabel}`;
+}
+
+function renderOrderTimelineRows(order) {
+  const history = Array.isArray(order && order.statusHistory) ? order.statusHistory : [];
+  if (!history.length) return '<div class="order-meta">No timeline events</div>';
+
+  return history.slice().reverse().map((entry) => {
+    const at = entry && entry.at ? new Date(entry.at).toLocaleString("en-IN") : "-";
+    const fromLabel = entry && entry.from ? formatOrderStatus(entry.from) : "-";
+    const toLabel = formatOrderStatus(entry && entry.to ? entry.to : (order && order.status ? order.status : "draft"));
+    const note = String(entry && entry.note ? entry.note : "").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    return `<div class="order-meta"><strong>${String(at).replace(/</g, "&lt;").replace(/>/g, "&gt;")}</strong> | ${fromLabel} → ${toLabel}${note ? ` | ${note}` : ""}</div>`;
+  }).join("");
+}
+
+function renderOrderAuditRows(order) {
+  const rows = [];
+  if (order && order.quotationNo) rows.push(`<div class="order-meta"><strong>Quotation:</strong> ${String(order.quotationNo).replace(/</g, "&lt;").replace(/>/g, "&gt;")}</div>`);
+  if (order && order.paymentType) rows.push(`<div class="order-meta"><strong>Payment:</strong> ${String(order.paymentType).replace(/</g, "&lt;").replace(/>/g, "&gt;")}</div>`);
+  if (order && order.cancelledAt) rows.push(`<div class="order-meta"><strong>Cancelled At:</strong> ${new Date(order.cancelledAt).toLocaleString("en-IN")}</div>`);
+  if (order && order.cancellationReason) rows.push(`<div class="order-meta"><strong>Reason:</strong> ${String(order.cancellationReason).replace(/</g, "&lt;").replace(/>/g, "&gt;")}</div>`);
+  if (order && order.updatedAt) rows.push(`<div class="order-meta"><strong>Last Updated:</strong> ${new Date(order.updatedAt).toLocaleString("en-IN")}</div>`);
+  if (!rows.length) rows.push('<div class="order-meta">No audit records</div>');
+  return rows.join("");
 }
 
 async function deleteOrder(orderId) {
@@ -674,7 +849,37 @@ function confirmDelete() {
   showOrdersNotice("Order cancelled and audit logged.", "success");
 }
 
-document.addEventListener("DOMContentLoaded", renderOrders);
+function installOrdersAccordionBehavior() {
+  const accordions = Array.from(document.querySelectorAll("details.secondary-accordion"));
+  accordions.forEach((details) => {
+    const summary = details.querySelector("summary");
+    if (!summary) return;
+    if (summary.dataset.accordionBound === "true") return;
+    summary.dataset.accordionBound = "true";
+
+    const toggle = () => {
+      if (details.hasAttribute("open")) details.removeAttribute("open");
+      else details.setAttribute("open", "");
+    };
+
+    summary.addEventListener("click", (event) => {
+      event.preventDefault();
+      toggle();
+    });
+
+    summary.addEventListener("keydown", (event) => {
+      if (event.key === "Enter" || event.key === " ") {
+        event.preventDefault();
+        toggle();
+      }
+    });
+  });
+}
+
+document.addEventListener("DOMContentLoaded", () => {
+  installOrdersAccordionBehavior();
+  renderOrders();
+});
 
 if (typeof window !== "undefined") {
   window.openOrder = openOrder;

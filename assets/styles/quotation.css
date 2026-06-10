@@ -57,6 +57,26 @@ body {
   gap: 14px;
 }
 
+.lock-banner {
+  display: grid;
+  gap: 6px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid #fecaca;
+  background: #fef2f2;
+}
+
+.lock-banner-title {
+  font-size: 12px;
+  font-weight: 700;
+  color: #991b1b;
+}
+
+.lock-banner-copy {
+  font-size: 12px;
+  color: #7f1d1d;
+}
+
 .section-heading {
   display: flex;
   align-items: center;
@@ -185,6 +205,39 @@ select:focus {
   gap: 8px;
 }
 
+.secondary-accordion {
+  border: 1px solid #dbe5f0;
+  border-radius: 12px;
+  background: #f8fbff;
+}
+
+.secondary-accordion summary {
+  cursor: pointer;
+  list-style: none;
+  padding: 10px 12px;
+  font-size: 13px;
+  font-weight: 700;
+  color: #334155;
+}
+
+.secondary-accordion summary::-webkit-details-marker {
+  display: none;
+}
+
+.secondary-accordion summary::after {
+  content: "+";
+  float: right;
+  color: #64748b;
+}
+
+.secondary-accordion[open] summary::after {
+  content: "-";
+}
+
+.accordion-body {
+  padding: 0 12px 12px;
+}
+
 .row {
   display: flex;
   gap: 8px;
@@ -233,18 +286,30 @@ select:focus {
 }
 
 .table-scroll {
-  min-width: 700px;
+  min-width: 560px;
   padding: 8px;
 }
 
 .table-header,
 .table-row {
   display: grid;
-  grid-template-columns: 2fr 1fr 0.8fr 1.4fr 1fr 1.2fr 1fr;
+  grid-template-columns: 2fr 1fr 0.9fr 1.2fr 1fr;
   gap: 10px;
   align-items: center;
   font-size: 13px;
   padding: 10px 4px;
+}
+
+.item-inline-meta {
+  display: block;
+  margin-top: 2px;
+  font-size: 11px;
+  color: #64748b;
+}
+
+.item-inline-meta a {
+  color: #2563eb;
+  text-decoration: none;
 }
 
 .table-header {
@@ -281,11 +346,84 @@ select:focus {
 .charge-name {
   font-weight: 600;
   color: #1f2937;
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .charge-percent,
 .charge-amount {
   text-align: right;
+}
+
+.charge-table {
+  border: 1px solid #e5ebf2;
+  border-radius: 10px;
+  background: #fbfcfe;
+  overflow: hidden;
+  width: 100%;
+}
+
+.charge-table-header,
+.charge-table-row {
+  display: grid;
+  grid-template-columns: 1.8fr 0.9fr 1fr 36px;
+  column-gap: 12px;
+  align-items: center;
+  padding: 7px 8px;
+}
+
+.charge-table-header {
+  font-size: 11px;
+  font-weight: 700;
+  color: #475569;
+  background: #f1f5f9;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.charge-table-row {
+  position: relative;
+  font-size: 12px;
+  color: #1f2937;
+}
+
+.charge-table-row + .charge-table-row {
+  border-top: 1px solid #edf2f7;
+}
+
+.charge-value,
+.charge-applied {
+  white-space: nowrap;
+  text-align: right;
+}
+
+.charge-table-header span:nth-child(2),
+.charge-table-header span:nth-child(3),
+.charge-value,
+.charge-applied {
+  justify-self: end;
+}
+
+.charge-table-header span:nth-child(4),
+.charge-action-cell {
+  justify-self: center;
+  text-align: center;
+}
+
+.charge-table-row .charge-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.charge-row-delete {
+  width: 24px;
+  height: 24px;
+  min-width: 24px;
+  padding: 0;
+  border-radius: 999px;
+  line-height: 1;
+  font-size: 12px;
 }
 
 .delete-btn {
@@ -329,6 +467,59 @@ select:focus {
   padding: 10px;
   font-size: 12px;
   color: #166534;
+}
+
+.funding-preview {
+  display: grid;
+  gap: 4px;
+}
+
+.funding-account-label {
+  color: #4b5563;
+}
+
+.funding-account-name {
+  font-size: 13px;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.funding-metrics {
+  display: grid;
+  gap: 2px;
+}
+
+.audit-compact {
+  display: grid;
+  gap: 6px;
+}
+
+.audit-compact-title {
+  font-size: 12px;
+  font-weight: 700;
+  color: #14532d;
+}
+
+.audit-compact-body {
+  display: grid;
+  gap: 2px;
+}
+
+.audit-toggle-link {
+  justify-self: start;
+  border: none;
+  background: transparent;
+  padding: 0;
+  color: #14532d;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.audit-trail.funding-shortfall {
+  border-left-color: #ef4444;
+  background: #fef2f2;
+  color: #991b1b;
 }
 
 .audit-row + .audit-row {
@@ -439,5 +630,26 @@ select:focus {
 
   .status-timeline {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .charge-row {
+    grid-template-columns: minmax(0, 1fr) auto auto 34px;
+    gap: 6px;
+  }
+
+  .charge-table-header,
+  .charge-table-row {
+    grid-template-columns: 1.8fr 0.9fr 1fr 32px;
+    column-gap: 10px;
+    padding: 6px 7px;
+  }
+
+  .charge-percent,
+  .charge-amount {
+    font-size: 12px;
+  }
+
+  .funding-account-name {
+    font-size: 12px;
   }
 }

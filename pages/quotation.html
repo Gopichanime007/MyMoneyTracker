@@ -50,11 +50,16 @@
         </div>
       </div>
 
-      <div class="status-timeline" id="quotationStatusTimeline" aria-label="Quotation status timeline">
-        <span class="status-step" data-status-step="draft">Draft</span>
-        <span class="status-step" data-status-step="accepted">Accepted</span>
-        <span class="status-step" data-status-step="converted">Converted</span>
-      </div>
+      <details class="secondary-accordion">
+        <summary>Timeline</summary>
+        <div class="accordion-body">
+          <div class="status-timeline" id="quotationStatusTimeline" aria-label="Quotation status timeline">
+            <span class="status-step" data-status-step="draft">Draft</span>
+            <span class="status-step" data-status-step="accepted">Accepted</span>
+            <span class="status-step" data-status-step="converted">Converted</span>
+          </div>
+        </div>
+      </details>
 
       <div class="status-actions" id="quotationStatusActions">
         <button class="secondary" type="button" data-quote-action="accepted" onclick="setQuotationStatus('accepted')">Accept Plan</button>
@@ -92,8 +97,6 @@
             <span>Name</span>
             <span>Price</span>
             <span>Qty</span>
-            <span>Source</span>
-            <span>Link</span>
             <span>Total</span>
             <span>Action</span>
           </div>
@@ -114,10 +117,12 @@
         <h3>Total: <span id="qFinalTotal">0</span></h3>
       </div>
 
-      <div class="section-heading">
-        <h4>Recent Activity</h4>
-      </div>
-      <div id="quotationAuditTrail" class="audit-trail"></div>
+      <details class="secondary-accordion">
+        <summary>Activity</summary>
+        <div class="accordion-body">
+          <div id="quotationAuditTrail" class="audit-trail"></div>
+        </div>
+      </details>
 
       <div class="footer-actions">
         <button id="saveDraftBtn" class="secondary" type="button" onclick="savePurchasePlanDraft()">Save Draft</button>
@@ -212,6 +217,11 @@
 
       <input type="text" id="cCustomLabel" placeholder="Custom charge name" style="display:none;">
 
+      <select id="cAdjustmentType" style="display:none;">
+        <option value="add">Add Amount</option>
+        <option value="deduct">Deduct Amount</option>
+      </select>
+
       <input type="number" id="cValue" placeholder="Value">
 
       <select id="cMode">
@@ -232,6 +242,7 @@
   </div>
 
   <script src="../assets/scripts/storage.js"></script>
+  <script src="../assets/scripts/documentWorkflow.js"></script>
   <script src="../assets/scripts/script.js"></script>
   <script src="../assets/scripts/quotation.js"></script>
 </body>

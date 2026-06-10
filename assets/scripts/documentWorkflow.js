@@ -100,6 +100,30 @@
     return Array.isArray(rows) ? rows : [];
   }
 
+  function findOrderForQuotation(quotationId, options = {}) {
+    const qId = String(quotationId || "");
+    if (!qId) return null;
+
+    const orders = getOrderRows();
+    const preferredOrderId = String(options.orderId || "");
+    if (preferredOrderId) {
+      const byPreferred = orders.find((row) => String(row && row.id || "") === preferredOrderId);
+      if (byPreferred) return byPreferred;
+    }
+
+    const byQuotationId = orders.find((row) => String(row && row.quotationId || "") === qId);
+    if (byQuotationId) return byQuotationId;
+
+    const relation = getRelationByQuotationId(qId);
+    const relationOrderId = String(relation && relation.orderId || "");
+    if (relationOrderId) {
+      const byRelation = orders.find((row) => String(row && row.id || "") === relationOrderId);
+      if (byRelation) return byRelation;
+    }
+
+    return null;
+  }
+
   function collectUsedNumbers(kind) {
     const set = new Set();
     if (kind === "quotation") {
@@ -291,6 +315,7 @@
     getQuotationRegistry,
     saveQuotationRegistry,
     getOrderRows,
+    findOrderForQuotation,
     getRelations,
     saveRelations,
     upsertRelation,
