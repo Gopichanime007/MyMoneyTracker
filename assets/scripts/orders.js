@@ -368,6 +368,102 @@ function clearOrdersSortModal() {
   renderOrders();
 }
 
+function getOrderChargeAmount(charge, items, subtotal) {
+  if (!charge) return 0;
+
+  let baseAmount = 0;
+  if (String(charge.appliesTo || "all") === "all") {
+    baseAmount = subtotal;
+  } else {
+    const target = (items || []).find((x) => String(x.id) === String(charge.appliesTo));
+    baseAmount = target ? Number(target.total || 0) : 0;
+  }
+
+  const value = Number(charge.value || 0);
+  if (String(charge.mode || "fixed") === "percent") {
+    return (baseAmount * value) / 100;
+  }
+
+  return value;
+}
+
+function getOrderChargeDirection(charge) {
+  const explicit = String(charge && charge.adjustmentType || "").toLowerCase();
+  if (explicit === "add" || explicit === "deduct") return explicit;
+
+  const type = String(charge && charge.type || "").toLowerCase();
+  if (type === "discount") return "deduct";
+  if (type === "gst" || type === "delivery") return "add";
+  return null;
+}
+
+function getOrderChargeSignedAmount(charge, items, subtotal) {
+  const amount = Number(getOrderChargeAmount(charge, items, subtotal) || 0);
+  const direction = getOrderChargeDirection(charge);
+  if (direction === "deduct") return -amount;
+  if (direction === "add") return amount;
+  return 0;
+}
+
+function getOrderChargeSummary(order) {
+  const items = Array.isArray(order && order.items) ? order.items : [];
+  const charges = Array.isArray(order && order.charges) ? order.charges : [];
+  const subtotal = Number(order && order.subtotal || 0);
+
+  const computedTotal = charges.reduce((sum, charge) => {
+    const amount = getOrderChargeSignedAmount(charge, items, subtotal);
+    return sum + Number(amount || 0);
+  }, 0);
+
+  return {
+    count: charges.length,
+    total: Number(computedTotal.toFixed(2))
+  };
+}
+
+function getFundingAmountForOrder(order) {
+  if (!order || !order.sourceId || !order.sourceType) return null;
+
+  if (String(order.sourceType) === "savings") {
+    const rows = JSON.parse(localStorage.getItem("savingsTransactions") || "[]");
+    const root = rows.find((row) => String(row && row.id || "") === String(order.sourceId || ""));
+    return root ? Number(root.amount || 0) : null;
+  }
+
+  if (String(order.sourceType) === "budget") {
+    const rows = JSON.parse(localStorage.getItem("budgets") || "[]");
+    const target = rows.find((row) => String((row && (row.budgetId || row.id)) || "") === String(order.sourceId || ""));
+    return target ? Number(target.totalAllocated || target.amount || 0) : null;
+  }
+
+  return null;
+}
+
+function renderOrderChargeRows(order) {
+  const items = Array.isArray(order && order.items) ? order.items : [];
+  const charges = Array.isArray(order && order.charges) ? order.charges : [];
+  const subtotal = Number(order && order.subtotal || 0);
+
+  if (!charges.length) {
+    return '<div class="order-subsection-empty">No charges</div>';
+  }
+
+  return charges.map((charge) => {
+    const amount = Number(getOrderChargeAmount(charge, items, subtotal) || 0);
+    const direction = getOrderChargeDirection(charge);
+    const amountLabel = direction === "deduct"
+      ? `-${formatCurrency(amount)}`
+      : (direction === "add" ? `+${formatCurrency(amount)}` : `${formatCurrency(amount)} (legacy excluded)`);
+    const label = String(charge.label || charge.type || "Charge").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    return `
+      <div class="item-row">
+        <span>${label}</span>
+        <span>${amountLabel}</span>
+      </div>
+    `;
+  }).join("");
+}
+
 function renderOrders() {
   const allOrders = getOrders();
   if (!document.getElementById || !document.getElementById("ordersList")) return;
@@ -402,7 +498,7 @@ function renderOrders() {
   container.innerHTML = "";
   const fragment = document.createDocumentFragment();
 
-  [...orders].reverse().forEach(order => {
+  orders.forEach(order => {
     const div = document.createElement("div");
     div.className = "order-card";
 
@@ -410,72 +506,88 @@ function renderOrders() {
       ? new Date(order.updatedAt || order.date || order.createdAt).toLocaleString("en-IN")
       : "-";
 
-    const itemsHTML = (order.items || []).map(i => `
+    const items = Array.isArray(order.items) ? order.items : [];
+    const itemsHTML = items.map(i => `
       <div class="item-row">
         <span>${String(i.name || "-").replace(/</g, "&lt;").replace(/>/g, "&gt;")}</span>
         <span>${Number(i.qty || 0)} × ${formatCurrency(Number(i.price || 0))}</span>
       </div>
     `).join("");
-
-    const allowed = getAllowedOrderTransitions(String(order.status || "draft"));
-
-    const transitionButtons = allowed
-      .filter(state => state !== "cancelled")
-      .map(state => `<button type="button" class="secondary tiny-btn" onclick="event.stopPropagation(); transitionOrderStatus('${order.id}','${state}')">${formatOrderStatus(state)}</button>`)
-      .join("");
-
-    const cancelBtn = allowed.includes("cancelled")
-      ? `<button type="button" class="danger tiny-btn" onclick="event.stopPropagation(); openDeleteModal('${order.id}')">Cancel</button>`
-      : "";
-
+    const chargeSummary = getOrderChargeSummary(order);
+    const chargesHTML = renderOrderChargeRows(order);
     const openBtn = `<button type="button" class="secondary tiny-btn" onclick="event.stopPropagation(); openOrder('${order.id}')">Open</button>`;
-    const editBtn = `<button type="button" class="secondary tiny-btn" onclick="event.stopPropagation(); openOrder('${order.id}')">Edit</button>`;
-    const fundingBtn = `<button type="button" class="secondary tiny-btn" onclick="event.stopPropagation(); viewFundingDetails('${order.id}')">View Funding</button>`;
     const deleteBtn = `<button type="button" class="danger tiny-btn" onclick="event.stopPropagation(); deleteOrder('${order.id}')">Delete</button>`;
 
     const purpose = String(order.purpose || "-").replace(/</g, "&lt;").replace(/>/g, "&gt;");
     const quotationNo = String(order.quotationNo || order.quotationId || "-").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-    const funding = `${String(order.sourceType || "-").replace(/</g, "&lt;").replace(/>/g, "&gt;")} → ${String(order.sourceName || "-").replace(/</g, "&lt;").replace(/>/g, "&gt;")}`;
+    const fundingSource = String(order.sourceName || "-").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    const fundingAmountRaw = getFundingAmountForOrder(order);
+    const fundingAmount = fundingAmountRaw == null ? "-" : formatCurrency(Number(fundingAmountRaw || 0));
+    const quotedAmount = formatCurrency(Number(order.plannedAmount || order.total || 0));
+    const orderAmount = formatCurrency(Number(order.total || 0));
+    const varianceRaw = Number(order.total || 0) - Number(order.plannedAmount || order.total || 0);
+    const varianceAmount = varianceRaw > 0
+      ? `+${formatCurrency(varianceRaw)}`
+      : (varianceRaw < 0 ? `-${formatCurrency(Math.abs(varianceRaw))}` : formatCurrency(0));
 
     div.innerHTML = `
       <div class="order-header" onclick="toggleOrder('${order.id}')">
         <div>
-          <strong>${String(order.orderNo || order.id).replace(/</g, "&lt;").replace(/>/g, "&gt;")} • ${formatCurrency(Number(order.total || 0))}</strong>
+          <strong>${String(order.orderNo || order.id).replace(/</g, "&lt;").replace(/>/g, "&gt;")}</strong>
           <small>${date}</small>
+          <small>Purpose: ${purpose}</small>
+          <small>Items: ${items.length} | Charges: ${chargeSummary.count}</small>
+          <div class="order-amount">${formatCurrency(Number(order.total || 0))}</div>
         </div>
 
         <div class="header-right">
+          <span class="collapsed-open">${openBtn}</span>
           <span class="badge status-${String(order.status || "draft")}">${formatOrderStatus(order.status || "draft")}</span>
           <span class="arrow">▼</span>
         </div>
       </div>
 
       <div class="order-items" id="items-${order.id}">
-        <div class="order-meta">
-          Purpose: ${purpose}
+        <div class="order-section order-funding-summary">
+          <div class="order-subsection-title">Funding Summary</div>
+          <div class="order-meta">Funding Source: ${fundingSource}</div>
+          <div class="order-meta">Funding Amount: ${fundingAmount}</div>
+          <div class="order-meta">Quoted Amount: ${quotedAmount}</div>
+          <div class="order-meta">Order Amount: ${orderAmount}</div>
+          <div class="order-meta">Variance: ${varianceAmount}</div>
         </div>
 
-        <div class="order-meta">
-          Linked Quotation: ${quotationNo}
+        <div class="order-divider"></div>
+
+        <div class="order-section">
+          <div class="order-subsection-title">Items</div>
+          <div class="order-meta"><strong>Count:</strong> ${items.length}</div>
+          ${itemsHTML || '<div class="order-subsection-empty">No items</div>'}
         </div>
 
-        <div class="order-meta">
-          Funding: ${funding}
+        <div class="order-divider"></div>
+
+        <div class="order-section">
+          <div class="order-subsection-title">Charges</div>
+          <div class="order-meta"><strong>Count:</strong> ${chargeSummary.count}</div>
+          ${chargesHTML}
         </div>
 
-        <div class="order-meta">
-          ${getPaymentIcon(order.paymentType)} ${String(order.paymentType || "-").replace(/</g, "&lt;").replace(/>/g, "&gt;")}
+        <div class="order-divider"></div>
+
+        <div class="order-section">
+          <div class="order-subsection-title">References</div>
+          <div class="order-meta">Linked Quotation: ${quotationNo}</div>
+          <div class="order-meta">${getPaymentIcon(order.paymentType)} ${String(order.paymentType || "-").replace(/</g, "&lt;").replace(/>/g, "&gt;")}</div>
         </div>
 
-        ${itemsHTML}
+        <div class="order-divider"></div>
 
-        <div class="order-actions-row">
-          ${openBtn}
-          ${editBtn}
-          ${transitionButtons}
-          ${cancelBtn}
-          ${fundingBtn}
-          ${deleteBtn}
+        <div class="order-section">
+          <div class="order-subsection-title">Actions</div>
+          <div class="order-actions-row">
+            ${deleteBtn}
+          </div>
         </div>
       </div>
     `;
@@ -540,11 +652,14 @@ function viewFundingDetails(orderId) {
 }
 
 function getOrderFundingSummary(order) {
-  const sourceType = String(order.sourceType || "-");
   const sourceName = String(order.sourceName || "-");
   const total = formatCurrency(Number(order.total || 0));
   const planned = formatCurrency(Number(order.plannedAmount || order.total || 0));
-  return `Funding ${sourceType} → ${sourceName} | Planned ${planned} | Order ${total}`;
+  const variance = Number(order.total || 0) - Number(order.plannedAmount || order.total || 0);
+  const varianceLabel = variance > 0
+    ? `+${formatCurrency(variance)}`
+    : (variance < 0 ? `-${formatCurrency(Math.abs(variance))}` : formatCurrency(0));
+  return `Funding Source ${sourceName} | Quoted Amount ${planned} | Order Amount ${total} | Variance ${varianceLabel}`;
 }
 
 async function deleteOrder(orderId) {

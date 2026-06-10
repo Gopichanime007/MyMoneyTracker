@@ -184,6 +184,14 @@ h4 {
     gap: 6px;
 }
 
+.collapsed-open {
+    display: inline-flex;
+}
+
+.collapsed-open .tiny-btn {
+    min-width: 64px;
+}
+
 /* =========================
    🏷 BADGE
 ========================= */
@@ -229,7 +237,7 @@ h4 {
 }
 
 .order-items.open {
-    max-height: 300px;
+    max-height: 900px;
     opacity: 1;
 }
 
@@ -241,6 +249,46 @@ h4 {
     font-size: 13px;
     color: var(--subtext);
     margin-bottom: 8px;
+}
+
+.order-section {
+    display: grid;
+    gap: 6px;
+}
+
+.order-funding-summary {
+    border-radius: 10px;
+    border: 1px solid #dbe3ef;
+    background: #f8fbff;
+    padding: 10px;
+}
+
+.order-divider {
+    height: 1px;
+    background: linear-gradient(90deg, rgba(148, 163, 184, 0), rgba(148, 163, 184, 0.45), rgba(148, 163, 184, 0));
+    margin: 8px 0;
+}
+
+.order-amount {
+    margin-top: 4px;
+    font-size: 20px;
+    font-weight: 700;
+    color: #111827;
+}
+
+.order-subsection-title {
+    margin: 10px 0 6px;
+    font-size: 12px;
+    font-weight: 700;
+    color: #374151;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+.order-subsection-empty {
+    margin-bottom: 8px;
+    font-size: 12px;
+    color: #6b7280;
 }
 
 /* =========================
@@ -404,6 +452,41 @@ h4 {
     margin-bottom: 12px;
 }
 
+.secondary-accordion {
+    border: 1px solid #d7deea;
+    border-radius: 12px;
+    background: #f8fbff;
+}
+
+.secondary-accordion summary {
+    cursor: pointer;
+    list-style: none;
+    padding: 10px 12px;
+    font-size: 13px;
+    font-weight: 700;
+    color: #334155;
+}
+
+.secondary-accordion summary::-webkit-details-marker {
+    display: none;
+}
+
+.secondary-accordion summary::after {
+    content: "+";
+    float: right;
+    color: #64748b;
+}
+
+.secondary-accordion[open] summary::after {
+    content: "-";
+}
+
+.accordion-body {
+    padding: 0 12px 12px;
+    display: grid;
+    gap: 10px;
+}
+
 .orders-toolbar h4 {
     margin: 0;
 }
@@ -425,6 +508,10 @@ h4 {
     display: flex;
     flex-wrap: wrap;
     gap: 8px;
+}
+
+.order-actions-row .tiny-btn {
+    min-width: 92px;
 }
 
 .tiny-btn {
@@ -456,5 +543,13 @@ h4 {
     .orders-toolbar .action-bar,
     #ordersStatusFilter {
         max-width: none;
+    }
+
+    .order-header strong {
+        font-size: 16px;
+    }
+
+    .order-amount {
+        font-size: 18px;
     }
 }
