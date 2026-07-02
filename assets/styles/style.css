@@ -26,8 +26,9 @@
 body {
   margin: 0;
   font-family: 'Poppins', sans-serif;
-  background: white;
+  background: var(--bg);
   color: var(--text);
+  transition: background-color 0.2s ease, color 0.2s ease;
 }
 
 /* =========================
@@ -97,7 +98,8 @@ body {
 
 /* CARD */
 .card {
-  background: rgba(255, 255, 255, 0.95);
+  background: var(--surface, rgba(255, 255, 255, 0.95));
+  color: var(--text);
   backdrop-filter: blur(8px);
 
   padding: var(--space-lg);
@@ -198,8 +200,9 @@ body {
 }
 
 .secondary {
-  background: #f1f3f6;
-  border: none;
+  background: var(--control-bg, #f1f3f6);
+  color: var(--text);
+  border: 1px solid color-mix(in srgb, var(--border), var(--theme) 10%);
   border-radius: 14px;
   padding: 12px;
   width: 100%;
@@ -215,10 +218,10 @@ select,
 textarea {
   width: 100%;
   padding: 12px;
-
+  background: var(--surface, #ffffff);
+  color: var(--text);
   border-radius: 12px;
-  border: 1px solid var(--border);
-
+  border: 1px solid color-mix(in srgb, var(--border), var(--theme) 10%);
   margin-top: var(--space-sm);
 }
 
@@ -386,7 +389,8 @@ select:focus {
 .modal-content,
 .modal-box {
 
-  background: white;
+  background: var(--surface, white);
+  color: var(--text);
 
   width: 90%;
   max-width: 420px;
@@ -431,11 +435,11 @@ select:focus {
 }
 
 .filter-builder-section {
-  border: 1px solid #e5e7eb;
+  border: 1px solid color-mix(in srgb, var(--border), var(--theme) 12%);
   border-radius: 12px;
   padding: 10px;
   margin-top: 8px;
-  background: #fafafa;
+  background: color-mix(in srgb, var(--surface), var(--theme) 4%);
 }
 
 .filter-builder-root {
@@ -488,9 +492,9 @@ select:focus {
 }
 
 .filter-builder-card {
-  border: 1px solid #d1d5db;
+  border: 1px solid color-mix(in srgb, var(--border), var(--theme) 18%);
   border-radius: 10px;
-  background: #ffffff;
+  background: color-mix(in srgb, var(--surface), var(--theme) 6%);
   padding: 10px;
   margin-top: 8px;
   display: grid;
@@ -578,7 +582,8 @@ select:focus {
   padding: 10px;
   margin-bottom: 6px;
   border-radius: 10px;
-  background: #f5f5f5;
+  background: color-mix(in srgb, var(--surface), var(--theme) 5%);
+  border: 1px solid color-mix(in srgb, var(--border), var(--theme) 10%);
 }
 
 .cat-delete {
@@ -887,7 +892,7 @@ h4 {
   gap: 12px;
   align-items: flex-start;
   border: 1px solid color-mix(in srgb, var(--border), var(--theme) 10%);
-  background: color-mix(in srgb, #ffffff, var(--theme) 3%);
+  background: color-mix(in srgb, var(--surface), var(--theme) 5%);
   border-radius: 12px;
   padding: 12px 14px;
   box-shadow: 0 4px 10px rgba(0, 0, 0, 0.05);
@@ -898,6 +903,66 @@ h4 {
   transform: translateY(-1px);
   box-shadow: 0 8px 16px rgba(0, 0, 0, 0.08);
   border-color: color-mix(in srgb, var(--theme), var(--border) 45%);
+}
+
+.history-summary-shell {
+  display: grid;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.history-summary-block {
+  border: 1px solid color-mix(in srgb, var(--border), var(--theme) 12%);
+  background: linear-gradient(145deg, color-mix(in srgb, var(--surface) 86%, var(--theme) 14%), color-mix(in srgb, var(--surface) 80%, var(--theme) 8%));
+  border-radius: 16px;
+  padding: 12px;
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.06);
+}
+
+.history-summary-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.history-summary-head h4 {
+  margin: 0;
+}
+
+.history-summary-subtitle {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.history-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.history-summary-card {
+  padding: 10px;
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--surface), var(--theme) 6%);
+  border: 1px solid color-mix(in srgb, var(--border), var(--theme) 10%);
+  display: grid;
+  gap: 4px;
+}
+
+.history-summary-card span {
+  font-size: 11px;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.history-summary-card strong {
+  font-size: 13px;
+}
+
+.history-summary-block.premium {
+  border-color: color-mix(in srgb, var(--theme), #ffffff 55%);
 }
 
 #history .history-list-premium .history-main {

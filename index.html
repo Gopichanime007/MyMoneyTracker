@@ -35,6 +35,7 @@
       <button data-screen="history" onclick="showScreen('history')">📜</button>
       <button data-screen="budget" onclick="showScreen('budget')">💰</button>
       <button data-screen="graph" onclick="showScreen('graph')">📊</button>
+      <button data-screen="efficiency" onclick="showScreen('efficiency')">🎯</button>
       <button data-screen="budgets" onclick="showScreen('budgets')">📦</button>
       <button data-screen="settings" onclick="showScreen('settings')">⚙️</button>
     </div>
@@ -296,6 +297,14 @@
       </div>
     </section>
 
+    <section id="efficiency" class="screen">
+      <div class="card efficiency-screen-card">
+        <h3>🎯 Efficiency</h3>
+        <p class="muted-note">Efficiency shows how much of each daily limit was saved, spent, or covered by earlier savings.</p>
+        <div id="efficiencyDashboard"></div>
+      </div>
+    </section>
+
     <section id="budgets" class="screen">
       <div class="card">
         <h3>📦 Budget Entries</h3>
@@ -343,6 +352,11 @@
         </select>
         <input type="text" id="hexInput" placeholder="Apply custom theme using hex code (e.g. #4caf50)">
         <button class="secondary" onclick="applyHex()">Apply</button>
+
+        <h4>Budget Efficiency Ledger</h4>
+        <label for="dailySpendingLimitInput">Daily Spending Limit</label>
+        <input type="number" id="dailySpendingLimitInput" min="0" step="1" placeholder="100">
+        <button class="primary" type="button" onclick="saveDailySpendingLimitFromUI()">Save Daily Limit</button>
 
         <input type="color" id="colorPicker" class="hidden" onchange="applyCustomColor(this.value)">
 
@@ -556,12 +570,23 @@
     </div>
   </div>
 
+  <div id="efficiencyCoverageModal" class="modal hidden" onclick="closeEfficiencyCoverageModal()">
+    <div class="modal-content" onclick="event.stopPropagation()">
+      <h3 id="efficiencyCoverageTitle">Overspend Coverage</h3>
+      <div id="efficiencyCoverageBody" class="modal-body"></div>
+      <div class="modal-actions">
+        <button class="secondary" type="button" onclick="closeEfficiencyCoverageModal()">Close</button>
+      </div>
+    </div>
+  </div>
+
   <!-- SCRIPT -->
   <script src="assets/scripts/storage.js"></script>
   <script src="assets/scripts/documentWorkflow.js"></script>
   <script src="assets/scripts/queryEngine.js"></script>
   <script src="assets/scripts/searchService.js"></script>
   <script src="assets/scripts/filterBuilder.js"></script>
+  <script src="assets/scripts/budgetEfficiency.js"></script>
   <script src="assets/scripts/script.js"></script>
   <script>
     document.addEventListener("DOMContentLoaded", () => {

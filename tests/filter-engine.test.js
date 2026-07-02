@@ -68,6 +68,21 @@ test('Period filter supports custom date range', () => {
     expect(result.results.map((r) => r.id)).toEqual(['2']);
 });
 
+test('Date filters normalize timestamp values against day-level date inputs', () => {
+    const rows = [
+        { id: '1', date: '2026-06-08T09:00:00Z', purpose: 'Fuel' },
+        { id: '2', date: '2026-06-09T09:00:00Z', purpose: 'Food' }
+    ];
+
+    const result = window.QueryEngine.runQueryPipeline(rows, {
+        filters: [
+            { field: 'date', op: 'eq', value: '2026-06-08' }
+        ]
+    });
+
+    expect(result.results.map((r) => r.id)).toEqual(['1']);
+});
+
 test('Legacy date filter wrapper returns this week records', () => {
     const rows = [
         { id: '1', date: '2026-06-08T10:00:00Z', purpose: 'Fuel' },
