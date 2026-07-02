@@ -1497,114 +1497,6 @@ if (!window.AppDialog) {
 ========================= */
 
 // 📜 Load History
-function formatHistoryDate(value) {
-    const parsed = new Date(value);
-    if (Number.isNaN(parsed.getTime())) return "—";
-    return parsed.toLocaleString("en-IN");
-}
-
-function buildHistorySummaryMetrics(list) {
-    const safeList = Array.isArray(list) ? list.filter(Boolean) : [];
-    const incomes = safeList.filter((entry) => Number(entry.amount || 0) > 0).reduce((sum, entry) => sum + Math.abs(Number(entry.amount || 0)), 0);
-    const expenses = safeList.filter((entry) => Number(entry.amount || 0) < 0).reduce((sum, entry) => sum + Math.abs(Number(entry.amount || 0)), 0);
-    const savings = Math.max(0, incomes - expenses);
-    const netBalance = incomes - expenses;
-    const transactionCount = safeList.length;
-    const averageDaily = transactionCount > 0 ? expenses / Math.max(1, transactionCount) : 0;
-    const highestExpense = safeList.filter((entry) => Number(entry.amount || 0) < 0).reduce((best, entry) => {
-        const amount = Math.abs(Number(entry.amount || 0));
-        return amount > best.amount ? { amount, entry } : best;
-    }, { amount: 0, entry: null });
-    const highestIncome = safeList.filter((entry) => Number(entry.amount || 0) > 0).reduce((best, entry) => {
-        const amount = Math.abs(Number(entry.amount || 0));
-        return amount > best.amount ? { amount, entry } : best;
-    }, { amount: 0, entry: null });
-
-    return {
-        totalIncome: incomes,
-        totalExpenses: expenses,
-        totalSavings: savings,
-        netBalance,
-        transactionCount,
-        averageDailySpending: averageDaily,
-        highestExpense,
-        highestIncome
-    };
-}
-
-function createHistorySummaryBlock(label, metrics, mode) {
-    const fragment = document.createElement("section");
-    fragment.className = `history-summary-block ${mode}`;
-    fragment.innerHTML = `
-        <div class="history-summary-head">
-            <h4>${escapeHtml(label)}</h4>
-            <span class="history-summary-subtitle">${escapeHtml(metrics.transactionCount)} transaction${metrics.transactionCount === 1 ? "" : "s"}</span>
-        </div>
-        <div class="history-summary-grid">
-            <div class="history-summary-card"><span>Income</span><strong>${escapeHtml(formatCurrency(metrics.totalIncome))}</strong></div>
-            <div class="history-summary-card"><span>Expenses</span><strong>${escapeHtml(formatCurrency(metrics.totalExpenses))}</strong></div>
-            <div class="history-summary-card"><span>Savings</span><strong>${escapeHtml(formatCurrency(metrics.totalSavings))}</strong></div>
-            <div class="history-summary-card"><span>Net</span><strong>${escapeHtml(formatCurrency(metrics.netBalance))}</strong></div>
-            <div class="history-summary-card"><span>Avg / Day</span><strong>${escapeHtml(formatCurrency(metrics.averageDailySpending))}</strong></div>
-            <div class="history-summary-card"><span>Highest Expense</span><strong>${escapeHtml(formatCurrency(metrics.highestExpense.amount))}</strong></div>
-            <div class="history-summary-card"><span>Highest Income</span><strong>${escapeHtml(formatCurrency(metrics.highestIncome.amount))}</strong></div>
-        </div>
-    `;
-    return fragment;
-}
-
-function buildHistorySections(items) {
-    const ordered = Array.isArray(items) ? items.slice().sort((left, right) => new Date(left.date || 0).getTime() - new Date(right.date || 0).getTime()) : [];
-    const sections = [];
-    let currentWeekStart = null;
-    let currentMonthKey = null;
-
-    ordered.forEach((entry) => {
-        const entryDate = new Date(entry.date || 0);
-        if (Number.isNaN(entryDate.getTime())) {
-            return;
-        }
-        const entryDayKey = `${entryDate.getFullYear()}-${String(entryDate.getMonth() + 1).padStart(2, "0")}-${String(entryDate.getDate()).padStart(2, "0")}`;
-        const monthKey = `${entryDate.getFullYear()}-${String(entryDate.getMonth() + 1).padStart(2, "0")}`;
-
-        if (!currentWeekStart) {
-            currentWeekStart = entryDayKey;
-        } else {
-            const prev = new Date(currentWeekStart);
-            const diffDays = Math.round((entryDate.getTime() - prev.getTime()) / 86400000);
-            if (diffDays > 7) {
-                sections.push({ type: "week", entries: [] });
-                currentWeekStart = entryDayKey;
-            }
-        }
-
-        if (!currentMonthKey) {
-            currentMonthKey = monthKey;
-        }
-
-        const lastSection = sections[sections.length - 1];
-        if (!lastSection || lastSection.type !== "week" || lastSection.entries.length === 0) {
-            sections.push({ type: "week", entries: [] });
-        }
-
-        const weekSection = sections[sections.length - 1];
-        if (weekSection.type === "week") {
-            weekSection.entries.push(entry);
-        }
-
-        const monthSection = sections.find((section) => section.type === "month" && section.monthKey === monthKey && section.entries.length && section.entries[section.entries.length - 1].date && new Date(section.entries[section.entries.length - 1].date).getMonth() === entryDate.getMonth());
-        if (!monthSection) {
-            sections.push({ type: "month", monthKey, entries: [] });
-        }
-        const pendingMonthSection = sections[sections.length - 1];
-        if (pendingMonthSection && pendingMonthSection.type === "month") {
-            pendingMonthSection.entries.push(entry);
-        }
-    });
-
-    return sections.filter((section) => Array.isArray(section.entries) && section.entries.length > 0);
-}
-
 function loadHistory(list = getExpenses()) {
 
     try {
@@ -1631,74 +1523,56 @@ function loadHistory(list = getExpenses()) {
         }
 
         let withRunning = rebalanceExpenseLedger(finalList, getBudgets());
-        const sections = buildHistorySections(withRunning);
-        const summaryHost = document.createElement("div");
-        summaryHost.className = "history-summary-shell";
-        summaryHost.appendChild(createHistorySummaryBlock("Premium Financial Snapshot", buildHistorySummaryMetrics(withRunning), "premium"));
-        container.appendChild(summaryHost);
+        withRunning.forEach((e) => {
 
-        sections.forEach((section) => {
-            if (!section || !Array.isArray(section.entries) || !section.entries.length) {
-                return;
-            }
-            if (section.type === "week") {
-                const summary = createHistorySummaryBlock(`Week ${section.entries[0].date ? new Date(section.entries[0].date).toLocaleDateString("en-IN", { day: "2-digit", month: "short" }) : "Summary"}`, buildHistorySummaryMetrics(section.entries), "week");
-                container.appendChild(summary);
-            } else if (section.type === "month") {
-                const monthLabel = section.monthKey ? new Date(`${section.monthKey}-01T00:00:00`).toLocaleDateString("en-IN", { month: "long", year: "numeric" }) : "Month Summary";
-                const summary = createHistorySummaryBlock(`${monthLabel} Summary`, buildHistorySummaryMetrics(section.entries), "month");
-                container.appendChild(summary);
-            }
+            let div = document.createElement("div");
+            div.className = "expense-item transaction-card";
 
-            section.entries.forEach((e) => {
-                let div = document.createElement("div");
-                div.className = "expense-item transaction-card";
+            let entryType = String(e.type || "entry").replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
+            let amount = formatCurrency(Math.abs(Number(e.amount || 0)));
+            let amountClass = e.amount < 0 ? "negative" : "positive";
+            let date = new Date(e.date).toLocaleString("en-IN");
+            let runningBalance = formatCurrency(Number(e.BalanceAfterTransaction ?? e.runningBalance ?? 0));
+            let descriptorParts = [e.category, e.purpose].filter(Boolean);
+            if (e.type === "refund") descriptorParts.push(`Refund Type: ${formatRefundType(e.refundType)}`);
+            if (e.resolutionType) descriptorParts.push(`Resolution: ${RESOLUTION_TYPE_LABELS[normalizeResolutionType(e.resolutionType)] || e.resolutionType}`);
+            let descriptor = descriptorParts.join(" • ");
+            let sourceText = e.entity || e.paymentType || "Wallet";
 
-                let entryType = String(e.type || "entry").replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
-                let amount = formatCurrency(Math.abs(Number(e.amount || 0)));
-                let amountClass = e.amount < 0 ? "negative" : "positive";
-                let date = formatHistoryDate(e.date);
-                let runningBalance = formatCurrency(Number(e.BalanceAfterTransaction ?? e.runningBalance ?? 0));
-                let descriptorParts = [e.category, e.purpose].filter(Boolean);
-                if (e.type === "refund") descriptorParts.push(`Refund Type: ${formatRefundType(e.refundType)}`);
-                if (e.resolutionType) descriptorParts.push(`Resolution: ${RESOLUTION_TYPE_LABELS[normalizeResolutionType(e.resolutionType)] || e.resolutionType}`);
-                let descriptor = descriptorParts.join(" • ");
-                let sourceText = e.entity || e.paymentType || "Wallet";
+            div.innerHTML = `
+                <div class="transaction-card-head">
+                    <div class="history-type">${escapeHtml(entryType)}</div>
+                    ${descriptor ? `<div class="transaction-title">${escapeHtml(descriptor)}</div>` : ""}
+                </div>
 
-                div.innerHTML = `
-                    <div class="transaction-card-head">
-                        <div class="history-type">${escapeHtml(entryType)}</div>
-                        ${descriptor ? `<div class="transaction-title">${escapeHtml(descriptor)}</div>` : ""}
+                <div class="transaction-meta-grid">
+                    <span class="entry-label">Source</span>
+                    <span class="entry-value">${escapeHtml(sourceText)}</span>
+                    <span class="entry-label">Date</span>
+                    <span class="entry-value">${escapeHtml(date)}</span>
+                    <span class="entry-label">Running Balance</span>
+                    <span class="entry-value">${escapeHtml(runningBalance)}</span>
+                </div>
+
+                <div class="transaction-card-foot">
+                    <div class="history-amount ${amountClass}">${escapeHtml(amount)}</div>
+                    <div class="history-actions">
+                        <button class="delete-btn" onclick="event.stopPropagation(); deleteExpenseUI('${e.id}')" title="Delete">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M3 6h18"></path>
+                                <path d="M8 6V4h8v2"></path>
+                                <path d="M19 6l-1 14H6L5 6"></path>
+                                <path d="M10 11v6"></path>
+                                <path d="M14 11v6"></path>
+                            </svg>
+                        </button>
                     </div>
+                </div>
+            `;
 
-                    <div class="transaction-meta-grid">
-                        <span class="entry-label">Source</span>
-                        <span class="entry-value">${escapeHtml(sourceText)}</span>
-                        <span class="entry-label">Date</span>
-                        <span class="entry-value">${escapeHtml(date)}</span>
-                        <span class="entry-label">Running Balance</span>
-                        <span class="entry-value">${escapeHtml(runningBalance)}</span>
-                    </div>
+            div.addEventListener("click", () => openTransactionAuditDetails("expense", e));
 
-                    <div class="transaction-card-foot">
-                        <div class="history-amount ${amountClass}">${escapeHtml(amount)}</div>
-                        <div class="history-actions">
-                            <button class="delete-btn" onclick="event.stopPropagation(); deleteExpenseUI('${e.id}')" title="Delete">
-                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                    <path d="M3 6h18"></path>
-                                    <path d="M8 6V4h8v2"></path>
-                                    <path d="M19 6l-1 14H6L5 6"></path>
-                                    <path d="M10 11v6"></path>
-                                    <path d="M14 11v6"></path>
-                                </svg>
-                            </button>
-                        </div>
-                    </div>
-                `;
-
-                div.addEventListener("click", () => openTransactionAuditDetails("expense", e));
-                container.appendChild(div);
-            });
+            container.appendChild(div);
         });
 
     } catch (err) {
