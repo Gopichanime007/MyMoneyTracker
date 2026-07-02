@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Daily Budget Ledger</title>
+  <link rel="stylesheet" href="../assets/styles/style.css" />
+  <link rel="stylesheet" href="../assets/styles/daily-budget-ledger.css" />
+</head>
+<body>
+  <div class="app">
+    <header class="header">
+      <button class="secondary back-btn" type="button" onclick="goBackToPreviousPage()" aria-label="Go back">⬅ Back</button>
+      <h2>📘 Daily Budget Ledger</h2>
+      <p class="muted">Track daily spending, savings, and deficits with running balance updates.</p>
+    </header>
+
+    <section class="card ledger-shell">
+      <div class="section-title-row">
+        <h3>Daily Budget</h3>
+        <span id="ledgerEntryCount" class="ledger-pill">0 entries</span>
+      </div>
+
+      <label for="dailyBudgetInput">Fixed Daily Budget</label>
+      <input id="dailyBudgetInput" type="number" min="0" step="1" placeholder="100" />
+      <button id="saveDailyBudget" class="primary" type="button">Save Budget</button>
+    </section>
+
+    <section class="card ledger-shell">
+      <div class="section-title-row">
+        <h3>Daily Ledger Entry</h3>
+      </div>
+
+      <label for="entryDate">Date</label>
+      <input id="entryDate" type="date" />
+
+      <label for="entryNote">Note / Description</label>
+      <input id="entryNote" type="text" placeholder="Lunch, travel, groceries..." />
+
+      <label for="entryAmount">Amount Spent</label>
+      <input id="entryAmount" type="number" min="0" step="1" placeholder="0" />
+
+      <button id="saveLedgerEntry" class="primary" type="button">Add Entry</button>
+    </section>
+
+    <section class="card ledger-shell">
+      <div class="section-title-row">
+        <h3>Ledger View</h3>
+      </div>
+      <div id="ledgerEntries" class="ledger-list"></div>
+    </section>
+  </div>
+
+  <script src="../assets/scripts/dailyBudgetLedger.js"></script>
+  <script>
+    function goBackToPreviousPage() {
+      if (document.referrer && document.referrer !== window.location.href) {
+        window.history.back();
+        return;
+      }
+      window.location.href = '../index.html';
+    }
+  </script>
+</body>
+</html>

@@ -1084,7 +1084,6 @@ async function addSavings() {
     if (typeof loadGraph === "function") loadGraph();
     if (typeof renderBudgetEntries === "function") renderBudgetEntries();
     if (typeof loadBudgetOptions === "function") loadBudgetOptions();
-    if (typeof updateBudgetEfficiency === "function") updateBudgetEfficiency();
 
     showToast("Saved successfully ✅", "success");
     resetSavingsForm();

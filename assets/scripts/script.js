@@ -112,7 +112,6 @@ function changeCurrency(code) {
         loadBudgetScreen();
         renderBudgetEntries();
         renderCategoryBreakdown(groupByCategory(getExpenses()));
-        updateBudgetEfficiency();
 
 
     } catch (err) {
@@ -498,8 +497,6 @@ if (typeof window !== 'undefined') {
     window.calculateAverageSpendingByType = window.calculateAverageSpendingByType || calculateAverageSpendingByType;
     window.loadGraph = window.loadGraph || loadGraph;
     window.updateGraphSummary = window.updateGraphSummary || updateGraphSummary;
-    window.updateBudgetEfficiency = window.updateBudgetEfficiency || updateBudgetEfficiency;
-    window.computeBudgetEfficiencyMetrics = window.computeBudgetEfficiencyMetrics || computeBudgetEfficiencyMetrics;
     window.loadBudgetOptions = window.loadBudgetOptions || loadBudgetOptions;
     window.autoSelectExpenseBudget = window.autoSelectExpenseBudget || autoSelectExpenseBudget;
     window.resetExpenseBudgetSelectionState = window.resetExpenseBudgetSelectionState || resetExpenseBudgetSelectionState;
@@ -1637,7 +1634,6 @@ async function deleteExpenseUI(id) {
             loadHistory();
             loadDashboard();
             loadGraph();
-            updateBudgetEfficiency();
             renderBudgetEntries();
             loadBudgetOptions();
             if (typeof loadSavings === "function") loadSavings();
@@ -1654,7 +1650,6 @@ async function deleteExpenseUI(id) {
         loadHistory();
         loadDashboard();
         loadGraph();
-        updateBudgetEfficiency();
         renderBudgetEntries();
         resetExpenseBudgetSelectionState();
         loadBudgetOptions();
@@ -2315,7 +2310,6 @@ async function handleAddExpense() {
         loadDashboard();
         loadGraph();
         updateProgressBar();
-        updateBudgetEfficiency();
         renderBudgetEntries();
         return;
     }
@@ -2374,7 +2368,6 @@ async function handleAddExpense() {
         loadDashboard();
         loadGraph();
         updateProgressBar();
-        updateBudgetEfficiency();
         renderBudgetEntries();
         return;
     }
@@ -2406,7 +2399,6 @@ async function handleAddExpense() {
     loadDashboard();   // 🔥 important
     loadGraph();
     updateProgressBar();
-    updateBudgetEfficiency();
     renderBudgetEntries();
     loadBudgetOptions();  // 🔥 refresh graph
 }
@@ -2729,7 +2721,6 @@ window.addEventListener("load", function () {
         loadDashboard();
         loadBudgetScreen();
         loadGraph("day");
-        updateBudgetEfficiency();
 
         let today = new Date().toISOString().split("T")[0];
         let dateInput = document.getElementById("expenseDate");
@@ -7170,7 +7161,6 @@ function importData() {
         loadBudgetOptions();
         loadDashboard();
         loadGraph();
-        updateBudgetEfficiency();
         if (typeof renderBudgetEntries === "function") renderBudgetEntries();
         if (typeof renderIncomeList === "function") renderIncomeList();
         if (typeof loadSavings === "function") loadSavings();
@@ -10332,7 +10322,6 @@ function refreshFinancialViewsAfterPeriodUpdate() {
     if (typeof loadSavings === "function") loadSavings();
     if (typeof loadHistory === "function") loadHistory();
     if (typeof loadGraph === "function") loadGraph();
-    if (typeof updateBudgetEfficiency === "function") updateBudgetEfficiency();
 }
 
 function rebindPeriodReferencesAcrossData(oldPeriodKey, newPeriodKey, startKey) {
@@ -10768,7 +10757,6 @@ function handleExpenseSave(amount, selectedBudgetId = null, attachmentMeta = nul
     loadDashboard();
     loadHistory();
     loadGraph();
-    updateBudgetEfficiency();
     renderBudgetEntries();
     loadBudgetOptions();
 
@@ -10847,7 +10835,6 @@ function confirmSplit() {
     closeSplitModal();
 
     loadDashboard();
-    updateBudgetEfficiency();
     renderBudgetEntries();
     loadBudgetOptions();
     loadHistory();
@@ -10864,128 +10851,6 @@ function closeSplitModal() {
     pendingSplit = null;
 }
 
-function updateBudgetEfficiency() {
-    let metrics = computeBudgetEfficiencyMetrics();
-
-    // =========================
-    // 🎯 UI
-    // =========================
-    function setText(id, value) {
-
-        let el =
-            document.getElementById(id);
-
-        if (el) {
-            el.innerText = value;
-        }
-    }
-
-    setText(
-        "savedToday",
-        formatCurrency(metrics.dailyRemaining)
-    );
-
-    setText(
-        "savedWeek",
-        formatCurrency(metrics.weeklyRemaining)
-    );
-
-    setText(
-        "savedPeriod",
-        formatCurrency(metrics.periodRemaining)
-    );
-}
-
-function computeBudgetEfficiencyMetrics(referenceDate = new Date()) {
-    let expenses = filterByActivePeriod(getExpenses());
-    let budgets = filterBudgetsByActivePeriod(getBudgets());
-
-    function getNetSpentForRange(fromDate, toDate) {
-        let subset = expenses.filter(e => {
-            let d = new Date(e.date);
-            return d >= fromDate && d <= toDate;
-        });
-
-        return budgets.reduce((sum, b) => {
-            return sum + getNetSpentForBudget(b.budgetId, subset);
-        }, 0);
-    }
-
-    function getNormalizedPeriodRange() {
-        let active = getActiveBudgetPeriod();
-
-        if (active && active.start) {
-            let start = new Date(active.start);
-            let end = getBudgetPeriodEffectiveEndDate(active, referenceDate);
-            start.setHours(0, 0, 0, 0);
-            end.setHours(23, 59, 59, 999);
-            return { start, end };
-        }
-
-        let now = new Date(referenceDate);
-        let start = new Date(now.getFullYear(), now.getMonth(), 1);
-        let end = new Date(now.getFullYear(), now.getMonth() + 1, 0);
-        start.setHours(0, 0, 0, 0);
-        end.setHours(23, 59, 59, 999);
-        return { start, end };
-    }
-
-    let now = new Date(referenceDate);
-
-    let dayStart = new Date(now);
-    dayStart.setHours(0, 0, 0, 0);
-
-    let dayEnd = new Date(now);
-    dayEnd.setHours(23, 59, 59, 999);
-
-    let weekStart = new Date(now);
-    weekStart.setDate(now.getDate() - now.getDay());
-    weekStart.setHours(0, 0, 0, 0);
-
-    let weekEnd = new Date(weekStart);
-    weekEnd.setDate(weekStart.getDate() + 6);
-    weekEnd.setHours(23, 59, 59, 999);
-
-    let monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
-    let monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0);
-    monthStart.setHours(0, 0, 0, 0);
-    monthEnd.setHours(23, 59, 59, 999);
-
-    let periodRange = getNormalizedPeriodRange();
-    let totalBudget = budgets.reduce((s, b) => s + (b.totalAllocated || 0), 0);
-
-    let periodDays = Math.max(1, Math.floor((periodRange.end - periodRange.start) / (1000 * 60 * 60 * 24)) + 1);
-    let periodWeeks = Math.max(1, Math.ceil(periodDays / 7));
-
-    let periodMonths = Math.max(1,
-        (periodRange.end.getFullYear() - periodRange.start.getFullYear()) * 12 +
-        (periodRange.end.getMonth() - periodRange.start.getMonth()) + 1
-    );
-
-    let dailyLimit = totalBudget / periodDays;
-    let weeklyLimit = totalBudget / periodWeeks;
-    let monthlyLimit = totalBudget / periodMonths;
-
-    let todaySpent = getNetSpentForRange(dayStart, dayEnd);
-    let weekSpent = getNetSpentForRange(weekStart, weekEnd);
-    let monthSpent = getNetSpentForRange(monthStart, monthEnd);
-    let periodSpent = getNetSpentForRange(periodRange.start, periodRange.end);
-
-    return {
-        totalBudget,
-        dailyLimit,
-        weeklyLimit,
-        monthlyLimit,
-        todaySpent,
-        weekSpent,
-        monthSpent,
-        periodSpent,
-        dailyRemaining: dailyLimit - todaySpent,
-        weeklyRemaining: weeklyLimit - weekSpent,
-        monthlyRemaining: monthlyLimit - monthSpent,
-        periodRemaining: totalBudget - periodSpent
-    };
-}
 function normalizeDate(date) {
 
     let d = new Date(date);
