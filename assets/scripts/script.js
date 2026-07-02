@@ -1763,6 +1763,34 @@ function normalizeResolutionType(value) {
     return mapped[raw] || "open";
 }
 
+function resolveRefundLinkTargets(snapshotOrOriginal, fallbackBudgetId = null) {
+    const original = snapshotOrOriginal && snapshotOrOriginal.original
+        ? snapshotOrOriginal.original
+        : snapshotOrOriginal || null;
+
+    const sourceCandidates = [];
+    if (original && Array.isArray(original.linkedSourceSavingsIds) && original.linkedSourceSavingsIds.length) {
+        original.linkedSourceSavingsIds.forEach(id => {
+            if (id !== undefined && id !== null && id !== "") sourceCandidates.push(String(id));
+        });
+    }
+    if (original && original.linkedSourceSavingsId) sourceCandidates.push(String(original.linkedSourceSavingsId));
+    if (original && original.sourceId) sourceCandidates.push(String(original.sourceId));
+    if (original && original.linkedSourceId) sourceCandidates.push(String(original.linkedSourceId));
+    if (original && original.budgetWalletSourceId) sourceCandidates.push(String(original.budgetWalletSourceId));
+    if (original && original.source) sourceCandidates.push(String(original.source));
+    if (original && original.entity) sourceCandidates.push(String(original.entity));
+
+    const uniqueSources = [...new Set(sourceCandidates.filter(Boolean))];
+
+    return {
+        budgetId: (original && (original.budgetId || original.targetBudgetId || original.linkedBudgetId)) || fallbackBudgetId || null,
+        linkedSourceSavingsId: uniqueSources[0] || null,
+        linkedSourceSavingsIds: uniqueSources,
+        sourceIds: uniqueSources
+    };
+}
+
 function getExpenseResolutionSnapshot(originalId, expensesList) {
     let expenses = Array.isArray(expensesList) ? expensesList : getExpenses();
     let original = expenses.find(e => String(e.id) === String(originalId));
@@ -2318,6 +2346,7 @@ async function handleAddExpense() {
         let snapshot = getExpenseResolutionSnapshot(linkedTransactionId);
         let pending = Number(snapshot.remainingRefundable || 0);
         let refundAmount = Math.abs(Number(amount) || 0);
+        let linkTargets = resolveRefundLinkTargets(snapshot, budgetId);
 
         if (refundResolutionType !== "consumed" && refundResolutionType !== "written_off") {
             addExpense({
@@ -2328,8 +2357,10 @@ async function handleAddExpense() {
                 type: "refund",
                 paymentType,
                 person,
-                budgetId: snapshot.original ? snapshot.original.budgetId : budgetId,
+                budgetId: linkTargets.budgetId,
                 linkedTransactionId,
+                linkedSourceSavingsId: linkTargets.linkedSourceSavingsId,
+                linkedSourceSavingsIds: linkTargets.linkedSourceSavingsIds,
                 refundType,
                 entity: paymentType,
                 attachmentId: nonExpAttachment.attachmentId,
@@ -2348,8 +2379,10 @@ async function handleAddExpense() {
                 type: "expense_resolution",
                 paymentType: paymentType || "N/A",
                 person,
-                budgetId: snapshot.original ? snapshot.original.budgetId : budgetId,
+                budgetId: linkTargets.budgetId,
                 linkedTransactionId,
+                linkedSourceSavingsId: linkTargets.linkedSourceSavingsId,
+                linkedSourceSavingsIds: linkTargets.linkedSourceSavingsIds,
                 entity: "System",
                 attachmentId: nonExpAttachment.attachmentId,
                 attachmentStatus: nonExpAttachment.status,
@@ -4812,7 +4845,12 @@ function ensureAuditModal() {
     modal.className = "modal";
     modal.innerHTML = `
       <div class="modal-content audit-modal-content" onclick="event.stopPropagation()">
-        <h3>Transaction Details</h3>
+        <div class="audit-modal-header">
+          <div>
+            <h3>Transaction Details</h3>
+            <p class="audit-modal-subtitle">Review the linked budget, source, and resolution state for this entry.</p>
+          </div>
+        </div>
         <div id="txnDetailsBody" class="audit-details-grid"></div>
         <div id="txnAttachmentSection" class="audit-attachments" style="display:none;"></div>
         <div class="modal-actions">
@@ -4951,29 +4989,49 @@ async function openTransactionAuditDetails(scope, transaction) {
         ? allocationRows.map(row => `${String(row.budgetId || "-")} : ${formatCurrency(Math.abs(Number(row.amount || 0)))}`).join(" | ")
         : "-";
 
+    let detailRows = [
+        { label: "Amount", value: formatCurrency(Number(transaction.amount || 0)) },
+        { label: "Date", value: new Date(transaction.date || Date.now()).toLocaleString("en-IN") },
+        { label: "Entry Type", value: transaction.type || "-" },
+        { label: "Running Balance", value: runningBalanceText },
+        { label: "Notes", value: transaction.purpose || transaction.note || "-" },
+        { label: "Budget ID", value: budgetIds.join(", ") || "-" },
+        { label: "Budget Name", value: budgetNames.join(", ") || "-" },
+        { label: "Source ID", value: sourceIds.join(", ") || "-" },
+        { label: "Source Name", value: sourceNames.join(", ") || "-" },
+        { label: "Allocation Details", value: allocationDetails },
+        { label: "Refund Type", value: transaction.type === "refund" ? formatRefundType(transaction.refundType) : "-" },
+        { label: "Resolution Type", value: transaction.resolutionType ? (RESOLUTION_TYPE_LABELS[normalizeResolutionType(transaction.resolutionType)] || transaction.resolutionType) : "-" },
+        { label: "Resolved Amount", value: formatCurrency(Number(transaction.resolvedAmount || 0)) },
+        { label: "Loss Amount", value: formatCurrency(Number(transaction.lossAmount || 0)) },
+        { label: "Linked Transaction", value: transaction.linkedTransactionId || "-" },
+        { label: "Created At", value: new Date(createdAt || Date.now()).toLocaleString("en-IN") }
+    ];
+
+    if (summary && summary.exists) {
+        detailRows.push(
+            { label: "Original Amount", value: formatCurrency(summary.originalAmount) },
+            { label: "Refunded", value: formatCurrency(summary.refunded) },
+            { label: "Loss", value: formatCurrency(summary.loss) },
+            { label: "Status", value: summaryStatusText },
+            { label: "Remaining Refundable", value: formatCurrency(summary.remainingRefundable) }
+        );
+    }
+
     body.innerHTML = `
-      <div><small>Transaction ID</small><div>${escapeHtml(transaction.id || "-")}</div></div>
-      <div><small>Date</small><div>${escapeHtml(new Date(transaction.date || Date.now()).toLocaleString("en-IN"))}</div></div>
-      <div><small>Entry Type</small><div>${escapeHtml(transaction.type || "-")}</div></div>
-      <div><small>Amount</small><div>${escapeHtml(formatCurrency(Number(transaction.amount || 0)))}</div></div>
-      <div><small>Running Balance</small><div>${escapeHtml(runningBalanceText)}</div></div>
-      <div><small>Notes</small><div>${escapeHtml(transaction.purpose || transaction.note || "-")}</div></div>
-      <div><small>Budget ID</small><div>${escapeHtml(budgetIds.join(", ") || "-")}</div></div>
-      <div><small>Budget Name</small><div>${escapeHtml(budgetNames.join(", ") || "-")}</div></div>
-      <div><small>Source ID</small><div>${escapeHtml(sourceIds.join(", ") || "-")}</div></div>
-      <div><small>Source Name</small><div>${escapeHtml(sourceNames.join(", ") || "-")}</div></div>
-      <div><small>Allocation Details</small><div>${escapeHtml(allocationDetails)}</div></div>
-    <div><small>Refund Type</small><div>${escapeHtml(transaction.type === "refund" ? formatRefundType(transaction.refundType) : "-")}</div></div>
-    <div><small>Resolution Type</small><div>${escapeHtml(transaction.resolutionType ? (RESOLUTION_TYPE_LABELS[normalizeResolutionType(transaction.resolutionType)] || transaction.resolutionType) : "-")}</div></div>
-    <div><small>Resolved Amount</small><div>${escapeHtml(formatCurrency(Number(transaction.resolvedAmount || 0)))}</div></div>
-    <div><small>Loss Amount</small><div>${escapeHtml(formatCurrency(Number(transaction.lossAmount || 0)))}</div></div>
-      <div><small>Linked Transaction</small><div>${escapeHtml(transaction.linkedTransactionId || "-")}</div></div>
-      <div><small>Created At</small><div>${escapeHtml(new Date(createdAt || Date.now()).toLocaleString("en-IN"))}</div></div>
-      ${summary && summary.exists ? `<div><small>Original Amount</small><div>${escapeHtml(formatCurrency(summary.originalAmount))}</div></div>` : ""}
-      ${summary && summary.exists ? `<div><small>Refunded</small><div>${escapeHtml(formatCurrency(summary.refunded))}</div></div>` : ""}
-      ${summary && summary.exists ? `<div><small>Loss</small><div>${escapeHtml(formatCurrency(summary.loss))}</div></div>` : ""}
-            ${summary && summary.exists ? `<div><small>Status</small><div>${escapeHtml(summaryStatusText)}</div></div>` : ""}
-      ${summary && summary.exists ? `<div><small>Remaining Refundable</small><div>${escapeHtml(formatCurrency(summary.remainingRefundable))}</div></div>` : ""}
+      <div class="audit-summary-card">
+        <div class="audit-summary-pill">${escapeHtml(transaction.type || "-" )}</div>
+        <div class="audit-summary-title">${escapeHtml(transaction.purpose || transaction.note || transaction.category || "Transaction")}</div>
+        <div class="audit-summary-meta">${escapeHtml(new Date(createdAt || Date.now()).toLocaleString("en-IN"))}</div>
+      </div>
+      <div class="audit-details-card">
+        ${detailRows.map(row => `
+          <div class="audit-detail-row">
+            <span class="audit-detail-label">${escapeHtml(row.label)}</span>
+            <span class="audit-detail-value">${escapeHtml(row.value)}</span>
+          </div>
+        `).join("")}
+      </div>
     `;
 
     if (!transaction.attachmentId) {
@@ -5025,6 +5083,9 @@ try {
     window.viewAttachmentById = viewAttachmentById;
     window.downloadAttachmentById = downloadAttachmentById;
     window.deleteTransactionAttachment = deleteTransactionAttachment;
+    window.resolveRefundLinkTargets = resolveRefundLinkTargets;
+    window.computeBudgetEfficiencyMetrics = computeBudgetEfficiencyMetrics;
+    window.updateBudgetEfficiency = updateBudgetEfficiency;
 } catch (e) {
     // ignore
 }
@@ -7497,6 +7558,81 @@ function hasActiveExpenseQueryState() {
     let hasFilters = Array.isArray(state.filters) && state.filters.length > 0;
     let hasSort = Array.isArray(state.sort) && state.sort.length > 0;
     return Boolean(searchText || hasFilters || hasSort);
+}
+
+function computeBudgetEfficiencyMetrics(referenceDate = new Date()) {
+    const budgets = Array.isArray(getBudgets()) ? getBudgets() : [];
+    const expenses = Array.isArray(getExpenses()) ? getExpenses() : [];
+    const activeBudgets = filterBudgetsByActivePeriod(budgets);
+    const activeBudgetIds = activeBudgets.map(b => b && b.budgetId).filter(Boolean);
+    const filteredExpenses = filterByActivePeriod(expenses);
+
+    const totalBudget = activeBudgets.reduce((sum, b) => sum + Number(b.totalAllocated || 0), 0);
+    const monthSpent = Math.max(0, getNetSpentForBudgetSet(activeBudgetIds, filteredExpenses));
+    const monthlyLimit = totalBudget;
+    const monthlyRemaining = Math.max(0, monthlyLimit - monthSpent);
+
+    const daysInPeriod = (() => {
+        const period = getActiveBudgetPeriod();
+        if (!period || !period.start) return 1;
+        const start = new Date(period.start);
+        const end = period.end ? new Date(period.end) : new Date(referenceDate);
+        start.setHours(0, 0, 0, 0);
+        end.setHours(0, 0, 0, 0);
+        const diff = Math.round((end - start) / (1000 * 60 * 60 * 24));
+        return Math.max(1, diff + 1);
+    })();
+
+    const dailyLimit = monthlyLimit > 0 ? monthlyLimit / daysInPeriod : 0;
+    const todayStart = new Date(referenceDate);
+    todayStart.setHours(0, 0, 0, 0);
+    const todayEnd = new Date(referenceDate);
+    todayEnd.setHours(23, 59, 59, 999);
+    const todayEntries = filteredExpenses.filter(entry => {
+        const d = new Date(entry.date);
+        return d >= todayStart && d <= todayEnd;
+    });
+    const todaySpent = Math.max(0, getNetSpentForBudgetSet(activeBudgetIds, todayEntries));
+    const dailyRemaining = Math.max(0, dailyLimit - todaySpent);
+
+    const weeklyLimit = monthlyLimit > 0 ? monthlyLimit / 4 : 0;
+    const weekStart = new Date(referenceDate);
+    weekStart.setDate(referenceDate.getDate() - referenceDate.getDay());
+    weekStart.setHours(0, 0, 0, 0);
+    const weekEnd = new Date(weekStart);
+    weekEnd.setDate(weekStart.getDate() + 6);
+    weekEnd.setHours(23, 59, 59, 999);
+    const weekEntries = filteredExpenses.filter(entry => {
+        const d = new Date(entry.date);
+        return d >= weekStart && d <= weekEnd;
+    });
+    const weekSpent = Math.max(0, getNetSpentForBudgetSet(activeBudgetIds, weekEntries));
+    const weeklyRemaining = Math.max(0, weeklyLimit - weekSpent);
+
+    return {
+        dailyLimit,
+        todaySpent,
+        dailyRemaining,
+        weeklyLimit,
+        weekSpent,
+        weeklyRemaining,
+        monthlyLimit,
+        monthSpent,
+        monthlyRemaining
+    };
+}
+
+function updateBudgetEfficiency() {
+    const metrics = computeBudgetEfficiencyMetrics(new Date());
+
+    const setText = (id, value) => {
+        const el = document.getElementById(id);
+        if (el) el.innerText = formatCurrency(value);
+    };
+
+    setText("savedToday", metrics.dailyRemaining);
+    setText("savedWeek", metrics.weeklyRemaining);
+    setText("savedPeriod", metrics.monthlyRemaining);
 }
 
 function applyActiveExpenseQuery(rows) {

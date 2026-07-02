@@ -90,6 +90,26 @@ test('expense resolution snapshot supports partial and multiple refunds', () => 
     expect(snap.status).toBe('PARTIALLY_REFUNDED');
 });
 
+test('refund link targets preserve the original source or budget association', () => {
+    const snap = {
+        original: {
+            id: 'root-exp',
+            type: 'transfer_back',
+            amount: -6000,
+            budgetId: 'b1',
+            sourceId: 'src-1',
+            linkedSourceSavingsId: 'src-1',
+            linkedSourceSavingsIds: ['src-1', 'src-2']
+        }
+    };
+
+    const targets = window.resolveRefundLinkTargets(snap, 'fallback-budget');
+
+    expect(targets.budgetId).toBe('b1');
+    expect(targets.linkedSourceSavingsId).toBe('src-1');
+    expect(targets.linkedSourceSavingsIds).toEqual(['src-1', 'src-2']);
+});
+
 test('history renders all original and refund transactions (no replacement)', () => {
     localStorage.setItem('budgets', JSON.stringify([
         { budgetId: 'b1', totalAllocated: 5000, periodKey: '2026-06-03_to_2026-07-02' }
