@@ -1,4 +1,4 @@
-const { buildLedgerRows, calculateDailyDelta } = require('../assets/scripts/dailyBudgetLedger');
+const { buildLedgerRows, calculateDailyDelta, getLedgerDataSourceEntries } = require('../assets/scripts/dailyBudgetLedger');
 
 describe('daily budget ledger logic', () => {
   test('calculates running balance using savings and deficits', () => {
@@ -15,6 +15,26 @@ describe('daily budget ledger logic', () => {
     expect(calculateDailyDelta(100, 150)).toBe(-50);
     expect(entryRows[0].runningBalance).toBe(4);
     expect(entryRows[1].runningBalance).toBe(68);
+    expect(entryRows[2].runningBalance).toBe(18);
+  });
+
+  test('derives rows from existing expense records instead of separate ledger storage', () => {
+    const expenses = [
+      { id: '1', date: '2026-06-29T10:00:00.000Z', amount: -96, type: 'expense' },
+      { id: '2', date: '2026-06-30T10:00:00.000Z', amount: -36, type: 'expense' },
+      { id: '3', date: '2026-07-01T10:00:00.000Z', amount: -150, type: 'expense' }
+    ];
+
+    const rows = buildLedgerRows([],
+      100,
+      expenses,
+      { source: 'expense' }
+    );
+    const entryRows = rows.filter((row) => row.type === 'entry');
+
+    expect(getLedgerDataSourceEntries(expenses)).toHaveLength(3);
+    expect(entryRows[0].spent).toBe(96);
+    expect(entryRows[2].dailyDelta).toBe(-50);
     expect(entryRows[2].runningBalance).toBe(18);
   });
 

@@ -243,6 +243,17 @@ function saveExpenses(data) {
         let safe = Array.isArray(data) ? data : [];
         let rebalanced = rebalanceExpenseLedger(safe, getBudgets());
         localStorage.setItem("expenses", JSON.stringify(rebalanced));
+
+        const changeEvent = new CustomEvent('expenses:changed', {
+            detail: { expenses: rebalanced }
+        });
+
+        if (typeof window !== 'undefined') {
+            window.dispatchEvent(changeEvent);
+        }
+        if (typeof document !== 'undefined') {
+            document.dispatchEvent(changeEvent);
+        }
     } catch (err) {
         console.error('saveExpenses failed', err);
     }

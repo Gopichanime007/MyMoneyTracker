@@ -1,7 +1,6 @@
 (function (root) {
   const STORAGE_KEYS = {
-    config: 'dailyBudgetLedgerConfig',
-    entries: 'dailyBudgetLedgerEntries'
+    config: 'dailyBudgetLedgerConfig'
   };
 
   function safeNumber(value, fallback = 0) {
@@ -52,6 +51,21 @@
     return date.toLocaleDateString('en-IN', { month: 'long', year: 'numeric' });
   }
 
+  function formatDisplayDate(dateValue) {
+    const date = parseDate(dateValue);
+    if (!date) return '';
+    return date.toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' });
+  }
+
+  function getDateKey(dateValue) {
+    const date = parseDate(dateValue);
+    if (!date) return '';
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  }
+
   function calculateDailyDelta(budget, spent) {
     return safeNumber(budget, 0) - safeNumber(spent, 0);
   }
@@ -74,17 +88,28 @@
     localStorage.setItem(STORAGE_KEYS.config, JSON.stringify(config));
   }
 
-  function getStoredEntries() {
+  function getLedgerDataSourceEntries(expenses = null) {
+    const sourceEntries = Array.isArray(expenses) ? expenses : getStoredExpenses();
+    return (Array.isArray(sourceEntries) ? sourceEntries : [])
+      .filter((entry) => {
+        const amount = safeNumber(entry && entry.amount, 0);
+        return entry && (entry.type === 'expense' || entry.type === 'loss' || amount < 0);
+      })
+      .map((entry) => ({
+        ...entry,
+        date: entry.date || entry.createdAt || '',
+        amount: safeNumber(entry.amount, 0),
+        spent: Math.abs(safeNumber(entry.amount, 0))
+      }));
+  }
+
+  function getStoredExpenses() {
     try {
-      const stored = JSON.parse(localStorage.getItem(STORAGE_KEYS.entries) || '[]');
+      const stored = JSON.parse(localStorage.getItem('expenses') || '[]');
       return Array.isArray(stored) ? stored : [];
     } catch (error) {
       return [];
     }
-  }
-
-  function saveStoredEntries(entries) {
-    localStorage.setItem(STORAGE_KEYS.entries, JSON.stringify(entries));
   }
 
   function createSummaryRow(entries, kind, closingRunningBalance) {
@@ -105,8 +130,41 @@
     };
   }
 
-  function buildLedgerRows(entries, dailyBudget = 100) {
-    const sortedEntries = [...entries]
+  function buildLedgerRows(entries, dailyBudget = 100, sourceExpenses = null) {
+    const ledgerSourceEntries = Array.isArray(entries) && entries.length
+      ? entries
+      : getLedgerDataSourceEntries(sourceExpenses);
+
+    const groupedEntries = new Map();
+
+    ledgerSourceEntries.forEach((entry, index) => {
+      const normalizedDate = getDateKey(entry.date || entry.createdAt || '');
+      if (!normalizedDate) return;
+
+      const bucket = groupedEntries.get(normalizedDate) || {
+        id: entry.id || `entry-${index + 1}`,
+        date: normalizedDate,
+        day: getDayName(entry.date || entry.createdAt || ''),
+        note: '',
+        budget: safeNumber(dailyBudget, 100),
+        spent: 0,
+        expenseCount: 0,
+        expenses: []
+      };
+
+      const entryAmount = safeNumber(entry.spent, safeNumber(entry.amount, 0));
+      bucket.spent += entryAmount;
+      bucket.expenseCount += 1;
+      bucket.expenses.push(entry);
+
+      if (!bucket.note) {
+        bucket.note = entry.note || entry.purpose || entry.category || '';
+      }
+
+      groupedEntries.set(normalizedDate, bucket);
+    });
+
+    const sortedEntries = [...groupedEntries.values()]
       .map((entry) => ({
         ...entry,
         budget: safeNumber(entry.budget, safeNumber(dailyBudget, 100)),
@@ -130,8 +188,9 @@
         type: 'entry',
         id: entry.id || `entry-${index + 1}`,
         date: entry.date,
+        displayDate: formatDisplayDate(entry.date),
         day: entry.day || getDayName(entry.date),
-        note: entry.note || '',
+        note: entry.expenseCount > 1 ? `${entry.expenseCount} expenses` : (entry.note || '—'),
         budget: entry.budget,
         spent: entry.spent,
         dailyDelta: delta,
@@ -202,12 +261,13 @@
       const deltaClass = row.dailyDelta >= 0 ? 'positive' : 'negative';
       const deltaLabel = row.dailyDelta >= 0 ? 'Savings' : 'Deficit';
       const dayLabel = row.day || getDayName(row.date);
+      const displayDate = row.displayDate || formatDisplayDate(row.date);
 
       return `
         <article class="ledger-row entry-row">
           <div class="ledger-row-header">
             <div>
-              <strong>${row.date}</strong>
+              <strong>${displayDate}</strong>
               <div class="muted">${dayLabel}</div>
             </div>
             <div class="ledger-badge ${deltaClass}">${deltaLabel}</div>
@@ -229,17 +289,6 @@
     budgetInput.value = safeNumber(config.dailyBudget, 100);
   }
 
-  function resetEntryForm() {
-    const dateInput = document.getElementById('entryDate');
-    const noteInput = document.getElementById('entryNote');
-    const amountInput = document.getElementById('entryAmount');
-    if (dateInput) {
-      dateInput.value = formatDateInput(new Date());
-    }
-    if (noteInput) noteInput.value = '';
-    if (amountInput) amountInput.value = '';
-  }
-
   function handleBudgetSave() {
     const budgetInput = document.getElementById('dailyBudgetInput');
     const nextBudget = safeNumber(budgetInput ? budgetInput.value : 100, 100);
@@ -249,37 +298,11 @@
     renderDailyBudgetLedger();
   }
 
-  function handleEntrySave() {
-    const dateInput = document.getElementById('entryDate');
-    const noteInput = document.getElementById('entryNote');
-    const amountInput = document.getElementById('entryAmount');
-
-    if (!dateInput || !dateInput.value) {
-      return;
-    }
-
-    const config = getStoredConfig();
-    const entries = getStoredEntries();
-    const newEntry = {
-      id: `entry-${Date.now()}`,
-      date: dateInput.value,
-      day: getDayName(dateInput.value),
-      note: noteInput ? noteInput.value.trim() : '',
-      budget: safeNumber(config.dailyBudget, 100),
-      spent: safeNumber(amountInput ? amountInput.value : 0, 0)
-    };
-
-    entries.push(newEntry);
-    saveStoredEntries(entries);
-    resetEntryForm();
-    renderDailyBudgetLedger();
-  }
-
   function renderDailyBudgetLedger() {
     const config = getStoredConfig();
     populateBudgetField(config);
-    const entries = getStoredEntries();
-    const rows = buildLedgerRows(entries, config.dailyBudget);
+    const expenses = getStoredExpenses();
+    const rows = buildLedgerRows([], config.dailyBudget, expenses, { source: 'expense' });
     renderLedger(rows);
     const summaryCount = document.getElementById('ledgerEntryCount');
     if (summaryCount) {
@@ -293,20 +316,18 @@
       saveBudgetButton.addEventListener('click', handleBudgetSave);
     }
 
-    const saveEntryButton = document.getElementById('saveLedgerEntry');
-    if (saveEntryButton) {
-      saveEntryButton.addEventListener('click', handleEntrySave);
-    }
+    window.addEventListener('storage', () => renderDailyBudgetLedger());
+    document.addEventListener('expenses:changed', () => renderDailyBudgetLedger());
   }
 
   function initDailyBudgetLedgerPage() {
     bindEvents();
-    resetEntryForm();
     renderDailyBudgetLedger();
   }
 
   root.calculateDailyDelta = calculateDailyDelta;
   root.buildLedgerRows = buildLedgerRows;
+  root.getLedgerDataSourceEntries = getLedgerDataSourceEntries;
   root.renderDailyBudgetLedger = renderDailyBudgetLedger;
   root.initDailyBudgetLedgerPage = initDailyBudgetLedgerPage;
 
@@ -319,7 +340,7 @@
       calculateDailyDelta,
       buildLedgerRows,
       getStoredConfig,
-      getStoredEntries
+      getLedgerDataSourceEntries
     };
   }
 })(typeof window !== 'undefined' ? window : globalThis);
