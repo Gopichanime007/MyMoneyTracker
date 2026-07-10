@@ -3,6 +3,25 @@
     config: 'dailyBudgetLedgerConfig'
   };
 
+  /* ==========================================================
+     ⚠️  UPDATE HERE #1 — point this at your real Expense data.
+     This is the ONLY place the ledger reads expense records
+     from. If your expenses live somewhere other than
+     localStorage['expenses'], change EXPENSES_STORAGE_KEY (or
+     replace the body of getStoredExpenses() with your own
+     fetch/DB call).
+  ========================================================== */
+  const EXPENSES_STORAGE_KEY = 'expenses';
+
+  function getStoredExpenses() {
+    try {
+      const stored = JSON.parse(localStorage.getItem(EXPENSES_STORAGE_KEY) || '[]');
+      return Array.isArray(stored) ? stored : [];
+    } catch (error) {
+      return [];
+    }
+  }
+
   function safeNumber(value, fallback = 0) {
     const parsed = Number(value);
     return Number.isFinite(parsed) ? parsed : fallback;
@@ -16,12 +35,6 @@
     return date;
   }
 
-  function addDays(date, amount) {
-    const next = new Date(date);
-    next.setDate(next.getDate() + amount);
-    return next;
-  }
-
   function formatDateInput(date) {
     if (!date) return '';
     const year = date.getFullYear();
@@ -30,55 +43,211 @@
     return `${year}-${month}-${day}`;
   }
 
+  function getDateKey(dateValue) {
+    return formatDateInput(parseDate(dateValue));
+  }
+
   function formatCurrency(value) {
-    const amount = safeNumber(value, 0);
     return new Intl.NumberFormat('en-IN', {
       style: 'currency',
       currency: 'INR',
       maximumFractionDigits: 0
-    }).format(amount);
+    }).format(safeNumber(value, 0));
   }
 
   function getDayName(dateValue) {
     const date = parseDate(dateValue);
-    if (!date) return '';
-    return date.toLocaleDateString('en-IN', { weekday: 'long' });
-  }
-
-  function getMonthLabel(dateValue) {
-    const date = parseDate(dateValue);
-    if (!date) return 'Summary';
-    return date.toLocaleDateString('en-IN', { month: 'long', year: 'numeric' });
+    return date ? date.toLocaleDateString('en-IN', { weekday: 'short' }) : '';
   }
 
   function formatDisplayDate(dateValue) {
     const date = parseDate(dateValue);
-    if (!date) return '';
-    return date.toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' });
+    return date ? date.toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '';
   }
 
-  function getDateKey(dateValue) {
-    const date = parseDate(dateValue);
-    if (!date) return '';
-    const year = date.getFullYear();
-    const month = String(date.getMonth() + 1).padStart(2, '0');
-    const day = String(date.getDate()).padStart(2, '0');
-    return `${year}-${month}-${day}`;
+  function getMonthLabel(date) {
+    return date ? date.toLocaleDateString('en-IN', { month: 'long', year: 'numeric' }) : 'Summary';
   }
 
-  function calculateDailyDelta(budget, spent) {
-    return safeNumber(budget, 0) - safeNumber(spent, 0);
+  // Sunday-start calendar week. Two dates are in the same week
+  // if they share the same "Sunday of that week".
+  function getWeekKey(date) {
+    const sunday = new Date(date);
+    sunday.setDate(sunday.getDate() - sunday.getDay());
+    return formatDateInput(sunday);
+  }
+
+  function getMonthKey(date) {
+    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+  }
+
+  /* ==========================================================
+     ⚠️  UPDATE HERE #2 — field mapping for a single expense.
+     If your expense objects use different field names than
+     `date` / `amount` / `type`, change them ONLY inside this
+     function. Everything downstream just reads entry.date and
+     entry.spent, so this is the one translation layer.
+  ========================================================== */
+  function getLedgerDataSourceEntries(expenses) {
+    return (Array.isArray(expenses) ? expenses : [])
+      .filter((entry) => {
+        const amount = safeNumber(entry && entry.amount, 0);
+        return entry && (entry.type === 'expense' || entry.type === 'loss' || amount < 0);
+      })
+      .map((entry) => ({
+        date: entry.date || entry.createdAt || '',
+        spent: Math.abs(safeNumber(entry.amount, 0))
+      }));
+  }
+
+  function createSummaryRow(entries, kind, runningBalance, label) {
+    return {
+      type: 'summary',
+      kind, // 'week' | 'month' — used as the CSS row class (week-summary / month-summary)
+      label,
+      budget: entries.reduce((sum, e) => sum + e.budget, 0),
+      spent: entries.reduce((sum, e) => sum + e.spent, 0),
+      savings: entries.reduce((sum, e) => sum + e.savings, 0),
+      deficit: entries.reduce((sum, e) => sum + e.deficit, 0),
+      runningBalance
+    };
+  }
+
+  /**
+   * Builds ledger rows purely from Expense records — no separate
+   * ledger entries are ever created or stored.
+   *
+   * @param {number} dailyBudget - Fixed Daily Budget, applied to every date.
+   * @param {Array}  expensesOverride - optional, mainly for testing.
+   */
+  function buildLedgerRows(dailyBudget = 100, expensesOverride = null) {
+    const expenses = Array.isArray(expensesOverride) ? expensesOverride : getStoredExpenses();
+    const rawEntries = getLedgerDataSourceEntries(expenses);
+
+    // Step 1 — sum expenses per calendar date (rule 2, rule 8: only
+    // dates that actually have expense records are kept).
+    const dailyTotals = new Map();
+    rawEntries.forEach((entry) => {
+      const dateKey = getDateKey(entry.date);
+      if (!dateKey) return;
+      dailyTotals.set(dateKey, (dailyTotals.get(dateKey) || 0) + entry.spent);
+    });
+
+    // Step 2 — ascending date order (rule 9).
+    const sortedDates = [...dailyTotals.keys()].sort((a, b) => new Date(a) - new Date(b));
+
+    const budget = safeNumber(dailyBudget, 100);
+    const rows = [];
+    let runningBalance = 0; // rule 3: previous running balance starts at 0
+    let weekBucket = [];
+    let monthBucket = [];
+    let weekCounter = 0;
+
+    sortedDates.forEach((dateKey, index) => {
+      const date = parseDate(dateKey);
+      const spent = dailyTotals.get(dateKey);
+
+      // Step 3 — Savings / Deficit (rule 2's if/else-if/else).
+      let savings = 0;
+      let deficit = 0;
+      if (spent < budget) {
+        savings = budget - spent;
+      } else if (spent > budget) {
+        deficit = spent - budget;
+      }
+
+      // Step 4 — running balance (rule 3).
+      runningBalance += savings - deficit;
+
+      const row = {
+        type: 'entry',
+        date: dateKey,
+        displayDate: formatDisplayDate(dateKey),
+        day: getDayName(dateKey),
+        budget,
+        spent,
+        savings,
+        deficit,
+        runningBalance
+      };
+
+      rows.push(row);
+      weekBucket.push(row);
+      monthBucket.push(row);
+
+      // Step 5 — decide if a week/month boundary was just crossed,
+      // by peeking at the next date that actually has expenses.
+      const nextDateKey = sortedDates[index + 1];
+      const nextDate = nextDateKey ? parseDate(nextDateKey) : null;
+      const isLastRecord = !nextDate;
+
+      const weekEnds = isLastRecord || getWeekKey(nextDate) !== getWeekKey(date);
+      const monthEnds = isLastRecord || getMonthKey(nextDate) !== getMonthKey(date);
+
+      if (weekEnds) {
+        weekCounter += 1;
+        rows.push(createSummaryRow(weekBucket, 'week', runningBalance, `Week ${weekCounter} Summary`));
+        weekBucket = [];
+      }
+
+      if (monthEnds) {
+        rows.push(createSummaryRow(monthBucket, 'month', runningBalance, `${getMonthLabel(date)} Summary`));
+        monthBucket = [];
+      }
+    });
+
+    return rows;
+  }
+
+  function balanceClass(value) {
+    if (value > 0) return 'positive';
+    if (value < 0) return 'negative';
+    return '';
+  }
+
+  function renderLedger(rows) {
+    const tbody = document.getElementById('ledgerEntries');
+    if (!tbody) return;
+
+    if (!rows.length) {
+      tbody.innerHTML = `
+        <tr>
+          <td colspan="6">
+            <div class="empty-state">No expenses recorded yet. Add an expense to see it reflected here.</div>
+          </td>
+        </tr>`;
+      return;
+    }
+
+    tbody.innerHTML = rows.map((row) => {
+      if (row.type === 'summary') {
+        return `
+          <tr class="${row.kind}-summary">
+            <td>${row.label}</td>
+            <td>${formatCurrency(row.budget)}</td>
+            <td>${formatCurrency(row.spent)}</td>
+            <td class="${row.savings > 0 ? 'positive' : ''}">${formatCurrency(row.savings)}</td>
+            <td class="${row.deficit > 0 ? 'negative' : ''}">${formatCurrency(row.deficit)}</td>
+            <td class="${balanceClass(row.runningBalance)}">${formatCurrency(row.runningBalance)}</td>
+          </tr>`;
+      }
+
+      return `
+        <tr>
+          <td>${row.displayDate} (${row.day})</td>
+          <td>${formatCurrency(row.budget)}</td>
+          <td>${formatCurrency(row.spent)}</td>
+          <td class="${row.savings > 0 ? 'positive' : ''}">${formatCurrency(row.savings)}</td>
+          <td class="${row.deficit > 0 ? 'negative' : ''}">${formatCurrency(row.deficit)}</td>
+          <td class="${balanceClass(row.runningBalance)}">${formatCurrency(row.runningBalance)}</td>
+        </tr>`;
+    }).join('');
   }
 
   function getStoredConfig() {
     try {
       const stored = JSON.parse(localStorage.getItem(STORAGE_KEYS.config) || 'null');
-      if (!stored) {
-        return { dailyBudget: 100 };
-      }
-      return {
-        dailyBudget: safeNumber(stored.dailyBudget, 100)
-      };
+      return { dailyBudget: safeNumber(stored && stored.dailyBudget, 100) };
     } catch (error) {
       return { dailyBudget: 100 };
     }
@@ -88,212 +257,15 @@
     localStorage.setItem(STORAGE_KEYS.config, JSON.stringify(config));
   }
 
-  function getLedgerDataSourceEntries(expenses = null) {
-    const sourceEntries = Array.isArray(expenses) ? expenses : getStoredExpenses();
-    return (Array.isArray(sourceEntries) ? sourceEntries : [])
-      .filter((entry) => {
-        const amount = safeNumber(entry && entry.amount, 0);
-        return entry && (entry.type === 'expense' || entry.type === 'loss' || amount < 0);
-      })
-      .map((entry) => ({
-        ...entry,
-        date: entry.date || entry.createdAt || '',
-        amount: safeNumber(entry.amount, 0),
-        spent: Math.abs(safeNumber(entry.amount, 0))
-      }));
-  }
-
-  function getStoredExpenses() {
-    try {
-      const stored = JSON.parse(localStorage.getItem('expenses') || '[]');
-      return Array.isArray(stored) ? stored : [];
-    } catch (error) {
-      return [];
-    }
-  }
-
-  function createSummaryRow(entries, kind, closingRunningBalance) {
-    const totalBudget = entries.reduce((sum, entry) => sum + safeNumber(entry.budget, 0), 0);
-    const totalSpent = entries.reduce((sum, entry) => sum + safeNumber(entry.spent, 0), 0);
-    const totalSavings = entries.reduce((sum, entry) => sum + Math.max(0, safeNumber(entry.dailyDelta, 0)), 0);
-    const totalDeficit = entries.reduce((sum, entry) => sum + Math.max(0, -safeNumber(entry.dailyDelta, 0)), 0);
-
-    return {
-      type: 'summary',
-      kind,
-      label: kind === 'week' ? 'Week Summary' : `${getMonthLabel(entries[entries.length - 1].date)} Summary`,
-      totalBudget,
-      totalSpent,
-      totalSavings,
-      totalDeficit,
-      closingRunningSavings: closingRunningBalance
-    };
-  }
-
-  function buildLedgerRows(entries, dailyBudget = 100, sourceExpenses = null) {
-    const ledgerSourceEntries = Array.isArray(entries) && entries.length
-      ? entries
-      : getLedgerDataSourceEntries(sourceExpenses);
-
-    const groupedEntries = new Map();
-
-    ledgerSourceEntries.forEach((entry, index) => {
-      const normalizedDate = getDateKey(entry.date || entry.createdAt || '');
-      if (!normalizedDate) return;
-
-      const bucket = groupedEntries.get(normalizedDate) || {
-        id: entry.id || `entry-${index + 1}`,
-        date: normalizedDate,
-        day: getDayName(entry.date || entry.createdAt || ''),
-        note: '',
-        budget: safeNumber(dailyBudget, 100),
-        spent: 0,
-        expenseCount: 0,
-        expenses: []
-      };
-
-      const entryAmount = safeNumber(entry.spent, safeNumber(entry.amount, 0));
-      bucket.spent += entryAmount;
-      bucket.expenseCount += 1;
-      bucket.expenses.push(entry);
-
-      if (!bucket.note) {
-        bucket.note = entry.note || entry.purpose || entry.category || '';
-      }
-
-      groupedEntries.set(normalizedDate, bucket);
-    });
-
-    const sortedEntries = [...groupedEntries.values()]
-      .map((entry) => ({
-        ...entry,
-        budget: safeNumber(entry.budget, safeNumber(dailyBudget, 100)),
-        spent: safeNumber(entry.spent, 0)
-      }))
-      .sort((left, right) => new Date(left.date) - new Date(right.date));
-
-    const rows = [];
-    let runningBalance = 0;
-    let weekEntries = [];
-    let weekStartDate = null;
-    let monthEntries = [];
-    let currentMonthKey = '';
-
-    sortedEntries.forEach((entry, index) => {
-      const date = parseDate(entry.date);
-      const delta = calculateDailyDelta(entry.budget, entry.spent);
-      runningBalance += delta;
-
-      const row = {
-        type: 'entry',
-        id: entry.id || `entry-${index + 1}`,
-        date: entry.date,
-        displayDate: formatDisplayDate(entry.date),
-        day: entry.day || getDayName(entry.date),
-        note: entry.expenseCount > 1 ? `${entry.expenseCount} expenses` : (entry.note || '—'),
-        budget: entry.budget,
-        spent: entry.spent,
-        dailyDelta: delta,
-        runningBalance
-      };
-
-      rows.push(row);
-
-      if (!weekStartDate && date) {
-        weekStartDate = date;
-      }
-
-      if (date && weekStartDate) {
-        const dayDifference = Math.round((date - weekStartDate) / (1000 * 60 * 60 * 24));
-        weekEntries.push({ ...row });
-        if (dayDifference >= 6) {
-          rows.push(createSummaryRow(weekEntries, 'week', runningBalance));
-          weekEntries = [];
-          weekStartDate = addDays(date, 1);
-        }
-      }
-
-      if (date) {
-        const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
-        if (monthKey !== currentMonthKey) {
-          monthEntries = [];
-          currentMonthKey = monthKey;
-        }
-        monthEntries.push({ ...row });
-
-        const lastDayOfMonth = new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate();
-        if (date.getDate() === lastDayOfMonth) {
-          rows.push(createSummaryRow(monthEntries, 'month', runningBalance));
-          monthEntries = [];
-          currentMonthKey = monthKey;
-        }
-      }
-    });
-
-    return rows;
-  }
-
-  function renderLedger(rows) {
-    const ledgerRoot = document.getElementById('ledgerEntries');
-    if (!ledgerRoot) return;
-
-    if (!rows.length) {
-      ledgerRoot.innerHTML = '<div class="empty-state">No ledger entries yet. Add the first day to begin tracking your running balance.</div>';
-      return;
-    }
-
-    ledgerRoot.innerHTML = rows.map((row) => {
-      if (row.type === 'summary') {
-        const summaryLabel = row.label || (row.kind === 'week' ? 'Week Summary' : 'Month Summary');
-        return `
-          <article class="ledger-row summary-row ${row.kind}">
-            <div class="summary-heading">${summaryLabel}</div>
-            <div class="summary-grid">
-              <div><span>Total Budget</span><strong>${formatCurrency(row.totalBudget)}</strong></div>
-              <div><span>Total Spent</span><strong>${formatCurrency(row.totalSpent)}</strong></div>
-              <div><span>Total Savings</span><strong>${formatCurrency(row.totalSavings)}</strong></div>
-              <div><span>Total Deficit</span><strong>${formatCurrency(row.totalDeficit)}</strong></div>
-              <div class="summary-wide"><span>Closing Running Savings</span><strong>${formatCurrency(row.closingRunningSavings)}</strong></div>
-            </div>
-          </article>`;
-      }
-
-      const deltaClass = row.dailyDelta >= 0 ? 'positive' : 'negative';
-      const deltaLabel = row.dailyDelta >= 0 ? 'Savings' : 'Deficit';
-      const dayLabel = row.day || getDayName(row.date);
-      const displayDate = row.displayDate || formatDisplayDate(row.date);
-
-      return `
-        <article class="ledger-row entry-row">
-          <div class="ledger-row-header">
-            <div>
-              <strong>${displayDate}</strong>
-              <div class="muted">${dayLabel}</div>
-            </div>
-            <div class="ledger-badge ${deltaClass}">${deltaLabel}</div>
-          </div>
-          <div class="ledger-details">
-            <div><span>Note</span><strong>${row.note || '—'}</strong></div>
-            <div><span>Budget</span><strong>${formatCurrency(row.budget)}</strong></div>
-            <div><span>Spent</span><strong>${formatCurrency(row.spent)}</strong></div>
-            <div><span>Daily Saving/Deficit</span><strong>${formatCurrency(row.dailyDelta)}</strong></div>
-            <div class="summary-wide"><span>Running Savings</span><strong>${formatCurrency(row.runningBalance)}</strong></div>
-          </div>
-        </article>`;
-    }).join('');
-  }
-
   function populateBudgetField(config) {
     const budgetInput = document.getElementById('dailyBudgetInput');
-    if (!budgetInput) return;
-    budgetInput.value = safeNumber(config.dailyBudget, 100);
+    if (budgetInput) budgetInput.value = config.dailyBudget;
   }
 
   function handleBudgetSave() {
     const budgetInput = document.getElementById('dailyBudgetInput');
-    const nextBudget = safeNumber(budgetInput ? budgetInput.value : 100, 100);
     const config = getStoredConfig();
-    config.dailyBudget = nextBudget;
+    config.dailyBudget = safeNumber(budgetInput ? budgetInput.value : 100, 100);
     saveStoredConfig(config);
     renderDailyBudgetLedger();
   }
@@ -301,9 +273,10 @@
   function renderDailyBudgetLedger() {
     const config = getStoredConfig();
     populateBudgetField(config);
-    const expenses = getStoredExpenses();
-    const rows = buildLedgerRows([], config.dailyBudget, expenses, { source: 'expense' });
+
+    const rows = buildLedgerRows(config.dailyBudget);
     renderLedger(rows);
+
     const summaryCount = document.getElementById('ledgerEntryCount');
     if (summaryCount) {
       summaryCount.textContent = `${rows.filter((row) => row.type === 'entry').length} entries`;
@@ -312,10 +285,11 @@
 
   function bindEvents() {
     const saveBudgetButton = document.getElementById('saveDailyBudget');
-    if (saveBudgetButton) {
-      saveBudgetButton.addEventListener('click', handleBudgetSave);
-    }
+    if (saveBudgetButton) saveBudgetButton.addEventListener('click', handleBudgetSave);
 
+    // Re-render whenever expenses change elsewhere in the app.
+    // If your app has a custom event name for "expense added",
+    // add/replace it here.
     window.addEventListener('storage', () => renderDailyBudgetLedger());
     document.addEventListener('expenses:changed', () => renderDailyBudgetLedger());
   }
@@ -325,7 +299,6 @@
     renderDailyBudgetLedger();
   }
 
-  root.calculateDailyDelta = calculateDailyDelta;
   root.buildLedgerRows = buildLedgerRows;
   root.getLedgerDataSourceEntries = getLedgerDataSourceEntries;
   root.renderDailyBudgetLedger = renderDailyBudgetLedger;
@@ -336,11 +309,6 @@
   }
 
   if (typeof module !== 'undefined' && module.exports) {
-    module.exports = {
-      calculateDailyDelta,
-      buildLedgerRows,
-      getStoredConfig,
-      getLedgerDataSourceEntries
-    };
+    module.exports = { buildLedgerRows, getStoredConfig, getLedgerDataSourceEntries };
   }
 })(typeof window !== 'undefined' ? window : globalThis);
