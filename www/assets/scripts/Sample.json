@@ -1,0 +1,186 @@
+{
+  "expenses": [
+    {
+      "id": "EXP-1001",
+      "title": "Groceries",
+      "amount": 1250,
+      "categoryId": "CAT-FOOD",
+      "personId": "PER-001",
+      "budgetId": "BUD-001",
+      "budgetPeriodId": "BP-2026-MAY",
+      "paymentType": "UPI",
+      "date": "2026-05-20T10:15:00.000Z",
+      "notes": "Weekly vegetables and fruits",
+      "attachmentId": "ATT-001",
+      "createdAt": "2026-05-20T10:15:00.000Z",
+      "updatedAt": "2026-05-20T10:15:00.000Z"
+    },
+    {
+      "id": "EXP-1002",
+      "title": "Petrol",
+      "amount": 800,
+      "categoryId": "CAT-TRAVEL",
+      "personId": "PER-001",
+      "budgetId": "BUD-002",
+      "budgetPeriodId": "BP-2026-MAY",
+      "paymentType": "Cash",
+      "date": "2026-05-22T08:30:00.000Z",
+      "notes": "Bike fuel refill",
+      "attachmentId": null,
+      "createdAt": "2026-05-22T08:30:00.000Z",
+      "updatedAt": "2026-05-22T08:30:00.000Z"
+    }
+  ],
+
+  "budgets": [
+    {
+      "id": "BUD-001",
+      "name": "Food Budget",
+      "amount": 5000,
+      "remainingAmount": 3750,
+      "categoryId": "CAT-FOOD",
+      "budgetPeriodId": "BP-2026-MAY",
+      "priority": 1,
+      "isActive": true,
+      "createdAt": "2026-05-01T00:00:00.000Z"
+    },
+    {
+      "id": "BUD-002",
+      "name": "Travel Budget",
+      "amount": 3000,
+      "remainingAmount": 2200,
+      "categoryId": "CAT-TRAVEL",
+      "budgetPeriodId": "BP-2026-MAY",
+      "priority": 2,
+      "isActive": true,
+      "createdAt": "2026-05-01T00:00:00.000Z"
+    }
+  ],
+
+  "savings": [
+    {
+      "id": "SAV-001",
+      "title": "Emergency Fund",
+      "amount": 5000,
+      "type": "Deposit",
+      "date": "2026-05-10T09:00:00.000Z",
+      "notes": "Monthly saving",
+      "attachmentId": null,
+      "createdAt": "2026-05-10T09:00:00.000Z"
+    },
+    {
+      "id": "SAV-002",
+      "title": "Laptop Repair",
+      "amount": -1200,
+      "type": "Withdrawal",
+      "date": "2026-05-18T15:20:00.000Z",
+      "notes": "Repair service payment",
+      "attachmentId": null,
+      "createdAt": "2026-05-18T15:20:00.000Z"
+    }
+  ],
+
+  "orders": [
+    {
+      "id": "ORD-001",
+      "title": "Amazon Order",
+      "amount": 2499,
+      "status": "Delivered",
+      "date": "2026-05-12T13:45:00.000Z",
+      "trackingId": "TRK-987654",
+      "notes": "Bluetooth headphones",
+      "createdAt": "2026-05-12T13:45:00.000Z"
+    }
+  ],
+
+  "categories": [
+    {
+      "id": "CAT-FOOD",
+      "name": "Food",
+      "icon": "🍔",
+      "color": "#ff9800",
+      "type": "Expense",
+      "createdAt": "2026-01-01T00:00:00.000Z"
+    },
+    {
+      "id": "CAT-TRAVEL",
+      "name": "Travel",
+      "icon": "🚗",
+      "color": "#2196f3",
+      "type": "Expense",
+      "createdAt": "2026-01-01T00:00:00.000Z"
+    },
+    {
+      "id": "CAT-SAVINGS",
+      "name": "Savings",
+      "icon": "💰",
+      "color": "#4caf50",
+      "type": "Savings",
+      "createdAt": "2026-01-01T00:00:00.000Z"
+    }
+  ],
+
+  "persons": [
+    {
+      "id": "PER-001",
+      "name": "Rimuru",
+      "phone": "9876543210",
+      "email": "rimuru@example.com",
+      "createdAt": "2026-01-01T00:00:00.000Z"
+    },
+    {
+      "id": "PER-002",
+      "name": "Shion",
+      "phone": "9123456780",
+      "email": "shion@example.com",
+      "createdAt": "2026-01-02T00:00:00.000Z"
+    }
+  ],
+
+  "budgetPeriods": [
+    {
+      "id": "BP-2026-MAY",
+      "name": "May 2026",
+      "startDate": "2026-05-01",
+      "endDate": "2026-05-31",
+      "isActive": true,
+      "createdAt": "2026-05-01T00:00:00.000Z"
+    },
+    {
+      "id": "BP-2026-JUN",
+      "name": "June 2026",
+      "startDate": "2026-06-01",
+      "endDate": "2026-06-30",
+      "isActive": false,
+      "createdAt": "2026-06-01T00:00:00.000Z"
+    }
+  ],
+
+  "attachments": [
+    {
+      "id": "ATT-001",
+      "fileName": "grocery-bill.jpg",
+      "fileType": "image/jpeg",
+      "size": 245678,
+      "linkedEntity": "expense",
+      "linkedEntityId": "EXP-1001",
+      "createdAt": "2026-05-20T10:20:00.000Z"
+    }
+  ],
+
+  "settings": {
+    "theme": "dark",
+    "currencyCode": "INR",
+    "language": "en",
+    "autoBackup": true,
+    "backupFrequency": "daily",
+    "lastBackupAt": "2026-05-26T05:00:00.000Z"
+  },
+
+  "meta": {
+    "exportedAt": "2026-05-26T06:00:00.000Z",
+    "version": "v2",
+    "appName": "Money Tracker",
+    "device": "Web"
+  }
+}

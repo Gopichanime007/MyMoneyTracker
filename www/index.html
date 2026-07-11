@@ -1,0 +1,575 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <title>Money Tracker</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+  <!-- Fonts -->
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600&display=swap" rel="stylesheet">
+
+  <!-- Styles -->
+  <link rel="stylesheet" href="assets/styles/style.css">
+
+  <!-- Libraries -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+</head>
+
+<body>
+
+  <div class="app">
+
+    <!-- HEADER -->
+    <header class="header">
+      <h2>💰 Money Tracker</h2>
+    </header>
+
+    <div class="nav">
+      <button data-screen="home" onclick="showScreen('home')" class="active">🏠</button>
+      <button data-screen="add" onclick="showScreen('add')">➕</button>
+      <button data-screen="history" onclick="showScreen('history')">📜</button>
+      <button data-screen="budget" onclick="showScreen('budget')">💰</button>
+      <button data-screen="graph" onclick="showScreen('graph')">📊</button>
+      <button data-screen="budgets" onclick="showScreen('budgets')">📦</button>
+      <button data-screen="settings" onclick="showScreen('settings')">⚙️</button>
+      <button type="button" onclick="window.location.href='pages/daily-budget-ledger.html'" title="Daily Budget Ledger">📘</button>
+    </div>
+    <!-- ================= HOME ================= -->
+    <section id="home" class="screen active">
+      <div class="card">
+        <h3>Dashboard</h3>
+        <div class="headline-wrapper">
+          <div id="headlineText" class="headline-text">
+            Loading insights...
+          </div>
+        </div>
+        <small id="filteredViewActive" class="muted-note"></small>
+
+        <div class="dashboard-grid">
+
+          <div class="dash-card budget">
+            <span>Budget</span>
+            <h2><span id="budgetValue">0</span></h2>
+          </div>
+
+          <div class="dash-card spent">
+            <span>Spent</span>
+            <h2><span id="spent">0</span></h2>
+          </div>
+
+          <div id="remainingCard" class="dash-card remaining clickable-card">
+            <span>Remaining</span>
+            <h2><span id="remaining">0</span></h2>
+          </div>
+
+          <div class="dash-card today">
+            <span>Today</span>
+            <h2><span id="todaySpent">0</span></h2>
+          </div>
+
+          <div class="dash-card income">
+            <span>Income</span>
+            <h2><span id="incomeValue">0</span></h2>
+          </div>
+
+          <div class="dash-card net">
+            <span>Net</span>
+            <h2><span id="netValue">0</span></h2>
+          </div>
+
+        </div>
+
+        <div class="refund-type-card">
+          <h4>Refund Types This Period</h4>
+          <div id="refundTypeBreakdown"></div>
+        </div>
+
+        <!-- Progress -->
+        <div class="progress-wrapper">
+          <div class="progress-bar">
+            <div id="progressFill" class="progress-fill"></div>
+          </div>
+          <p id="progressText"></p>
+        </div>
+        <button class="primary" onclick="openQuotation()">
+          🧾 Open Quotations
+        </button>
+        <button class="secondary" onclick="window.location.href='pages/orders.html'">
+          📦 View Orders
+        </button>
+      </div>
+    </section>
+
+    <!-- ================= ADD ================= -->
+    <section id="add" class="screen">
+      <div class="card">
+        <h3>Add Expense</h3>
+
+        <label for="entryType">Entry Type</label>
+        <select id="entryType" onchange="handleEntryTypeUIChange()">
+          <option value="expense">Expense</option>
+          <option value="income">Income</option>
+          <option value="transfer">Transfer</option>
+          <option value="refund">Refund</option>
+          <option value="transfer_back">Transfer Back</option>
+        </select>
+
+        <input type="number" id="amount" placeholder="Amount">
+
+        <div id="categoryWrapper" class="form-group">
+          <label for="category">Category</label>
+          <select id="category"></select>
+        </div>
+
+        <input type="text" id="purpose" placeholder="Purpose (optional)">
+        <input type="date" id="expenseDate">
+
+        <div id="budgetWrapper" class="form-group">
+          <label for="budgetSelect">Budget</label>
+          <select id="budgetSelect"></select>
+        </div>
+
+        <div id="linkedTransactionWrapper" class="form-group hidden">
+          <label for="linkedTransactionSelect">Linked Transaction</label>
+          <select id="linkedTransactionSelect" onchange="updateLinkedRemainingUI();handleRefundResolutionChange()">
+            <option value="">Select transaction</option>
+          </select>
+
+          <label for="refundResolutionType">Resolution Type</label>
+          <select id="refundResolutionType" onchange="handleRefundResolutionChange()">
+            <option value="open">Open</option>
+            <option value="partially_refunded">Partially Refunded</option>
+            <option value="fully_refunded">Fully Refunded</option>
+            <option value="cancelled_with_charges">Cancelled With Charges</option>
+            <option value="consumed">Consumed</option>
+            <option value="written_off">Written Off</option>
+            <option value="settled">Settled</option>
+          </select>
+          <small id="refundResolutionHelp" class="muted-note refund-info"></small>
+
+          <label for="refundType">Reason</label>
+          <select id="refundType">
+            <option value="refund">Refund</option>
+            <option value="correction">Correction</option>
+            <option value="recovery">Recovery</option>
+            <option value="cancellation">Cancellation</option>
+            <option value="custom" selected>Custom</option>
+          </select>
+          <small id="refundTypeHelp" class="muted-note refund-info"></small>
+
+          <small id="linkedRemainingText" class="muted-note hidden"></small>
+        </div>
+
+        <div id="personWrapper" class="form-group hidden">
+          <label for="personSelect">Person</label>
+          <select id="personSelect">
+            <option value="">No specific person</option>
+          </select>
+          <small id="personSelectionHelp" class="muted-note"></small>
+        </div>
+
+        <div id="paymentWrapper" class="form-group">
+          <label for="paymentType">Payment Method</label>
+          <select id="paymentType">
+            <option value="PhonePe">PhonePe</option>
+            <option value="UPI">UPI</option>
+            <option value="Cash">Cash</option>
+            <option value="Google Pay">Google Pay</option>
+            <option value="Bank Transfer">Bank Transfer</option>
+          </select>
+        </div>
+
+        <!-- Attachment -->
+        <label class="field-label">Attach Receipt (optional)</label>
+        <div class="inline-row"> 
+          <input class="flex-input" id="expenseAttachment" type="file" accept="*/*" capture="environment" />
+          <button type="button" id="expenseAttachmentRemove" class="link-btn hidden">Remove</button>
+        </div>
+        <div id="expenseAttachmentPreviewWrapper" class="attachment-preview-wrapper hidden">
+          <img id="expenseAttachmentPreview" src="" class="attachment-preview" />
+        </div>
+        <button type="button" class="primary" onclick="saveExpense()">Save</button>
+      </div>
+    </section>
+
+    <!-- ================= HISTORY ================= -->
+    <section id="history" class="screen">
+      <div class="card">
+        <div class="history-shell">
+          <div class="history-headline">
+            <h3>History</h3>
+            <small>Track all movements with running balance clarity</small>
+          </div>
+
+          <div class="history-toolbar premium-history-toolbar">
+            <div class="history-filter-wrap">
+              <input id="historySearchInput" type="text" placeholder="Search transactions..." oninput="onExpenseHistorySearchInput(this.value)">
+            </div>
+
+            <div class="history-tools action-bar action-bar-4">
+              <button id="expenseFilterActionBtn" class="secondary" type="button" onclick="openExpenseFilterModal()">Filter</button>
+              <button class="secondary" type="button" onclick="openExpenseSortModal()">Sort</button>
+              <button class="secondary" type="button" onclick="exportPDF()" title="Download PDF">Export</button>
+              <button class="secondary" type="button" onclick="sharePDF()" title="Share PDF">Share</button>
+
+            </div>
+          </div>
+
+          <div id="expenseQueryChips" class="query-chip-row"></div>
+
+          <div id="historyList" class="history-list-premium"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================= BUDGET ================= -->
+    <section id="budget" class="screen">
+      <div class="card">
+        <h3>Budget</h3>
+
+        <p>Current: <span id="currentBudget">0</span></p>
+
+        <select id="budgetType">
+          <option value="daily">Daily</option>
+          <option value="weekly">Weekly</option>
+          <option value="monthly" selected>Monthly</option>
+        </select>
+
+        <input type="month" id="budgetMonth">
+        <input type="number" id="budgetAmount" placeholder="Amount">
+
+        <p>Daily Limit: <span id="calculatedDaily">0</span></p>
+
+        <button type="button" class="primary" onclick="saveBudget()">Save</button>
+        <button type="button" class="secondary" onclick="window.location.href='pages/budgetperiod.html'">Manage Budget Periods</button>
+      </div>
+      <!-- ================= SMART INSIGHTS ================= -->
+      <div class="budget-insights">
+
+        <div class="insight-card success">
+          <small>Daily Remaining</small>
+          <h4 id="savedToday">₹0</h4>
+        </div>
+
+        <div class="insight-card info">
+          <small>Weekly Remaining</small>
+          <h4 id="savedWeek">₹0</h4>
+        </div>
+
+        <div class="insight-card premium">
+          <small>Monthly Remaining</small>
+          <h4 id="savedPeriod">₹0</h4>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- ================= GRAPH ================= -->
+    <section id="graph" class="screen">
+      <div class="card">
+        <h3>Analytics</h3>
+
+        <div class="inline-row graph-controls">
+          <select onchange="handleGraphFilter(this.value)">
+            <option value="day">Day</option>
+            <option value="week">Week</option>
+            <option value="month">Month</option>
+          </select>
+
+          <button type="button" class="icon-btn" onclick="openPeriod()">📅</button>
+        </div>
+
+        <div class="chart-container">
+          <canvas id="myChart"></canvas>
+        </div>
+
+        <div class="card card-tight">
+          <h4>Category Breakdown</h4>
+          <div id="categoryBreakdown"></div>
+        </div>
+
+        <div id="graphDate" class="graph-date"></div>
+      </div>
+    </section>
+
+    <section id="budgets" class="screen">
+      <div class="card">
+        <h3>📦 Budget Entries</h3>
+        <div id="budgetEntries"></div>
+      </div>
+    </section>
+    <section id="budgetDetails" class="screen">
+      <div class="card">
+        <div id="budgetDetailsContainer"></div>
+      </div>
+    </section>
+
+    <!-- ================= SETTINGS ================= -->
+    <section id="settings" class="screen">
+      <div class="card">
+
+        <h3>Settings</h3>
+        <h4>Currency</h4>
+        <select onchange="changeCurrency(this.value)">
+          <option value="INR">INR (₹)</option>
+          <option value="USD">USD ($)</option>
+          <option value="EUR">EUR (€)</option>
+          <option value="GBP">GBP (£)</option>
+        </select>
+        <!-- Theme -->
+        <h4>Appearance Mode</h4>
+        <select id="appearanceModeSelect" onchange="applyAppearanceSettings(this.value)">
+          <option value="metallic">Metallic</option>
+          <option value="matte">Matte</option>
+          <option value="glossy">Glossy</option>
+          <option value="chromium">Chromium</option>
+          <option value="glass">Glass</option>
+          <option value="paper">Paper</option>
+          <option value="neon">Neon</option>
+        </select>
+
+        <h4>Accent Color</h4>
+        <select id="accentColorSelect" onchange="handleTheme(this.value)">
+          <option value="purple">Purple</option>
+          <option value="blue">Blue</option>
+          <option value="emerald">Emerald</option>
+          <option value="orange">Orange</option>
+          <option value="red">Red</option>
+          <option value="custom">Custom</option>
+        </select>
+        <input type="text" id="hexInput" placeholder="Apply custom theme using hex code (e.g. #4caf50)">
+        <button class="secondary" onclick="applyHex()">Apply</button>
+
+        <input type="color" id="colorPicker" class="hidden" onchange="applyCustomColor(this.value)">
+
+        <!-- Category -->
+        <h4>Add Category</h4>
+        <input type="text" id="newCategory" placeholder="New category">
+        <button class="primary" onclick="addCategory()">Add</button>
+
+        <h4 class="clickable-header" onclick="toggleCategory()">
+          Your Categories <span id="catArrow">></span>
+        </h4>
+
+        <!-- Backup -->
+        <h4>Backup & Restore</h4>
+        <div class="btn-group">
+          <button class="primary" onclick="openBackupOptions()">📤 Backup</button>
+          <button class="secondary" onclick="openImportModal()">📥 Import Data</button>
+          <button class="secondary" onclick="openNoSeriesModal()">🔢 No Series</button>
+
+          <!-- <button class="secondary" onclick="runMigration()"> 🔄 Fix Old Data </button> -->
+          <button class="secondary" onclick="openConfirm()">🗑 Reset App</button>
+        </div>
+
+        <h4>Automatic Backup</h4>
+        <div class="form-group">
+          <label for="autoBackupEnabled">
+            <input id="autoBackupEnabled" type="checkbox" onchange="applyAutoBackupSettings()" class="inline-checkbox" />
+            Enable Auto Backup
+          </label>
+
+          <label for="autoBackupFrequency">Backup Frequency</label>
+          <select id="autoBackupFrequency" onchange="applyAutoBackupSettings()">
+            <option value="daily">Daily</option>
+            <option value="weekly">Weekly</option>
+            <option value="monthly">Monthly</option>
+          </select>
+
+          <label for="autoBackupTarget">Backup Target</label>
+          <select id="autoBackupTarget" onchange="applyAutoBackupSettings()">
+            <option value="local_download">Local File Download</option>
+            <option value="google_drive">Google Drive (future-ready)</option>
+            <option value="one_drive">OneDrive (future-ready)</option>
+          </select>
+
+          <small id="autoBackupLastRun" class="muted-note">Last Backup: Not available</small>
+          <small id="autoBackupNextRun" class="muted-note">Next Scheduled Backup: Not available</small>
+          <small id="autoBackupRetentionState" class="muted-note">Retention: Not available</small>
+          <small id="autoBackupRuntimeState" class="muted-note">Export runtime: checking capabilities...</small>
+
+          <button class="secondary" type="button" onclick="runAutoBackupNow()">Run Backup Now</button>
+        </div>
+
+        <!-- <h4>💸 Loans / Recoveries</h4>
+        <div id="loanSummary"></div>
+      </div>
+      <div class="app-signature">
+        Developed by <strong>Gopichaninme</strong>
+      </div> -->
+    </section>
+
+  </div>
+
+  <!-- DATE MODAL -->
+  <div class="modal" id="periodModal" onclick="closePeriod()">
+    <div class="modal-content" onclick="event.stopPropagation()">
+
+      <h3>Select Period</h3>
+
+      <input type="date" id="startDate">
+      <input type="date" id="endDate">
+
+      <div class="modal-actions">
+        <button class="secondary" onclick="closePeriod()">Cancel</button>
+        <button class="primary" onclick="applyPeriodFromModal()">Apply</button>
+      </div>
+
+    </div>
+  </div>
+  <!-- Modal -->
+  <div id="categoryModal" class="modal">
+    <div class="modal-content">
+      <h3>Your Categories</h3>
+      <div id="categoryList"></div>
+      <button type="button" class="secondary" onclick="closeCategoryModal()">Close</button>
+    </div>
+  </div>
+  <div id="backupModal" class="modal">
+    <div class="modal-content">
+
+      <h3>Backup & Restore</h3>
+
+      <div class="modal-actions modal-stack-actions">
+
+        <button class="primary" onclick="exportDataAsJSON()">
+          📄 Export JSON
+        </button>
+
+        <button class="primary" onclick="exportDataAsExcel()">
+          📊 Export Excel
+        </button>
+
+        <!-- <button class="secondary" onclick="openImportModal()">
+          📥 Import Data
+        </button> -->
+
+      </div>
+
+      <button class="secondary" onclick="closeBackupModal()">Close</button>
+
+    </div>
+  </div>
+  <div id="importModal" class="modal">
+    <div class="modal-content">
+      <h3>Import Data</h3>
+
+      <textarea id="importText" placeholder="Paste JSON here" class="import-textarea"></textarea>
+      <pre id="importValidationReport" class="muted-note" aria-live="polite">Import report will appear here.</pre>
+
+      <input type="file" accept=".json" onchange="handleFileImport(event)">
+
+      <div class="modal-actions">
+        <button class="secondary" onclick="closeImportModal()">Cancel</button>
+        <button class="primary" onclick="importData()">Import</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="splitModal" class="modal">
+    <div class="modal-box">
+
+      <div class="modal-header">
+        <h3>Confirm Allocation</h3>
+      </div>
+
+      <div class="modal-body" id="splitDetails"></div>
+
+      <div class="modal-actions">
+        <button onclick="closeSplitModal()">Cancel</button>
+        <button class="primary" onclick="confirmSplit()">Confirm</button>
+      </div>
+
+    </div>
+  </div>
+
+  <div id="confirmModal" class="modal hidden">
+    <div class="modal-content">
+      <h3>Clear all app data?</h3>
+
+      <div class="modal-actions">
+        <button class="secondary" onclick="closeConfirm()">Cancel</button>
+        <button class="primary" onclick="confirmReset()">OK</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="noSeriesModal" class="modal hidden" onclick="closeNoSeriesModal()">
+    <div class="modal-content" onclick="event.stopPropagation()">
+      <h3>No Series Configuration</h3>
+
+      <label for="quotationPrefixInput">Quotation Prefix</label>
+      <input type="text" id="quotationPrefixInput" placeholder="QT">
+
+      <label for="quotationStartInput">Quotation Starting Number</label>
+      <input type="number" id="quotationStartInput" min="0" step="1" placeholder="1000">
+
+      <label for="orderPrefixInput">Order Prefix</label>
+      <input type="text" id="orderPrefixInput" placeholder="ORD">
+
+      <label for="orderStartInput">Order Starting Number</label>
+      <input type="number" id="orderStartInput" min="0" step="1" placeholder="1000">
+
+      <p id="noSeriesPreviewText" class="muted-note">Preview: QT-1001 | ORD-1001</p>
+
+      <div class="modal-actions">
+        <button class="secondary" type="button" onclick="closeNoSeriesModal()">Cancel</button>
+        <button class="primary" type="button" onclick="saveNoSeriesModal()">Save</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="expenseFilterModal" class="modal hidden" onclick="closeExpenseFilterModal()">
+    <div class="modal-content" onclick="event.stopPropagation()">
+      <h3>Expense Filter Builder</h3>
+      <div id="expenseFilterBuilderRoot"></div>
+    </div>
+  </div>
+
+  <div id="expenseSortModal" class="modal hidden" onclick="closeExpenseSortModal()">
+    <div class="modal-content" onclick="event.stopPropagation()">
+      <h3>Expense Sort</h3>
+
+      <label for="expenseSortField">Field</label>
+      <select id="expenseSortField">
+        <option value="date">Date</option>
+        <option value="amount">Amount</option>
+        <option value="type">Type</option>
+        <option value="category">Category</option>
+      </select>
+
+      <label for="expenseSortDirection">Direction</label>
+      <select id="expenseSortDirection">
+        <option value="desc">Descending</option>
+        <option value="asc">Ascending</option>
+      </select>
+
+            <div class="modal-actions sort-modal-actions">
+        <button class="secondary" type="button" onclick="closeExpenseSortModal()">Close</button>
+        <button class="secondary" type="button" onclick="clearExpenseSortModal()">Clear</button>
+        <button class="primary" type="button" onclick="applyExpenseSortModal()">Apply</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- SCRIPT -->
+  <script src="assets/scripts/storage.js"></script>
+  <script src="assets/scripts/documentWorkflow.js"></script>
+  <script src="assets/scripts/queryEngine.js"></script>
+  <script src="assets/scripts/searchService.js"></script>
+  <script src="assets/scripts/filterBuilder.js"></script>
+  <script src="assets/scripts/script.js"></script>
+  <script>
+    document.addEventListener("DOMContentLoaded", () => {
+      showScreen('home');
+    });
+  </script>
+
+</body>
+
+</html>

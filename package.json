@@ -22,5 +22,10 @@
     "jest-environment-jsdom": "^29.7.0",
     "jsdom": "^21.0.0",
     "playwright-core": "^1.60.0"
+  },
+  "dependencies": {
+    "@capacitor/android": "^8.4.1",
+    "@capacitor/cli": "^8.4.1",
+    "@capacitor/core": "^8.4.1"
   }
 }

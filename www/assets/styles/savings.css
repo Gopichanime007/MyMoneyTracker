@@ -1,0 +1,254 @@
+:root {
+  --theme: #4caf50;
+  --text: #1f2937;
+  --muted: #6b7280;
+  --border: #e5e7eb;
+  --surface: #ffffff;
+}
+
+.summary {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-sm);
+}
+
+.summary .box {
+  border-radius: 14px;
+  padding: var(--space-md);
+  border: 1px solid color-mix(in srgb, var(--border), var(--theme) 8%);
+  background: color-mix(in srgb, var(--surface), var(--theme) 6%);
+}
+
+#savingsBalance {
+  margin-top: var(--space-sm);
+  margin-bottom: var(--space-md);
+  font-size: clamp(1.8rem, 6vw, 2.3rem);
+  line-height: 1.1;
+}
+
+.savings-summary-grid .summary.box,
+.activity-summary-grid .summary.box {
+  display: block;
+  border-radius: 14px;
+  padding: var(--space-md);
+  border: 1px solid color-mix(in srgb, var(--border), var(--theme) 8%);
+  background: color-mix(in srgb, var(--surface), var(--theme) 6%);
+}
+
+.savings-summary-grid h3,
+.activity-summary-grid h3 {
+  margin-top: 4px;
+  font-size: 1.02rem;
+}
+
+.summary .box.success {
+  background: color-mix(in srgb, var(--surface), var(--theme) 14%);
+}
+
+.chart-box {
+  width: 100%;
+  min-height: 300px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.savings-summary-grid,
+.activity-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-sm);
+  margin-top: var(--space-md);
+}
+
+.period-summary-card,
+.health-card {
+  margin-top: var(--space-md);
+  border-radius: var(--radius-md);
+  border: 1px solid color-mix(in srgb, var(--border), var(--theme) 10%);
+  background: color-mix(in srgb, var(--surface), var(--theme) 5%);
+  padding: var(--space-md);
+}
+
+.period-summary-card h4,
+.health-card h4 {
+  margin: 0;
+  font-size: 0.95rem;
+}
+
+.period-grid,
+.health-grid {
+  margin-top: var(--space-sm);
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-sm);
+}
+
+.period-grid small,
+.health-grid small,
+.activity-summary-grid small,
+.savings-summary-grid small {
+  display: block;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.period-grid strong,
+.health-grid strong {
+  font-size: 13px;
+}
+
+#latestTransactionMeta {
+  margin-top: var(--space-xs);
+}
+
+.health-card {
+  background: linear-gradient(145deg, color-mix(in srgb, var(--theme), #f0fdf4 64%), color-mix(in srgb, var(--surface), var(--theme) 9%));
+}
+
+.chart-inner {
+  width: min(100%, 360px);
+  height: 280px;
+}
+
+#savingsChart {
+  width: 100% !important;
+  height: 100% !important;
+  display: block;
+}
+
+.input-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: var(--space-sm);
+}
+
+.input-row .primary {
+  width: 48px;
+  margin-top: 0;
+}
+
+.income-card {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: var(--space-md);
+  padding: var(--space-md);
+  border-radius: 14px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+}
+
+.income-left strong {
+  font-size: 14px;
+}
+
+.income-left small {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.income-right .amount {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.source-entry-details {
+  display: grid;
+  gap: 8px;
+}
+
+.source-entry-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.source-entry-key {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 500;
+  min-width: 0;
+}
+
+.source-entry-value {
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 700;
+  text-align: right;
+  justify-self: end;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.remaining {
+  display: inline-block;
+  margin-top: 4px;
+  padding: 4px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+}
+
+.remaining.green {
+  color: color-mix(in srgb, var(--theme), #166534 48%);
+  background: color-mix(in srgb, var(--theme), #ecfdf5 72%);
+}
+
+.remaining.red {
+  color: color-mix(in srgb, var(--theme), #991b1b 64%);
+  background: color-mix(in srgb, var(--theme), #fee2e2 72%);
+}
+
+.chip {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--space-md);
+  width: 100%;
+  padding: var(--space-sm) var(--space-md);
+  margin-bottom: var(--space-sm);
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: color-mix(in srgb, var(--surface), var(--theme) 5%);
+}
+
+.chip button {
+  background: transparent;
+  color: color-mix(in srgb, var(--theme), #b91c1c 65%);
+}
+
+@media (max-width: 600px) {
+  .savings-summary-grid,
+  .activity-summary-grid,
+  .period-grid,
+  .health-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .chart-box {
+    min-height: 0;
+    padding: 4px 0;
+  }
+
+  .chart-inner {
+    width: 100%;
+    max-width: none;
+    height: clamp(240px, 68vw, 320px);
+  }
+
+  .source-entry-details {
+    gap: 6px;
+    width: min(100%, 300px);
+  }
+
+  .source-entry-row {
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 10px;
+  }
+
+  .source-entry-value {
+    max-width: none;
+    min-width: 72px;
+  }
+}
