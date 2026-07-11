@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Daily Budget Ledger</title>
+  <link rel="stylesheet" href="../assets/styles/style.css" />
+  <link rel="stylesheet" href="../assets/styles/daily-budget-ledger.css" />
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+
+  <link
+    href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=Inter:wght@400;500;600;700&display=swap"
+    rel="stylesheet">
+</head>
+
+<body>
+  <div class="app">
+    <header class="header">
+      <button class="secondary back-btn" type="button" onclick="goBackToPreviousPage()" aria-label="Go back">⬅
+        Back</button>
+      <h2>📘 Daily Budget Ledger</h2>
+      <p class="muted">Track daily spending, savings, and deficits with running balance updates.</p>
+    </header>
+
+    <section class="card ledger-shell">
+      <div class="section-title-row">
+        <h3>Daily Budget</h3>
+        <span id="ledgerEntryCount" class="ledger-pill">0 entries</span>
+      </div>
+
+      <label for="dailyBudgetInput">Fixed Daily Budget</label>
+      <input id="dailyBudgetInput" type="number" min="0" step="1" placeholder="100" />
+      <button id="saveDailyBudget" class="primary" type="button">Save Budget</button>
+    </section>
+
+    <section class="card ledger-shell">
+      <div class="section-title-row">
+        <h3>Expense View</h3>
+      </div>
+      <p class="muted">This page reflects the existing Expense records from the main ledger. It calculates daily budget,
+        spending, savings, deficits, and running balance directly from those records.</p>
+    </section>
+
+    <section class="card ledger-shell">
+      <div class="section-title-row">
+        <h3>Ledger View</h3>
+      </div>
+      <div class="ledger-table-container">
+        <table class="ledger-table">
+          <thead>
+            <tr>
+              <th>Date (Day)</th>
+              <th>Budget</th>
+              <th>Spent</th>
+              <th>Savings</th>
+              <th>Deficit</th>
+              <th>Running Balance</th>
+            </tr>
+          </thead>
+          <tbody id="ledgerEntries">
+            <!-- JavaScript will insert rows here -->
+          </tbody>
+        </table>
+      </div>
+    </section>
+  </div>
+
+  <script src="../assets/scripts/dailyBudgetLedger.js"></script>
+  <script>
+    function goBackToPreviousPage() {
+      if (document.referrer && document.referrer !== window.location.href) {
+        window.history.back();
+        return;
+      }
+      window.location.href = '../index.html';
+    }
+  </script>
+</body>
+
+</html>

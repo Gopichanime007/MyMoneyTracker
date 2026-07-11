@@ -1,0 +1,466 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <title>Savings</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <!-- <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script> -->
+  <link rel="stylesheet" href="../assets/styles/savings.css">
+  <link rel="stylesheet" href="../assets/styles/style.css">
+</head>
+
+<body>
+
+  <div class="app">
+
+    <!-- HEADER -->
+    <header class="header">
+      <h2>💰 Savings</h2>
+    </header>
+
+    <!-- NAV -->
+    <nav class="nav">
+      <button data-screen="home" onclick="showSavingsScreen('home')" class="active">🏠</button>
+      <button data-screen="add" onclick="showSavingsScreen('add')">➕</button>
+      <button data-screen="history" onclick="showSavingsScreen('history')">📜</button>
+      <button data-screen="graph" onclick="showSavingsScreen('graph')">📊</button>
+      <button data-screen="income" onclick="showSavingsScreen('income')">🏦</button>
+      <button data-screen="settings" onclick="showSavingsScreen('settings')">⚙️</button>
+    </nav>
+
+    <!-- ================= HOME ================= -->
+    <section id="home" class="screen active">
+      <div class="card">
+        <h3>Savings Dashboard</h3>
+        <h1 id="savingsBalance">₹0</h1>
+
+        <div class="savings-summary-grid">
+          <div class="summary box">
+            <small>Total Deposits</small>
+            <h3 id="totalDeposits">₹0</h3>
+          </div>
+          <div class="summary box">
+            <small>Total Transfers</small>
+            <h3 id="totalTransfers">₹0</h3>
+          </div>
+          <div class="summary box">
+            <small>Total Refunds</small>
+            <h3 id="totalRefunds">₹0</h3>
+          </div>
+          <div class="summary box">
+            <small>Net Movement</small>
+            <h3 id="netSavingsMovement">₹0</h3>
+          </div>
+          <div class="summary box">
+            <small>Current Budget Allocation</small>
+            <h3 id="allocatedToBudget">₹0</h3>
+          </div>
+          <div class="summary box success">
+            <small>Available Savings</small>
+            <h3 id="availableBalance">₹0</h3>
+          </div>
+        </div>
+
+        <div class="period-summary-card">
+          <h4>Current Budget Period</h4>
+          <div class="period-grid">
+            <div>
+              <small>Period</small>
+              <strong id="currentBudgetPeriodLabel">No Active Period</strong>
+            </div>
+            <div>
+              <small>Start Date</small>
+              <strong id="currentBudgetPeriodStart">-</strong>
+            </div>
+            <div>
+              <small>End Date</small>
+              <strong id="currentBudgetPeriodEnd">-</strong>
+            </div>
+            <div>
+              <small>Days Remaining</small>
+              <strong id="currentBudgetPeriodRemaining">-</strong>
+            </div>
+          </div>
+        </div>
+
+        <div class="activity-summary-grid">
+          <div class="summary box">
+            <small>Transactions This Period</small>
+            <h3 id="transactionsThisPeriod">0</h3>
+          </div>
+          <div class="summary box">
+            <small>Latest Transaction</small>
+            <h3 id="latestTransactionValue">-</h3>
+            <small id="latestTransactionMeta">No transactions</small>
+          </div>
+          <div class="summary box">
+            <small>Largest Expense Transfer</small>
+            <h3 id="largestExpenseTransfer">₹0</h3>
+          </div>
+          <div class="summary box">
+            <small>Largest Refund</small>
+            <h3 id="largestRefund">₹0</h3>
+          </div>
+        </div>
+
+        <div class="health-card">
+          <h4>Financial Health</h4>
+          <div class="health-grid">
+            <div>
+              <small>Savings Balance</small>
+              <strong id="savingsHealthBalance">₹0</strong>
+            </div>
+            <div>
+              <small>Allocated to Budget</small>
+              <strong id="savingsHealthAllocated">₹0</strong>
+            </div>
+            <div>
+              <small>Net Movement</small>
+              <strong id="savingsHealthNet">₹0</strong>
+            </div>
+            <div>
+              <small>Transactions</small>
+              <strong id="savingsHealthTransactions">0</strong>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================= ADD ================= -->
+    <section id="add" class="screen">
+      <div class="card">
+        <h3>Add Entry</h3>
+
+        <!-- TYPE -->
+        <select id="sType" onchange="handleSavingsTypeChange()">
+          <option value="deposit">Deposit</option>
+          <option value="withdraw_budget">Move to Budget</option>
+          <option value="transfer">Transfer</option>
+          <option value="refund">Refund</option>
+        </select>
+
+        <!-- BASIC INFO -->
+        <input type="number" id="sAmount" placeholder="Amount">
+
+        <select id="sEntity"></select>
+
+        <input type="text" id="sNote" placeholder="Purpose / Note">
+
+        <!-- MAIN DATE -->
+        <label>Date</label>
+        <input type="date" id="sDate">
+
+        <!-- SOURCE -->
+        <div id="sourceWrapper" class="hidden">
+          <label>Source</label>
+          <select id="sourceSelect"></select>
+        </div>
+
+        <div id="sPersonWrapper" class="hidden form-offset-top">
+          <label>Person</label>
+          <select id="sPerson">
+            <option value="">No specific person</option>
+          </select>
+          <small id="sPersonHelp" class="muted-note"></small>
+        </div>
+
+        <!-- REFUND -->
+        <div id="refundWrapper" class="hidden form-offset-top">
+          <label>Refund Candidate</label>
+          <select id="refundSelect" onchange="handleSavingsRefundResolutionChange()">
+            <option value="">Select Transaction</option>
+          </select>
+          <label class="field-label">Resolution Type</label>
+          <select id="sRefundResolutionType" onchange="handleSavingsRefundResolutionChange()">
+            <option value="open">Open</option>
+            <option value="partially_refunded">Partially Refunded</option>
+            <option value="fully_refunded">Fully Refunded</option>
+            <option value="cancelled_with_charges">Cancelled With Charges</option>
+            <option value="consumed">Consumed</option>
+            <option value="written_off">Written Off</option>
+            <option value="settled">Settled</option>
+          </select>
+          <small id="sRefundResolutionHelp" class="muted-note refund-info"></small>
+          <label class="field-label">Refund Type</label>
+          <select id="sRefundType">
+            <option value="cancellation">Ticket Cancellation</option>
+            <option value="return">Product Return</option>
+            <option value="cashback">Cashback</option>
+            <option value="reversal">Bank Reversal</option>
+            <option value="recovery">Expense Recovery</option>
+            <option value="correction">Transfer Correction</option>
+            <option value="adjustment">Salary Adjustment</option>
+            <option value="loan_recovery">Loan Recovery</option>
+            <option value="custom" selected>Custom</option>
+          </select>
+          <small id="sRefundTypeHelp" class="muted-note refund-info"></small>
+          <small id="sRefundInfo" class="muted-note refund-info"></small>
+        </div>
+
+        <!-- PAYMENT -->
+        <label>Payment Method</label>
+        <select id="sPayment">
+          <option>Cash</option>
+          <option>UPI</option>
+          <option>PhonePe</option>
+          <option>Google Pay</option>
+          <option>Bank</option>
+        </select>
+
+        <!-- Attachment -->
+        <label class="field-label">Attach Receipt (optional)</label>
+        <div class="inline-row"> 
+          <input id="sAttachment" class="flex-input" type="file" accept="*/*" capture="environment" />
+          <button type="button" id="sAttachmentRemove" class="link-btn hidden">Remove</button>
+        </div>
+        <div id="sAttachmentPreviewWrapper" class="attachment-preview-wrapper hidden">
+          <img id="sAttachmentPreview" src="" class="attachment-preview" />
+        </div>
+
+        <!-- ACTION -->
+        <button class="primary" onclick="addSavings()">Save</button>
+
+      </div>
+    </section>
+    <!-- ================= HISTORY ================= -->
+    <section id="history" class="screen">
+      <div class="card">
+        <h3>History</h3>
+
+        <select onchange="handleSavingsFilter(this.value)">
+          <option value="all">All</option>
+          <option value="today">Today</option>
+          <option value="week">This Week</option>
+          <option value="month">This Month</option>
+          <option value="period">Custom Period</option>
+        </select>
+
+        <div class="action-bar action-bar-3">
+          <button id="savingsFilterActionBtn" class="secondary" type="button" onclick="openSavingsFilterModal()">
+            Filter
+          </button>
+
+          <button class="secondary" type="button" onclick="openSavingsSortModal()">
+            Sort
+          </button>
+
+          <button class="secondary" type="button" onclick="exportSavingsPDF()">Export</button>
+        </div>
+
+        <div id="savingsQueryChips" class="query-chip-row"></div>
+
+        <div id="savingsHistory"></div>
+      </div>
+    </section>
+
+    <!-- ================= GRAPH ================= -->
+    <section id="graph" class="screen">
+      <div class="card">
+
+        <div class="card-header">
+          <h3>📊 Savings Graph</h3>
+        </div>
+
+        <select onchange="handleSavingsFilter(this.value)">
+          <option value="all">All</option>
+          <option value="today">Today</option>
+          <option value="week">This Week</option>
+          <option value="month">This Month</option>
+          <option value="period">Custom Period</option>
+        </select>
+
+        <div class="chart-box">
+          <div class="chart-inner">
+            <canvas id="savingsChart"></canvas>
+          </div>
+        </div>
+
+      </div>
+    </section>
+    <!-- ========================= -->
+    <!-- 💰 INCOME SCREEN -->
+    <!-- Displays all income sources -->
+    <!-- ========================= -->
+    <section id="income" class="screen">
+
+      <div class="card">
+
+        <!-- 🔹 Section Title -->
+        <div class="card-header">
+          <h3>💰 Income Sources</h3>
+        </div>
+
+        <!-- 🔹 Income List Container (Dynamic Content) -->
+        <div id="incomeList">
+          <!-- Income cards will be rendered here via JS -->
+        </div>
+
+      </div>
+
+    </section>
+
+
+    <!-- ========================= -->
+    <!-- 📊 SOURCE DETAILS SCREEN -->
+    <!-- Shows selected income breakdown -->
+    <!-- ========================= -->
+    <section id="details" class="screen">
+
+      <div class="card">
+
+        <!-- 🔹 Header with Navigation -->
+        <div class="card-header">
+          <h3>📊 Source Details</h3>
+
+          <!-- 🔙 Back to Income Screen -->
+          <button class="secondary back-btn" onclick="showSavingsScreen('income')">
+            ⬅ Back
+          </button>
+        </div>
+
+        <!-- 🔹 Source Details Container (Dynamic Content) -->
+        <div id="sourceDetails">
+          <!-- Detailed transactions & summary will be rendered here -->
+        </div>
+
+      </div>
+
+    </section>
+    <!-- ================= SETTINGS ================= -->
+    <section id="settings" class="screen">
+      <div class="card">
+        <h3>⚙️ Settings</h3>
+
+        <!-- ========================= -->
+        <!-- CATEGORY SECTION -->
+        <!-- ========================= -->
+        <div class="input-row">
+          <input type="text" id="newCategory" placeholder="Add Category">
+          <button class="primary" onclick="addCategory()">➕</button>
+        </div>
+
+        <h4 onclick="openCategoryModal()" class="clickable-header">
+          Your Categories ⬇️
+        </h4>
+
+        <!-- ========================= -->
+        <!-- PERSON SECTION -->
+        <!-- ========================= -->
+        <div class="input-row">
+          <input type="text" id="newPerson" placeholder="Add Person">
+          <button class="primary" onclick="addPerson()">➕</button>
+        </div>
+
+        <h4 onclick="openPersonModal()" class="clickable-header">
+          Your Persons ⬇️
+        </h4>
+        <!-- ========================= -->
+        <!-- NAVIGATION -->
+        <!-- ========================= -->
+        <button class="primary" onclick="goToDashboard()">
+          🏠 Go to Main Dashboard
+        </button>
+
+      </div>
+    </section>
+
+  </div>
+
+  <!-- MODAL -->
+  <div id="savingsDateModal" class="modal">
+    <div class="modal-content">
+      <h3>Select Period</h3>
+
+      <input type="date" id="sFromDate">
+      <input type="date" id="sToDate">
+
+      <div class="modal-actions">
+        <button class="secondary" onclick="closeSavingsModal()">Cancel</button>
+        <button class="primary" onclick="applySavingsDateFilter()">Apply</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="savingsFilterModal" class="modal hidden" onclick="closeSavingsFilterModal()">
+    <div class="modal-content" onclick="event.stopPropagation()">
+      <h3>Savings Filter Builder</h3>
+      <div id="savingsFilterBuilderRoot"></div>
+    </div>
+  </div>
+
+  <div id="savingsSortModal" class="modal hidden" onclick="closeSavingsSortModal()">
+    <div class="modal-content" onclick="event.stopPropagation()">
+      <h3>Savings Sort</h3>
+
+      <label for="savingsSortField">Field</label>
+      <select id="savingsSortField">
+        <option value="date">Date</option>
+        <option value="amount">Amount</option>
+        <option value="type">Type</option>
+        <option value="note">Note</option>
+      </select>
+
+      <label for="savingsSortDirection">Direction</label>
+      <select id="savingsSortDirection">
+        <option value="desc">Descending</option>
+        <option value="asc">Ascending</option>
+      </select>
+
+      <div class="modal-actions sort-modal-actions">
+        <button class="secondary" type="button" onclick="closeSavingsSortModal()">Close</button>
+        <button class="secondary" type="button" onclick="clearSavingsSortModal()">Clear</button>
+        <button class="primary" type="button" onclick="applySavingsSortModal()">Apply</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="addPersonModal" class="modal" onclick="closeAddPersonModal()">
+    <div class="modal-content" onclick="event.stopPropagation()">
+      <h3>Add New Person</h3>
+      <input type="text" id="newPersonInput" placeholder="Enter person name">
+      <div class="modal-actions">
+        <button class="secondary" onclick="closeAddPersonModal()">Cancel</button>
+        <button class="primary" onclick="confirmAddPerson()">Add</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- CATEGORY MODAL -->
+  <div id="categoryModal" class="modal" onclick="closeCategoryModal()">
+    <div class="modal-content" onclick="event.stopPropagation()">
+      <h3>Your Categories</h3>
+      <div id="categoryList"></div>
+      <button class="primary" onclick="closeCategoryModal()">Close</button>
+    </div>
+  </div>
+
+  <!-- PERSON MODAL -->
+  <div id="personModal" class="modal" onclick="closePersonModal()">
+    <div class="modal-content" onclick="event.stopPropagation()">
+      <h3>Your Persons</h3>
+      <div id="personList"></div>
+      <button class="primary" onclick="closePersonModal()">Close</button>
+    </div>
+  </div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <script src="../assets/scripts/storage.js"></script>
+  <script src="../assets/scripts/queryEngine.js"></script>
+  <script src="../assets/scripts/searchService.js"></script>
+  <script src="../assets/scripts/filterBuilder.js"></script>
+  <script src="../assets/scripts/script.js"></script>
+  <script src="../assets/scripts/savings.js"></script>
+
+  <script>
+    function goBack() {
+      window.location.href = "../index.html";
+    }
+  </script>
+
+</body>
+
+</html>
