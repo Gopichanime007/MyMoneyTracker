@@ -240,7 +240,7 @@
    RESPONSIVE
 ========================================== */
 
-@media (max-width: 768px) {
+/*@media (max-width: 768px) {
 
     .ledger-table {
         min-width: 750px;
@@ -258,7 +258,7 @@
 }/* ===============================
    MOBILE RESPONSIVE TABLE
 ==================================*/
-@media (max-width:768px){
+/*@media (max-width:768px){
 
     .ledger-table-container{
         overflow-x:auto;
@@ -298,4 +298,4 @@
         align-items:flex-start;
         gap:8px;
     }
-}
+}*/
