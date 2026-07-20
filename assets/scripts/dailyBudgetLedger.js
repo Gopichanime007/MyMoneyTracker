@@ -13,6 +13,37 @@
   ========================================================== */
   const EXPENSES_STORAGE_KEY = 'expenses';
 
+  /* ==========================================================
+     ⚠️  UPDATE HERE #3 — default week-start day.
+     0 = Sunday, 1 = Monday, ... 6 = Saturday.
+     This is only the DEFAULT. If your HTML has a
+     <select id="weekStartDaySelect"> with options 0-6, the
+     user's choice there overrides this automatically and is
+     remembered in localStorage.
+  ========================================================== */
+  const DEFAULT_WEEK_START_DAY = 1; // Monday
+
+  /* ==========================================================
+     ⚠️  UPDATE HERE #4 — filter engine integration point.
+     Send over your filter engine file and I'll wire it in
+     here directly. Until then, call:
+         window.setLedgerFilter((expense) => true/false)
+     from your filter UI's "apply" handler — every expense for
+     which the function returns false is excluded from the
+     ledger, budget totals, and running balance, exactly like
+     it never happened.
+  ========================================================== */
+  let activeExpenseFilter = null;
+
+  function setLedgerFilter(filterFn) {
+    activeExpenseFilter = typeof filterFn === 'function' ? filterFn : null;
+    renderDailyBudgetLedger();
+  }
+
+  function clearLedgerFilter() {
+    setLedgerFilter(null);
+  }
+
   function getStoredExpenses() {
     try {
       const stored = JSON.parse(localStorage.getItem(EXPENSES_STORAGE_KEY) || '[]');
@@ -69,12 +100,14 @@
     return date ? date.toLocaleDateString('en-IN', { month: 'long', year: 'numeric' }) : 'Summary';
   }
 
-  // Sunday-start calendar week. Two dates are in the same week
-  // if they share the same "Sunday of that week".
-  function getWeekKey(date) {
-    const sunday = new Date(date);
-    sunday.setDate(sunday.getDate() - sunday.getDay());
-    return formatDateInput(sunday);
+  // Configurable-start calendar week. weekStartDay: 0=Sun..6=Sat.
+  // Two dates fall in the same week if they share the same
+  // "first day of that week" under this setting.
+  function getWeekKey(date, weekStartDay) {
+    const diff = (date.getDay() - weekStartDay + 7) % 7;
+    const start = new Date(date);
+    start.setDate(start.getDate() - diff);
+    return formatDateInput(start);
   }
 
   function getMonthKey(date) {
@@ -94,13 +127,14 @@
         const amount = safeNumber(entry && entry.amount, 0);
         return entry && (entry.type === 'expense' || entry.type === 'loss' || amount < 0);
       })
+      .filter((entry) => !activeExpenseFilter || activeExpenseFilter(entry))
       .map((entry) => ({
         date: entry.date || entry.createdAt || '',
         spent: Math.abs(safeNumber(entry.amount, 0))
       }));
   }
 
-  function createSummaryRow(entries, kind, runningBalance, label) {
+  function createSummaryRow(entries, kind, openingBalance, closingBalance, label) {
     return {
       type: 'summary',
       kind, // 'week' | 'month' — used as the CSS row class (week-summary / month-summary)
@@ -109,7 +143,8 @@
       spent: entries.reduce((sum, e) => sum + e.spent, 0),
       savings: entries.reduce((sum, e) => sum + e.savings, 0),
       deficit: entries.reduce((sum, e) => sum + e.deficit, 0),
-      runningBalance
+      openingBalance,
+      closingBalance
     };
   }
 
@@ -119,8 +154,9 @@
    *
    * @param {number} dailyBudget - Fixed Daily Budget, applied to every date.
    * @param {Array}  expensesOverride - optional, mainly for testing.
+   * @param {number} weekStartDay - 0=Sun..6=Sat, defaults to DEFAULT_WEEK_START_DAY.
    */
-  function buildLedgerRows(dailyBudget = 100, expensesOverride = null) {
+  function buildLedgerRows(dailyBudget = 100, expensesOverride = null, weekStartDay = DEFAULT_WEEK_START_DAY) {
     const expenses = Array.isArray(expensesOverride) ? expensesOverride : getStoredExpenses();
     const rawEntries = getLedgerDataSourceEntries(expenses);
 
@@ -139,11 +175,19 @@
     const budget = safeNumber(dailyBudget, 100);
     const rows = [];
     let runningBalance = 0; // rule 3: previous running balance starts at 0
+
     let weekBucket = [];
+    let weekOpeningBalance = 0;
     let monthBucket = [];
+    let monthOpeningBalance = 0;
     let weekCounter = 0;
 
     sortedDates.forEach((dateKey, index) => {
+      // Snapshot the balance BEFORE today's entry, the moment a
+      // new bucket starts — this becomes that bucket's opening balance.
+      if (weekBucket.length === 0) weekOpeningBalance = runningBalance;
+      if (monthBucket.length === 0) monthOpeningBalance = runningBalance;
+
       const date = parseDate(dateKey);
       const spent = dailyTotals.get(dateKey);
 
@@ -181,17 +225,17 @@
       const nextDate = nextDateKey ? parseDate(nextDateKey) : null;
       const isLastRecord = !nextDate;
 
-      const weekEnds = isLastRecord || getWeekKey(nextDate) !== getWeekKey(date);
+      const weekEnds = isLastRecord || getWeekKey(nextDate, weekStartDay) !== getWeekKey(date, weekStartDay);
       const monthEnds = isLastRecord || getMonthKey(nextDate) !== getMonthKey(date);
 
       if (weekEnds) {
         weekCounter += 1;
-        rows.push(createSummaryRow(weekBucket, 'week', runningBalance, `Week ${weekCounter} Summary`));
+        rows.push(createSummaryRow(weekBucket, 'week', weekOpeningBalance, runningBalance, `Week ${weekCounter} Summary`));
         weekBucket = [];
       }
 
       if (monthEnds) {
-        rows.push(createSummaryRow(monthBucket, 'month', runningBalance, `${getMonthLabel(date)} Summary`));
+        rows.push(createSummaryRow(monthBucket, 'month', monthOpeningBalance, runningBalance, `${getMonthLabel(date)} Summary`));
         monthBucket = [];
       }
     });
@@ -228,7 +272,11 @@
             <td>${formatCurrency(row.spent)}</td>
             <td class="${row.savings > 0 ? 'positive' : ''}">${formatCurrency(row.savings)}</td>
             <td class="${row.deficit > 0 ? 'negative' : ''}">${formatCurrency(row.deficit)}</td>
-            <td class="${balanceClass(row.runningBalance)}">${formatCurrency(row.runningBalance)}</td>
+            <td class="${balanceClass(row.closingBalance)}">
+              <span class="balance-opening">${formatCurrency(row.openingBalance)}</span>
+              <span class="balance-arrow"> → </span>
+              <span class="balance-closing">${formatCurrency(row.closingBalance)}</span>
+            </td>
           </tr>`;
       }
 
@@ -247,9 +295,12 @@
   function getStoredConfig() {
     try {
       const stored = JSON.parse(localStorage.getItem(STORAGE_KEYS.config) || 'null');
-      return { dailyBudget: safeNumber(stored && stored.dailyBudget, 100) };
+      return {
+        dailyBudget: safeNumber(stored && stored.dailyBudget, 100),
+        weekStartDay: safeNumber(stored && stored.weekStartDay, DEFAULT_WEEK_START_DAY)
+      };
     } catch (error) {
-      return { dailyBudget: 100 };
+      return { dailyBudget: 100, weekStartDay: DEFAULT_WEEK_START_DAY };
     }
   }
 
@@ -260,12 +311,22 @@
   function populateBudgetField(config) {
     const budgetInput = document.getElementById('dailyBudgetInput');
     if (budgetInput) budgetInput.value = config.dailyBudget;
+
+    // Optional — only touches the DOM if you've added this select.
+    const weekStartSelect = document.getElementById('weekStartDaySelect');
+    if (weekStartSelect) weekStartSelect.value = String(config.weekStartDay);
   }
 
   function handleBudgetSave() {
     const budgetInput = document.getElementById('dailyBudgetInput');
+    const weekStartSelect = document.getElementById('weekStartDaySelect');
+
     const config = getStoredConfig();
     config.dailyBudget = safeNumber(budgetInput ? budgetInput.value : 100, 100);
+    if (weekStartSelect) {
+      config.weekStartDay = safeNumber(weekStartSelect.value, DEFAULT_WEEK_START_DAY);
+    }
+
     saveStoredConfig(config);
     renderDailyBudgetLedger();
   }
@@ -274,7 +335,7 @@
     const config = getStoredConfig();
     populateBudgetField(config);
 
-    const rows = buildLedgerRows(config.dailyBudget);
+    const rows = buildLedgerRows(config.dailyBudget, null, config.weekStartDay);
     renderLedger(rows);
 
     const summaryCount = document.getElementById('ledgerEntryCount');
@@ -303,12 +364,14 @@
   root.getLedgerDataSourceEntries = getLedgerDataSourceEntries;
   root.renderDailyBudgetLedger = renderDailyBudgetLedger;
   root.initDailyBudgetLedgerPage = initDailyBudgetLedgerPage;
+  root.setLedgerFilter = setLedgerFilter;
+  root.clearLedgerFilter = clearLedgerFilter;
 
   if (typeof document !== 'undefined') {
     document.addEventListener('DOMContentLoaded', initDailyBudgetLedgerPage);
   }
 
   if (typeof module !== 'undefined' && module.exports) {
-    module.exports = { buildLedgerRows, getStoredConfig, getLedgerDataSourceEntries };
+    module.exports = { buildLedgerRows, getStoredConfig, getLedgerDataSourceEntries, setLedgerFilter };
   }
 })(typeof window !== 'undefined' ? window : globalThis);

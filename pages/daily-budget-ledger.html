@@ -18,7 +18,7 @@
 <body>
   <div class="app">
     <header class="header">
-      <button class="secondary back-btn" type="button" onclick="goBackToPreviousPage()" aria-label="Go back">⬅
+      <button class="secondary back-btn" type="button" onclick="goBackToPreviousPage()" aria-label="Go back">
         Back</button>
       <h2>📘 Daily Budget Ledger</h2>
       <p class="muted">Track daily spending, savings, and deficits with running balance updates.</p>
@@ -32,15 +32,22 @@
 
       <label for="dailyBudgetInput">Fixed Daily Budget</label>
       <input id="dailyBudgetInput" type="number" min="0" step="1" placeholder="100" />
-      <button id="saveDailyBudget" class="primary" type="button">Save Budget</button>
-    </section>
 
-    <section class="card ledger-shell">
-      <div class="section-title-row">
-        <h3>Expense View</h3>
-      </div>
-      <p class="muted">This page reflects the existing Expense records from the main ledger. It calculates daily budget,
-        spending, savings, deficits, and running balance directly from those records.</p>
+      <!-- NEW: week-start control. The JS reads this automatically
+           (id must stay exactly "weekStartDaySelect") — no other
+           wiring needed. Value is remembered in localStorage. -->
+      <label for="weekStartDaySelect">Week Starts On</label>
+      <select id="weekStartDaySelect">
+        <option value="0">Sunday</option>
+        <option value="1">Monday</option>
+        <option value="2">Tuesday</option>
+        <option value="3">Wednesday</option>
+        <option value="4">Thursday</option>
+        <option value="5">Friday</option>
+        <option value="6">Saturday</option>
+      </select>
+
+      <button id="saveDailyBudget" class="primary" type="button">Save Budget</button>
     </section>
 
     <section class="card ledger-shell">
