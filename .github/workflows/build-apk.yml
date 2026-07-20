@@ -25,8 +25,29 @@ jobs:
         run: |
           rm -rf www
           mkdir -p www
+
+          # Copy root HTML
           cp index.html www/
+
+          # Copy assets
           cp -r assets www/
+
+          # Copy pages
+          if [ -d pages ]; then
+            cp -r pages www/
+          fi
+
+          # Copy optional files
+          if [ -f manifest.json ]; then
+            cp manifest.json www/
+          fi
+
+          if [ -f service-worker.js ]; then
+            cp service-worker.js www/
+          fi
+
+          echo "====== WWW CONTENTS ======"
+          find www
 
       - name: Sync Capacitor
         run: npx cap sync android
