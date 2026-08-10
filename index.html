@@ -117,6 +117,7 @@
           <option value="transfer">Transfer</option>
           <option value="refund">Refund</option>
           <option value="transfer_back">Transfer Back</option>
+          <option value="adjustment">Adjustment</option>
         </select>
 
         <input type="number" id="amount" placeholder="Amount">
@@ -132,6 +133,15 @@
         <div id="budgetWrapper" class="form-group">
           <label for="budgetSelect">Budget</label>
           <select id="budgetSelect"></select>
+        </div>
+
+        <div id="adjustmentDirectionWrapper" class="form-group hidden">
+          <label for="adjustmentDirection">Adjustment Direction</label>
+          <select id="adjustmentDirection">
+            <option value="increase">Add To Budget (Increase Available)</option>
+            <option value="decrease">Deduct From Budget (Decrease Available)</option>
+          </select>
+          <small class="muted-note">Reason (Purpose) is mandatory for adjustments.</small>
         </div>
 
         <div id="linkedTransactionWrapper" class="form-group hidden">
