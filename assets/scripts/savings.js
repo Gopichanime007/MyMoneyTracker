@@ -2704,7 +2704,7 @@ function exportSavingsPDF() {
     }
     const doc = new jsPDF();
 
-    let data = getSavings();
+    let data = applySavingsSearch(getSavings());
 
     if (!data.length) {
         showToast("No data to export", "warning");

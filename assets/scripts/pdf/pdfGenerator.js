@@ -26,17 +26,25 @@
     }
 
     function generatePdfReport(opts = {}) {
-        const { jsPDF } = window.jspdf;
-        const doc = new jsPDF();
-        const pager = new Pager(doc);
+        const { jsPDF } = window.jspdf || {};
+        const doc = jsPDF ? new jsPDF() : null;
+        const pager = doc ? new Pager(doc) : null;
 
-        const dataSource = Array.isArray(opts.data) && opts.data.length ? opts.data : (window.currentFilteredExpenses && window.currentFilteredExpenses.length ? window.currentFilteredExpenses : (typeof getExpenses === 'function' ? getExpenses() : []));
+        const dataSource = Array.isArray(opts.data) && opts.data.length
+            ? opts.data
+            : (window.SearchService && typeof window.SearchService.applyModuleSearch === 'function'
+                ? (window.SearchService.applyModuleSearch('expenses', (typeof getExpenses === 'function' ? getExpenses() : [])).results || [])
+                : (window.currentFilteredExpenses && window.currentFilteredExpenses.length
+                    ? window.currentFilteredExpenses
+                    : (typeof getExpenses === 'function' ? getExpenses() : [])));
 
         // metadata
         const meta = {
             title: 'Money Tracker Report',
             generatedAt: new Date().toLocaleString(),
-            filter: (window.currentHistoryFilter && window.currentHistoryFilter.label) || 'All'
+            filter: (typeof window.getExportFilterLabel === 'function')
+                ? window.getExportFilterLabel('expenses')
+                : ((window.currentHistoryFilter && window.currentHistoryFilter.label) || 'All')
         };
         pager.meta = meta;
 

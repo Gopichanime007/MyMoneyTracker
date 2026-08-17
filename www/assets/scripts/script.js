@@ -3773,8 +3773,17 @@ try { window.generatePdfReport = generatePdfReport; } catch (e) { /* ignore */ }
 //=== COMMENTED OLD DOWNLOAD END === */
 
 // New PDF wrapper (calls modular PDF generator when available)
+function getExportRows(moduleName, rows) {
+    let list = Array.isArray(rows) ? rows : [];
+    if (!window.SearchService || typeof window.SearchService.applyModuleSearch !== "function") {
+        return list;
+    }
+    let queryResult = window.SearchService.applyModuleSearch(moduleName, list);
+    return Array.isArray(queryResult.results) ? queryResult.results : list;
+}
+
 function downloadPDF() {
-    const dataSource = (window.currentFilteredExpenses && window.currentFilteredExpenses.length) ? window.currentFilteredExpenses : (typeof getExpenses === 'function' ? getExpenses() : []);
+    const dataSource = getExportRows("expenses", (typeof getExpenses === 'function' ? getExpenses() : []));
     if (typeof window.generatePdfReport === 'function') {
         window.generatePdfReport({ data: dataSource });
         return;
@@ -9765,10 +9774,12 @@ function buildExpenseFilterDescriptorsFromModal() {
 }
 
 function rerenderExpenseWithQueryState() {
-    let fallback = (window.currentFilteredExpenses && window.currentFilteredExpenses.length)
-        ? window.currentFilteredExpenses
-        : getExpenses();
-    loadHistory(fallback);
+    // Always re-run the search against the full canonical dataset so that
+    // SearchService state (filters/search/sort) is applied against all
+    // records. Using `currentFilteredExpenses` here caused incremental
+    // narrowing when filters changed, leading to exported PDFs or views
+    // missing matching records.
+    loadHistory(getExpenses());
 }
 
 function countExpenseFilterConditions(filters) {

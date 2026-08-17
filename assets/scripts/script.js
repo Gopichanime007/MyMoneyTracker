@@ -80,6 +80,15 @@ function convertToBase(amount) {
     }
 }
 
+// Rounds to 2 decimal places (paise/cents) to eliminate floating-point drift
+// from repeated addition/subtraction across many ledger entries.
+function roundCurrency(value) {
+    let num = Number(value);
+    if (!Number.isFinite(num)) return 0;
+    return Math.round((num + Number.EPSILON) * 100) / 100;
+}
+
+
 // =========================
 // 💰 FORMAT (USE EVERYWHERE)
 // =========================
@@ -1274,7 +1283,7 @@ function getNetSpentForBudget(budgetId, expensesList) {
         }
     }
 
-    return net;
+    return roundCurrency(net);
 }
 
 function getNetSpentForBudgetSet(budgetIds, expensesList) {
@@ -1973,7 +1982,7 @@ function resolveBudgetSourceIdForTransferBack(budget, savingsEntries) {
 }
 
 function buildTransferBackPlan(requestAmount, selectedBudgetId = null) {
-    let amount = Math.abs(Number(requestAmount) || 0);
+    let amount = roundCurrency(Math.abs(Number(requestAmount) || 0));
     if (!amount) {
         return { amount: 0, allocations: [], remaining: 0, totalAvailable: 0 };
     }
@@ -1989,8 +1998,8 @@ function buildTransferBackPlan(requestAmount, selectedBudgetId = null) {
     let expenses = getExpenses();
     let candidates = budgets.map(b => {
         let spent = Math.max(0, getNetSpentForBudget(b.budgetId, expenses));
-        let allocated = Math.max(0, Number(b.totalAllocated || 0));
-        let available = Math.max(0, allocated - spent);
+        let allocated = roundCurrency(Math.max(0, Number(b.totalAllocated || 0)));
+        let available = roundCurrency(Math.max(0, allocated - spent));
         let resolvedSourceId = resolveBudgetSourceIdForTransferBack(b, savingsEntries) || String(b.sourceId || "");
         return {
             budgetId: b.budgetId,
@@ -2011,7 +2020,7 @@ function buildTransferBackPlan(requestAmount, selectedBudgetId = null) {
     }
 
     let chosen = candidates[0];
-    let use = Math.min(chosen.available, amount);
+    let use = roundCurrency(Math.min(chosen.available, amount));
     let allocations = use > 0
         ? [{
             budgetId: chosen.budgetId,
@@ -2019,16 +2028,121 @@ function buildTransferBackPlan(requestAmount, selectedBudgetId = null) {
             amount: use
         }]
         : [];
-    let remaining = Math.max(0, amount - use);
+    let remaining = roundCurrency(Math.max(0, amount - use));
 
     return {
         amount,
         allocations,
         remaining,
-        totalAvailable: candidates.reduce((sum, c) => sum + c.available, 0),
+        totalAvailable: roundCurrency(candidates.reduce((sum, c) => sum + c.available, 0)),
         selectedBudgetId: chosen.budgetId,
         selectedSourceId: chosen.sourceId
     };
+}
+
+// =========================
+// 🔄 QUICK CLOSE — one-tap transfer back from a budget card
+// =========================
+async function quickCloseBudgetTransferBack(group, relatedBudgetIds) {
+    let ids = Array.isArray(relatedBudgetIds) ? relatedBudgetIds : [];
+    let totalTransferred = 0;
+    let failures = [];
+
+    for (let budgetId of ids) {
+        let expenses = getExpenses();
+        let spent = getNetSpentForBudget(budgetId, expenses);
+        let budgetRow = getBudgets().find(b => String(b.budgetId) === String(budgetId));
+        let allocated = roundCurrency(Number(budgetRow && budgetRow.totalAllocated || 0));
+        let remaining = roundCurrency(Math.max(0, allocated - spent));
+
+        if (remaining <= 0) continue;
+
+        let plan = buildTransferBackPlan(remaining, budgetId);
+        if (!plan.allocations.length || plan.remaining > 0) {
+            failures.push(budgetId);
+            continue;
+        }
+
+        let transferBackTrail = plan.allocations.map(a => ({
+            budgetId: a.budgetId,
+            sourceId: a.sourceId,
+            amount: a.amount
+        }));
+        let uniqueSources = [...new Set(transferBackTrail.map(a => a.sourceId))];
+        let resolvedSourceId = uniqueSources.length === 1 ? uniqueSources[0] : null;
+
+        if (!resolvedSourceId) {
+            failures.push(budgetId);
+            continue;
+        }
+
+        let nowIso = new Date().toISOString();
+
+        let created = addExpense({
+            amount: -Math.abs(plan.amount),
+            category: "Transfer Back",
+            purpose: "Budget Closure",
+            date: nowIso,
+            type: "transfer_back",
+            paymentType: "Cash",
+            budgetId,
+            allocationTrail: transferBackTrail.map(a => ({ budgetId: a.budgetId, amount: roundCurrency(convertToBase(a.amount)) })),
+            transferBackTrail,
+            linkedSourceSavingsId: resolvedSourceId,
+            linkedSourceSavingsIds: uniqueSources
+        });
+
+        if (created && typeof getSavings === "function" && typeof saveSavings === "function") {
+            let savings = getSavings();
+            let grouped = {};
+            transferBackTrail.forEach(a => {
+                grouped[a.sourceId] = (grouped[a.sourceId] || 0) + Number(a.amount || 0);
+            });
+            Object.keys(grouped).forEach(sourceId => {
+                let val = roundCurrency(Math.abs(Number(grouped[sourceId]) || 0));
+                if (!val) return;
+                savings.push({
+                    id: (typeof crypto !== "undefined" && crypto.randomUUID) ? crypto.randomUUID() : `sav_${Date.now()}_${Math.random()}`,
+                    type: "refund",
+                    amount: val,
+                    sourceId,
+                    entity: "Budget Wallet",
+                    paymentType: "Cash",
+                    note: "Budget Closure",
+                    date: nowIso,
+                    monthKey: nowIso.slice(0, 7),
+                    periodKey: (typeof getActivePeriodKey === "function") ? getActivePeriodKey() : null,
+                    createdAt: new Date().toISOString(),
+                    updatedAt: new Date().toISOString(),
+                    linkedTransactionId: created.id,
+                    linkedSourceSavingsId: sourceId,
+                    autoGenerated: true
+                });
+            });
+            saveSavings(savings);
+        }
+
+        totalTransferred += plan.amount;
+    }
+
+    if (totalTransferred > 0) {
+        showToast(`Transferred back ${formatCurrency(totalTransferred)}`);
+    } else if (failures.length) {
+        showToast("Unable to transfer back — check budget source links");
+    } else {
+        showToast("Nothing to transfer back");
+    }
+
+    loadHistory();
+    loadBudgetOptions();
+    loadDashboard();
+    loadGraph();
+    updateProgressBar();
+    renderBudgetEntries();
+}
+
+if (typeof window !== "undefined") {
+    window.quickCloseBudgetTransferBack = quickCloseBudgetTransferBack;
 }
 
 function loadLinkedTransactionOptions(type) {
@@ -2102,9 +2216,10 @@ function handleEntryTypeUIChange() {
     let linkedWrapper = document.getElementById("linkedTransactionWrapper");
     let paymentWrapper = document.getElementById("paymentWrapper");
     let personWrapper = document.getElementById("personWrapper");
+    let adjustmentWrapper = document.getElementById("adjustmentDirectionWrapper");
     let personHelp = document.getElementById("personSelectionHelp");
 
-    [categoryWrapper, budgetWrapper, linkedWrapper, paymentWrapper, personWrapper]
+    [categoryWrapper, budgetWrapper, linkedWrapper, paymentWrapper, personWrapper, adjustmentWrapper]
         .filter(Boolean)
         .forEach(el => { el.style.display = "none"; });
 
@@ -2146,6 +2261,16 @@ function handleEntryTypeUIChange() {
         return;
     }
 
+    if (type === "adjustment") {
+        if (budgetWrapper) budgetWrapper.style.display = "block";
+        if (paymentWrapper) paymentWrapper.style.display = "block";
+        if (adjustmentWrapper) adjustmentWrapper.style.display = "block";
+        if (typeof loadBudgetOptions === "function") {
+            loadBudgetOptions({ mode: "adjustment" });
+        }
+        return;
+    }
+
     // income and other inflows
     if (categoryWrapper) categoryWrapper.style.display = "block";
     if (paymentWrapper) paymentWrapper.style.display = "block";
@@ -2166,6 +2291,7 @@ async function handleAddExpense() {
     let linkedTransactionId = document.getElementById("linkedTransactionSelect")?.value || null;
     let refundResolutionType = normalizeResolutionType(document.getElementById("refundResolutionType")?.value || "open");
     let refundType = normalizeRefundType(document.getElementById("refundType")?.value || "custom");
+    let adjustmentDirection = document.getElementById("adjustmentDirection")?.value || "increase";
 
     // ✅ VALIDATION
     if (!(type === "refund" && (refundResolutionType === "consumed" || refundResolutionType === "written_off")) && !amount) {
@@ -2173,8 +2299,13 @@ async function handleAddExpense() {
         return;
     }
 
-    if ((type === "expense" || type === "transfer") && !budgetId) {
+    if ((type === "expense" || type === "transfer" || type === "adjustment") && !budgetId) {
         showToast("Select budget");
+        return;
+    }
+
+    if (type === "adjustment" && (!purpose || !purpose.trim())) {
+        showToast("Reason is required for adjustment");
         return;
     }
 
@@ -2213,9 +2344,13 @@ async function handleAddExpense() {
     }
 
     // ✅ SIGN FIX
-    amount = (type === "expense" || type === "transfer")
-        ? -Math.abs(amount)
-        : Math.abs(amount);
+    if (type === "adjustment") {
+        amount = (adjustmentDirection === "decrease") ? -Math.abs(amount) : Math.abs(amount);
+    } else {
+        amount = (type === "expense" || type === "transfer")
+            ? -Math.abs(amount)
+            : Math.abs(amount);
+    }
 
     // =========================
     // 🧠 DATE FIX LOGIC
@@ -2259,6 +2394,8 @@ async function handleAddExpense() {
         category = "Refund";
     } else if (type === "transfer_back") {
         category = "Transfer Back";
+    } else if (type === "adjustment") {
+        category = "Adjustment";
     }
 
     if (type === "transfer_back") {
@@ -2342,6 +2479,34 @@ async function handleAddExpense() {
         }
 
         showToast("Added");
+        clearExpenseAttachmentState();
+        resetForm();
+        loadHistory();
+        loadBudgetOptions();
+        loadDashboard();
+        loadGraph();
+        updateProgressBar();
+        renderBudgetEntries();
+        return;
+    }
+
+    if (type === "adjustment") {
+        addExpense({
+            amount,
+            category,
+            purpose,
+            date: selectedDate.toISOString(),
+            type: "adjustment",
+            paymentType,
+            budgetId,
+            allocationTrail: [{ budgetId, amount: Math.abs(convertToBase(amount)) }],
+            entity: "System Adjustment",
+            attachmentId: nonExpAttachment.attachmentId,
+            attachmentStatus: nonExpAttachment.status,
+            attachmentError: nonExpAttachment.error
+        });
+
+        showToast("Adjustment Added");
         clearExpenseAttachmentState();
         resetForm();
         loadHistory();
@@ -2455,6 +2620,7 @@ function resetForm() {
     if (document.getElementById("linkedTransactionSelect")) document.getElementById("linkedTransactionSelect").value = "";
     if (document.getElementById("refundResolutionType")) document.getElementById("refundResolutionType").value = "open";
     if (document.getElementById("refundType")) document.getElementById("refundType").value = "custom";
+    if (document.getElementById("adjustmentDirection")) document.getElementById("adjustmentDirection").value = "increase";
     if (document.getElementById("personSelect")) document.getElementById("personSelect").value = "";
     if (document.getElementById("amount")) document.getElementById("amount").disabled = false;
     if (document.getElementById("linkedRemainingText")) {
@@ -3223,9 +3389,7 @@ function generatePdfReport(opts = {}) {
 
     const dataSource = (Array.isArray(data) && data.length)
         ? data
-        : (window.currentFilteredExpenses && window.currentFilteredExpenses.length)
-            ? window.currentFilteredExpenses
-            : (typeof getExpenses === 'function' ? getExpenses() : []);
+        : getExportRows("expenses", (typeof getExpenses === 'function' ? getExpenses() : []));
 
     const budgetIdsFromData = new Set();
     dataSource.forEach((entry) => {
@@ -3774,7 +3938,7 @@ try { window.generatePdfReport = generatePdfReport; } catch (e) { /* ignore */ }
 
 // New PDF wrapper (calls modular PDF generator when available)
 function downloadPDF() {
-    const dataSource = (window.currentFilteredExpenses && window.currentFilteredExpenses.length) ? window.currentFilteredExpenses : (typeof getExpenses === 'function' ? getExpenses() : []);
+    const dataSource = getExportRows("expenses", getExpenses());
     if (typeof window.generatePdfReport === 'function') {
         window.generatePdfReport({ data: dataSource });
         return;
@@ -5031,7 +5195,7 @@ async function openTransactionAuditDetails(scope, transaction) {
 
     body.innerHTML = `
       <div class="audit-summary-card">
-        <div class="audit-summary-pill">${escapeHtml(transaction.type || "-" )}</div>
+        <div class="audit-summary-pill">${escapeHtml(transaction.type || "-")}</div>
         <div class="audit-summary-title">${escapeHtml(transaction.purpose || transaction.note || transaction.category || "Transaction")}</div>
         <div class="audit-summary-meta">${escapeHtml(new Date(createdAt || Date.now()).toLocaleString("en-IN"))}</div>
       </div>
@@ -7224,7 +7388,7 @@ function importData() {
         }
 
         runIntegrityRepairSilently();
-    setImportStage("ledger-rebuild");
+        setImportStage("ledger-rebuild");
         loadTheme();
         syncThemeSelectors();
         refreshSettingsPanels();
@@ -7655,6 +7819,37 @@ function applyActiveExpenseQuery(rows) {
     return Array.isArray(queryResult.results) ? queryResult.results : list;
 }
 
+function getExportRows(moduleName, rows) {
+    let list = Array.isArray(rows) ? rows : [];
+    if (!window.SearchService || typeof window.SearchService.applyModuleSearch !== "function") {
+        return list;
+    }
+    let queryResult = window.SearchService.applyModuleSearch(moduleName, list);
+    return Array.isArray(queryResult.results) ? queryResult.results : list;
+}
+
+function getExportFilterLabel(moduleName) {
+    if (!window.SearchService || typeof window.SearchService.getState !== "function") {
+        return "All";
+    }
+    const state = window.SearchService.getState(moduleName);
+    const filters = Array.isArray(state.filters) ? state.filters : [];
+    const sort = Array.isArray(state.sort) ? state.sort : [];
+    const searchText = state.search && state.search.text ? String(state.search.text).trim() : "";
+    const parts = [];
+    if (searchText) {
+        parts.push(`Search: "${searchText}"`);
+    }
+    if (filters.length) {
+        parts.push(`Filters: ${filters.length}`);
+    }
+    if (sort.length) {
+        const first = sort[0];
+        parts.push(`Sort: ${String(first.field || "-")} ${String(first.direction || "desc")}`);
+    }
+    return parts.length ? parts.join(" | ") : "All";
+}
+
 function updateFilteredViewActiveIndicator() {
     let badge = document.getElementById("filteredViewActive");
     if (!badge) return;
@@ -7953,6 +8148,7 @@ function renderBudgetEntries() {
 
             <div class="entry-actions">
                 <button type="button" class="entry-action-btn" data-action="view">View Transactions</button>
+                <button type="button" class="entry-action-btn" data-action="close"${remaining <= 0 ? " disabled" : ""}>Close & Transfer Back</button>
                 <button type="button" class="entry-action-btn is-muted" disabled>Edit</button>
                 <button type="button" class="entry-action-btn is-muted" disabled>Delete</button>
             </div>
@@ -7965,6 +8161,14 @@ function renderBudgetEntries() {
             viewBtn.addEventListener("click", (event) => {
                 event.stopPropagation();
                 openBudgetDetails(g);
+            });
+        }
+
+        let closeBtn = div.querySelector('[data-action="close"]');
+        if (closeBtn) {
+            closeBtn.addEventListener("click", (event) => {
+                event.stopPropagation();
+                quickCloseBudgetTransferBack(g, relatedBudgetIds);
             });
         }
 
@@ -9765,10 +9969,12 @@ function buildExpenseFilterDescriptorsFromModal() {
 }
 
 function rerenderExpenseWithQueryState() {
-    let fallback = (window.currentFilteredExpenses && window.currentFilteredExpenses.length)
-        ? window.currentFilteredExpenses
-        : getExpenses();
-    loadHistory(fallback);
+    // Always re-run the search against the full canonical dataset so that
+    // SearchService state (filters/search/sort) is applied against all
+    // records. Using `currentFilteredExpenses` here caused incremental
+    // narrowing when filters changed, leading to exported PDFs or views
+    // missing matching records.
+    loadHistory(getExpenses());
 }
 
 function countExpenseFilterConditions(filters) {
