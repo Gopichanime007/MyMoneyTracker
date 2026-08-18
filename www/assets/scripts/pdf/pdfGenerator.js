@@ -42,7 +42,9 @@
         const meta = {
             title: 'Money Tracker Report',
             generatedAt: new Date().toLocaleString(),
-            filter: (window.currentHistoryFilter && window.currentHistoryFilter.label) || 'All'
+            filter: (typeof window.getExportFilterLabel === 'function')
+                ? window.getExportFilterLabel('expenses')
+                : ((window.currentHistoryFilter && window.currentHistoryFilter.label) || 'All')
         };
         pager.meta = meta;
 

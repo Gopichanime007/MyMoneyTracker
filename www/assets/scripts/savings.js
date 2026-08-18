@@ -573,7 +573,7 @@ window.addEventListener("load", function () {
 // Toast helper: define only if not already present to avoid overriding global app toast
 if (typeof window.showToast !== 'function') {
     let activeToast = null;
-    window.showToast = function(message, type = "info") {
+    window.showToast = function (message, type = "info") {
         if (activeToast) activeToast.remove();
 
         let toast = document.createElement("div");
@@ -1005,7 +1005,7 @@ async function addSavings() {
         if (["consumed", "cancelled_with_charges", "written_off", "settled"].includes(resolutionType)) {
             let lossAmount = resolutionType === "cancelled_with_charges"
                 ? Math.max(0, pending - creditAmount)
-            : (resolutionType === "written_off" ? pending : 0);
+                : (resolutionType === "written_off" ? pending : 0);
 
             const resolutionEntry = createSavingsEntry({
                 type: "expense_resolution",
@@ -1141,38 +1141,38 @@ function createOrUpdateBudget(budgetId, entry, selectedBudgetId = null) {
 
     } else {
 
-            // 🔥 Create new budget (PERIOD FIRST)
-            // Ensure globally-unique budgetId while keeping legacy traceability
-            const uid = (typeof crypto !== "undefined" && crypto.randomUUID) ? crypto.randomUUID() : `${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
+        // 🔥 Create new budget (PERIOD FIRST)
+        // Ensure globally-unique budgetId while keeping legacy traceability
+        const uid = (typeof crypto !== "undefined" && crypto.randomUUID) ? crypto.randomUUID() : `${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
 
-            const generatedBudgetId = `budget_${periodKey || fallbackMonth}_${entry.sourceId || 'manual'}_${uid}`;
+        const generatedBudgetId = `budget_${periodKey || fallbackMonth}_${entry.sourceId || 'manual'}_${uid}`;
 
-            budgets.push({
-                id: Date.now(),
-                type: "budget",
+        budgets.push({
+            id: Date.now(),
+            type: "budget",
 
-                // store generated unique id
-                budgetId: generatedBudgetId,
+            // store generated unique id
+            budgetId: generatedBudgetId,
 
-                // preserve original id for migration/traceability if provided
-                legacyId: budgetId || null,
+            // preserve original id for migration/traceability if provided
+            legacyId: budgetId || null,
 
-                sourceId: entry.sourceId,
+            sourceId: entry.sourceId,
 
-                totalAllocated: Math.abs(entry.amount),
+            totalAllocated: Math.abs(entry.amount),
 
-                entity: entry.entity,
+            entity: entry.entity,
 
-                note: entry.note || "",
-                date: entry.date || new Date().toISOString(),
+            note: entry.note || "",
+            date: entry.date || new Date().toISOString(),
 
-                // 🔥 CORE CHANGE
-                periodKey: periodKey || null,
-                monthKey: periodKey ? null : fallbackMonth, // fallback only
+            // 🔥 CORE CHANGE
+            periodKey: periodKey || null,
+            monthKey: periodKey ? null : fallbackMonth, // fallback only
 
-                createdAt: new Date().toISOString(),
-                updatedAt: new Date().toISOString()
-            });
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString()
+        });
     }
 
     localStorage.setItem("budgets", JSON.stringify(budgets));
@@ -1207,17 +1207,15 @@ function upsertActiveBudgetWalletFromSavings(entry) {
 
     if (!periodKey) return null;
 
-    let wallet = budgets.find(b => b && b.periodKey === periodKey && b.isBudgetWallet === true && String(b.sourceId || "") === sourceId);
+    // ⚠️ FIX (Issue 02): A Budget Wallet's identity is the Budget Period
+    // ALONE. sourceId must never participate in this lookup — one Budget
+    // Period has exactly one Budget Wallet, no matter how many different
+    // Savings sources fund it over time.
+    let wallet = budgets.find(b => b && b.periodKey === periodKey && b.isBudgetWallet === true);
 
     if (!wallet) {
-        wallet = budgets.find(b => b && b.periodKey === periodKey && (String(b.entity || "").toLowerCase() === "budget wallet") && String(b.sourceId || "") === sourceId);
-    }
-
-    if (!wallet) {
-        wallet = budgets.find(b => b && b.periodKey === periodKey && b.isBudgetWallet === true && String(b.sourceId || "") === "savings_wallet");
-        if (wallet) {
-            wallet.sourceId = sourceId;
-        }
+        // Legacy-data fallback: older rows may lack the isBudgetWallet flag.
+        wallet = budgets.find(b => b && b.periodKey === periodKey && (String(b.entity || "").toLowerCase() === "budget wallet"));
     }
 
     if (!wallet) {
@@ -1228,7 +1226,7 @@ function upsertActiveBudgetWalletFromSavings(entry) {
         wallet = {
             id: Date.now(),
             type: "budget",
-            budgetId: `budget_wallet_${periodKey}_${sourceId}_${uid}`,
+            budgetId: `budget_wallet_${periodKey}_${uid}`,
             sourceId: sourceId,
             totalAllocated: 0,
             entity: "Budget Wallet",
@@ -1247,6 +1245,24 @@ function upsertActiveBudgetWalletFromSavings(entry) {
 
     localStorage.setItem("budgets", JSON.stringify(budgets));
     return wallet;
+}
+// ⚠️ NEW (Issue 02): Funding-source traceability for a Budget Wallet.
+// Derived on demand from Savings entries — nothing new is stored, so this
+// can never drift out of sync with the actual transaction history.
+function getBudgetFundingSources(budgetId) {
+    if (!budgetId) return [];
+
+    let savings = (typeof getSavings === "function") ? getSavings() : (JSON.parse(localStorage.getItem("savingsTransactions")) || []);
+
+    return savings
+        .filter(entry => entry && String(entry.budgetWalletId || entry.targetBudgetId || "") === String(budgetId))
+        .map(entry => ({
+            sourceId: entry.sourceId || null,
+            amount: Math.abs(Number(entry.amount || 0)),
+            date: entry.date || entry.createdAt || null,
+            note: entry.note || ""
+        }))
+        .sort((a, b) => new Date(a.date) - new Date(b.date));
 }
 // =========================
 // 🗓️ FORMAT HELPERS
@@ -1425,8 +1441,8 @@ function renderSavingsHistory(data) {
     if (!container) return;
 
     let sourceData = applySavingsSearch(data);
-        renderSavingsQueryChips();
-        updateSavingsSortIndicator();
+    renderSavingsQueryChips();
+    updateSavingsSortIndicator();
 
     container.innerHTML = "";
 
@@ -2828,7 +2844,7 @@ function exportSavingsPDF() {
     // 💾 SAVE
     // =========================
     doc.save("savings-report.pdf");
-        saveSavings(data);
+    saveSavings(data);
     showToast("Savings report downloaded 📄", "success");
 }
 // Converts HEX color to RGB (used for dynamic theming if needed)
