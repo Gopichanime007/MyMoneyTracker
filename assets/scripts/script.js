@@ -8039,16 +8039,16 @@ function renderBudgetEntries() {
         return;
     }
 
-    // 🔥 GROUP BY SOURCE + PERIOD
+    // ⚠️ FIX (Issue 02): GROUP BY PERIOD ONLY — sourceId must not split
+    // a single Budget Wallet's card into multiple cards.
     let map = {};
 
     budgets.forEach(b => {
 
-        let key = b.sourceId + "_" + (b.periodKey || b.monthKey || "no_period");
+        let key = b.periodKey || b.monthKey || "no_period";
 
         if (!map[key]) {
             map[key] = {
-                sourceId: b.sourceId,
                 periodKey: b.periodKey,
                 monthKey: b.monthKey || null,
                 totalAllocated: 0,
@@ -8082,13 +8082,11 @@ function renderBudgetEntries() {
 
     list.forEach(g => {
 
-        // 🔥 Use periodKey/monthKey-aware matching
+        // ⚠️ FIX (Issue 02): match by period only, not sourceId.
         let relatedBudgets = budgets
             .filter(b =>
-                b.sourceId === g.sourceId && (
-                    (g.periodKey && b.periodKey === g.periodKey) ||
-                    (!g.periodKey && b.monthKey === g.monthKey)
-                )
+                (g.periodKey && b.periodKey === g.periodKey) ||
+                (!g.periodKey && b.monthKey === g.monthKey)
             );
 
         let relatedBudgetIds = relatedBudgets.map(b => b.budgetId);
@@ -8100,8 +8098,7 @@ function renderBudgetEntries() {
 
         let remaining = g.totalAllocated - used;
 
-        let source = savings.find(s => String(s.id) === String(g.sourceId));
-        let name = source ? (source.note || source.entity) : "Budget";
+        let name = "Budget";
 
         let transactionCount = expenses.filter(e => {
             if (Array.isArray(e.allocationTrail) && e.allocationTrail.length) {
@@ -8190,17 +8187,16 @@ function openBudgetDetails(group) {
     let container = document.getElementById("budgetDetailsContainer");
     if (!container) return;
 
-    let source = savings.find(s => s.id === group.sourceId);
-    let name = source ? (source.note || source.entity) : "Budget";
+    let name = "Budget";
 
     let related = [];
 
+    // ⚠️ FIX (Issue 02): match by period only, not sourceId — a Budget
+    // Wallet can now be funded by multiple sources.
     let relatedBudgetIds = budgets
         .filter(b =>
-            b.sourceId === group.sourceId && (
-                (group.periodKey && b.periodKey === group.periodKey) ||
-                (!group.periodKey && b.monthKey === group.monthKey)
-            )
+            (group.periodKey && b.periodKey === group.periodKey) ||
+            (!group.periodKey && b.monthKey === group.monthKey)
         )
         .map(b => b.budgetId);
 
