@@ -11,6 +11,7 @@
 
   <!-- Styles -->
   <link rel="stylesheet" href="assets/styles/style.css">
+  <link rel="stylesheet" href="assets/styles/daily-budget-ledger.css">
 
   <!-- Libraries -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
@@ -37,7 +38,8 @@
       <button data-screen="graph" onclick="showScreen('graph')">📊</button>
       <button data-screen="budgets" onclick="showScreen('budgets')">📦</button>
       <button data-screen="settings" onclick="showScreen('settings')">⚙️</button>
-      <button type="button" onclick="window.location.href='pages/daily-budget-ledger.html'" title="Daily Budget Ledger">📘</button>
+      <button type="button" onclick="window.location.href='pages/daily-budget-ledger.html'"
+        title="Daily Budget Ledger">📘</button>
     </div>
     <!-- ================= HOME ================= -->
     <section id="home" class="screen active">
@@ -196,7 +198,7 @@
 
         <!-- Attachment -->
         <label class="field-label">Attach Receipt (optional)</label>
-        <div class="inline-row"> 
+        <div class="inline-row">
           <input class="flex-input" id="expenseAttachment" type="file" accept="*/*" capture="environment" />
           <button type="button" id="expenseAttachmentRemove" class="link-btn hidden">Remove</button>
         </div>
@@ -210,33 +212,84 @@
     <!-- ================= HISTORY ================= -->
     <section id="history" class="screen">
       <div class="card">
-        <div class="history-shell">
-          <div class="history-headline">
-            <h3>History</h3>
-            <small>Track all movements with running balance clarity</small>
-          </div>
+        <div class="tab-bar" data-tab-group="historyTabs">
+          <button type="button" class="tab-bar-btn is-active" data-tab-key="history"
+            onclick="activateTab('historyTabs','history')">History</button>
+          <button type="button" class="tab-bar-btn" data-tab-key="dailyLedger"
+            onclick="activateTab('historyTabs','dailyLedger', onDailyLedgerTabOpened)">Daily Ledger</button>
+        </div>
 
-          <div class="history-toolbar premium-history-toolbar">
-            <div class="history-filter-wrap">
-              <input id="historySearchInput" type="text" placeholder="Search transactions..." oninput="onExpenseHistorySearchInput(this.value)">
+        <div class="tab-panel is-active" data-tab-group="historyTabs" data-tab-key="history">
+          <div class="history-shell">
+            <div class="history-headline">
+              <h3>History</h3>
+              <small>Track all movements with running balance clarity</small>
             </div>
 
-            <div class="history-tools action-bar action-bar-4">
-              <button id="expenseFilterActionBtn" class="secondary" type="button" onclick="openExpenseFilterModal()">Filter</button>
-              <button class="secondary" type="button" onclick="openExpenseSortModal()">Sort</button>
-              <button class="secondary" type="button" onclick="exportPDF()" title="Download PDF">Export</button>
-              <button class="secondary" type="button" onclick="sharePDF()" title="Share PDF">Share</button>
+            <div class="history-toolbar premium-history-toolbar">
+              <div class="history-filter-wrap">
+                <input id="historySearchInput" type="text" placeholder="Search transactions..."
+                  oninput="onExpenseHistorySearchInput(this.value)">
+              </div>
 
+              <div class="history-tools action-bar action-bar-4">
+                <button id="expenseFilterActionBtn" class="secondary" type="button"
+                  onclick="openExpenseFilterModal()">Filter</button>
+                <button class="secondary" type="button" onclick="openExpenseSortModal()">Sort</button>
+                <button class="secondary" type="button" onclick="exportPDF()" title="Download PDF">Export</button>
+                <button class="secondary" type="button" onclick="sharePDF()" title="Share PDF">Share</button>
+              </div>
             </div>
+
+            <div id="expenseQueryChips" class="query-chip-row"></div>
+
+            <div id="historyList" class="history-list-premium"></div>
+          </div>
+        </div>
+
+        <div class="tab-panel" data-tab-group="historyTabs" data-tab-key="dailyLedger">
+          <div class="section-title-row">
+            <h3>Daily Budget</h3>
+            <span id="ledgerEntryCount" class="ledger-pill">0 entries</span>
           </div>
 
-          <div id="expenseQueryChips" class="query-chip-row"></div>
+          <label for="dailyBudgetInput">Fixed Daily Budget</label>
+          <input id="dailyBudgetInput" type="number" min="0" step="1" placeholder="100" />
 
-          <div id="historyList" class="history-list-premium"></div>
+          <label for="weekStartDaySelect">Week Starts On</label>
+          <select id="weekStartDaySelect">
+            <option value="0">Sunday</option>
+            <option value="1">Monday</option>
+            <option value="2">Tuesday</option>
+            <option value="3">Wednesday</option>
+            <option value="4">Thursday</option>
+            <option value="5">Friday</option>
+            <option value="6">Saturday</option>
+          </select>
+
+          <button id="saveDailyBudget" class="primary" type="button">Save Budget</button>
+
+          <div class="section-title-row" style="margin-top: var(--space-md);">
+            <h3>Ledger View</h3>
+          </div>
+          <div class="ledger-table-container">
+            <table class="ledger-table">
+              <thead>
+                <tr>
+                  <th>Date (Day)</th>
+                  <th>Budget</th>
+                  <th>Spent</th>
+                  <th>Savings</th>
+                  <th>Deficit</th>
+                  <th>Running Balance</th>
+                </tr>
+              </thead>
+              <tbody id="ledgerEntries"></tbody>
+            </table>
+          </div>
         </div>
       </div>
     </section>
-
     <!-- ================= BUDGET ================= -->
     <section id="budget" class="screen">
       <div class="card">
@@ -256,7 +309,8 @@
         <p>Daily Limit: <span id="calculatedDaily">0</span></p>
 
         <button type="button" class="primary" onclick="saveBudget()">Save</button>
-        <button type="button" class="secondary" onclick="window.location.href='pages/budgetperiod.html'">Manage Budget Periods</button>
+        <button type="button" class="secondary" onclick="window.location.href='pages/budgetperiod.html'">Manage Budget
+          Periods</button>
       </div>
       <!-- ================= SMART INSIGHTS ================= -->
       <div class="budget-insights">
@@ -380,7 +434,8 @@
         <h4>Automatic Backup</h4>
         <div class="form-group">
           <label for="autoBackupEnabled">
-            <input id="autoBackupEnabled" type="checkbox" onchange="applyAutoBackupSettings()" class="inline-checkbox" />
+            <input id="autoBackupEnabled" type="checkbox" onchange="applyAutoBackupSettings()"
+              class="inline-checkbox" />
             Enable Auto Backup
           </label>
 
@@ -559,7 +614,7 @@
         <option value="asc">Ascending</option>
       </select>
 
-            <div class="modal-actions sort-modal-actions">
+      <div class="modal-actions sort-modal-actions">
         <button class="secondary" type="button" onclick="closeExpenseSortModal()">Close</button>
         <button class="secondary" type="button" onclick="clearExpenseSortModal()">Clear</button>
         <button class="primary" type="button" onclick="applyExpenseSortModal()">Apply</button>
@@ -574,6 +629,7 @@
   <script src="assets/scripts/searchService.js"></script>
   <script src="assets/scripts/filterBuilder.js"></script>
   <script src="assets/scripts/script.js"></script>
+  <script src="assets/scripts/dailyBudgetLedger.js"></script>
   <script>
     document.addEventListener("DOMContentLoaded", () => {
       showScreen('home');
