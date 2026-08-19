@@ -4719,6 +4719,50 @@ function escapeHtml(value) {
         .replace(/'/g, "&#39;");
 }
 
+// =========================
+// 🗂️ TAB BAR HELPER (shared)
+// =========================
+// Generic tab switcher. Works for any tab-bar/tab-panel pair as long as
+// their data-tab-group values match. onActivate lets a specific tab run
+// setup code (e.g. render its content) only the moment it's first opened.
+function activateTab(groupName, tabKey, onActivate) {
+    let bar = document.querySelector(`.tab-bar[data-tab-group="${groupName}"]`);
+    if (!bar) return;
+
+    bar.querySelectorAll(".tab-bar-btn").forEach(btn => {
+        btn.classList.toggle("is-active", btn.dataset.tabKey === tabKey);
+    });
+
+    document.querySelectorAll(`.tab-panel[data-tab-group="${groupName}"]`).forEach(panel => {
+        panel.classList.toggle("is-active", panel.dataset.tabKey === tabKey);
+    });
+
+    if (typeof onActivate === "function") onActivate(tabKey);
+}
+
+// Daily Ledger's own init only runs on DOMContentLoaded inside its own
+// file — but its markup doesn't exist yet at that point when it's a tab.
+// So we call its real render/bind functions ourselves, the first time
+// (and every time) the tab is actually opened.
+function onDailyLedgerTabOpened() {
+    if (typeof window.renderDailyBudgetLedger === "function") {
+        window.renderDailyBudgetLedger();
+    }
+    let saveBtn = document.getElementById("saveDailyBudget");
+    if (saveBtn && !saveBtn.dataset.ledgerBound) {
+        saveBtn.dataset.ledgerBound = "true";
+        saveBtn.addEventListener("click", function () {
+            let budgetInput = document.getElementById("dailyBudgetInput");
+            let weekStartSelect = document.getElementById("weekStartDaySelect");
+            let config = {
+                dailyBudget: Number(budgetInput ? budgetInput.value : 0) || 0,
+                weekStartDay: Number(weekStartSelect ? weekStartSelect.value : 1) || 1
+            };
+            localStorage.setItem("dailyBudgetLedgerConfig", JSON.stringify(config));
+            window.renderDailyBudgetLedger();
+        });
+    }
+}
 function getAttachmentApi() {
     return window.reMoAttachments || window.reMoAttachmentsIndexed || null;
 }
