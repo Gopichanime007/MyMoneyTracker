@@ -293,46 +293,81 @@
     <!-- ================= BUDGET ================= -->
     <section id="budget" class="screen">
       <div class="card">
-        <h3>Budget</h3>
+        <h3>Budget Wallet</h3>
 
-        <p>Current: <span id="currentBudget">0</span></p>
-
-        <select id="budgetType">
-          <option value="daily">Daily</option>
-          <option value="weekly">Weekly</option>
-          <option value="monthly" selected>Monthly</option>
-        </select>
-
-        <input type="month" id="budgetMonth">
-        <input type="number" id="budgetAmount" placeholder="Amount">
-
-        <p>Daily Limit: <span id="calculatedDaily">0</span></p>
-
-        <button type="button" class="primary" onclick="saveBudget()">Save</button>
-        <button type="button" class="secondary" onclick="window.location.href='pages/budgetperiod.html'">Manage Budget
-          Periods</button>
-      </div>
-      <!-- ================= SMART INSIGHTS ================= -->
-      <div class="budget-insights">
-
-        <div class="insight-card success">
-          <small>Daily Remaining</small>
-          <h4 id="savedToday">₹0</h4>
+        <div class="tab-bar" data-tab-group="budgetWalletTabs">
+          <button type="button" class="tab-bar-btn is-active" data-tab-key="overview"
+            onclick="activateTab('budgetWalletTabs','overview', renderBudgetWalletOverview)">Overview</button>
+          <button type="button" class="tab-bar-btn" data-tab-key="topup"
+            onclick="activateTab('budgetWalletTabs','topup')">Top-Up</button>
+          <button type="button" class="tab-bar-btn" data-tab-key="apply"
+            onclick="activateTab('budgetWalletTabs','apply', renderApplySourceTab)">Apply Source</button>
         </div>
 
-        <div class="insight-card info">
-          <small>Weekly Remaining</small>
-          <h4 id="savedWeek">₹0</h4>
+        <div class="tab-panel is-active" data-tab-group="budgetWalletTabs" data-tab-key="overview">
+          <p>Current: <span id="currentBudget">0</span></p>
+          <p>Daily Limit: <span id="calculatedDaily">0</span></p>
+
+          <div class="entry-summary-grid">
+            <div>
+              <small>Assigned</small>
+              <strong id="walletAssignedTotal">₹0</strong>
+            </div>
+            <div>
+              <small>Unassigned</small>
+              <strong id="walletUnassignedTotal">₹0</strong>
+            </div>
+            <div>
+              <small>Spent</small>
+              <strong id="walletSpentTotal">₹0</strong>
+            </div>
+            <div>
+              <small>Remaining</small>
+              <strong id="walletRemainingTotal">₹0</strong>
+            </div>
+          </div>
+
+          <button type="button" class="secondary" onclick="window.location.href='pages/budgetperiod.html'">Manage Budget
+            Periods</button>
+
+          <div class="budget-insights">
+            <div class="insight-card success">
+              <small>Daily Remaining</small>
+              <h4 id="savedToday">₹0</h4>
+            </div>
+            <div class="insight-card info">
+              <small>Weekly Remaining</small>
+              <h4 id="savedWeek">₹0</h4>
+            </div>
+            <div class="insight-card premium">
+              <small>Monthly Remaining</small>
+              <h4 id="savedPeriod">₹0</h4>
+            </div>
+          </div>
         </div>
 
-        <div class="insight-card premium">
-          <small>Monthly Remaining</small>
-          <h4 id="savedPeriod">₹0</h4>
+        <div class="tab-panel" data-tab-group="budgetWalletTabs" data-tab-key="topup">
+          <p class="modal-sub">Add money to your Budget Wallet right now without picking a Savings source. Assign the
+            source later from the Apply Source tab.</p>
+
+          <label for="topupAmount">Amount</label>
+          <input type="number" id="topupAmount" placeholder="Amount">
+
+          <label for="topupNote">Note (optional)</label>
+          <input type="text" id="topupNote" placeholder="e.g. Cash used while out">
+
+          <label for="topupDate">Date</label>
+          <input type="date" id="topupDate">
+
+          <button type="button" class="primary" onclick="handleCreateUnassignedTopup()">Add Top-Up</button>
         </div>
 
+        <div class="tab-panel" data-tab-group="budgetWalletTabs" data-tab-key="apply">
+          <p class="modal-sub">Assign a real Savings source to your unassigned top-ups, fully or partly.</p>
+          <div id="pendingTopupsList"></div>
+        </div>
       </div>
     </section>
-
     <!-- ================= GRAPH ================= -->
     <section id="graph" class="screen">
       <div class="card">

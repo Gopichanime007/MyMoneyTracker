@@ -490,6 +490,510 @@ function saveSavings(data) {
     }
 }
 
+// =========================
+// 💠 UNASSIGNED TOP-UPS (Issue 02 Part C)
+// =========================
+// Money added straight into a Budget Wallet without picking a Savings
+// source yet. Savings is NOT touched until a source is assigned (fully
+// or partially) later. Each top-up stays its own permanently traceable
+// record — never merged into a single blob, per the agreed business rule.
+function getUnassignedTopups() {
+    try {
+        return JSON.parse(localStorage.getItem("unassignedTopups")) || [];
+    } catch (err) {
+        return [];
+    }
+}
+
+function saveUnassignedTopups(data) {
+    try {
+        let safe = Array.isArray(data) ? data : [];
+        localStorage.setItem("unassignedTopups", JSON.stringify(safe));
+    } catch (err) {
+        console.error('saveUnassignedTopups failed', err);
+    }
+}
+
+// Same "one wallet per period" identity rule as Issue 02's fix — reused
+// here, not duplicated, so both paths can never disagree with each other.
+function getOrCreateActiveBudgetWallet() {
+    let periodKey = typeof getActivePeriodKey === "function" ? getActivePeriodKey() : null;
+    if (!periodKey) return null;
+
+    let budgets = getBudgets();
+    let wallet = budgets.find(b => b && b.periodKey === periodKey && b.isBudgetWallet === true);
+
+    if (!wallet) {
+        wallet = budgets.find(b => b && b.periodKey === periodKey && (String(b.entity || "").toLowerCase() === "budget wallet"));
+    }
+
+    if (!wallet) {
+        let uid = (typeof crypto !== "undefined" && crypto.randomUUID)
+            ? crypto.randomUUID()
+            : `${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
+
+        wallet = {
+            id: Date.now(),
+            type: "budget",
+            budgetId: `budget_wallet_${periodKey}_${uid}`,
+            sourceId: "savings_wallet",
+            totalAllocated: 0,
+            entity: "Budget Wallet",
+            note: "Auto Budget Wallet",
+            periodKey,
+            monthKey: null,
+            isBudgetWallet: true,
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString()
+        };
+        budgets.push(wallet);
+        saveBudgets(budgets);
+    }
+
+    return wallet;
+}
+
+// Creates a new unassigned top-up: adds straight to the active wallet's
+// spendable total, leaves Savings completely untouched.
+function createUnassignedTopup({ amount, note = "", date = new Date().toISOString() }) {
+    let amt = Math.abs(Number(amount) || 0);
+    if (!amt) return null;
+
+    let wallet = getOrCreateActiveBudgetWallet();
+    if (!wallet) return null;
+
+    let budgets = getBudgets();
+    let liveWallet = budgets.find(b => b && b.budgetId === wallet.budgetId);
+    if (!liveWallet) return null;
+
+    liveWallet.totalAllocated = Number(liveWallet.totalAllocated || 0) + amt;
+    liveWallet.updatedAt = new Date().toISOString();
+    saveBudgets(budgets);
+
+    let topup = {
+        id: (typeof crypto !== "undefined" && crypto.randomUUID) ? crypto.randomUUID() : `topup_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`,
+        amount: amt,
+        note,
+        date,
+        periodKey: liveWallet.periodKey,
+        budgetWalletId: liveWallet.budgetId,
+        assignedAmount: 0,
+        assignments: [],
+        status: "unassigned",
+        parked: false,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+    };
+
+    let topups = getUnassignedTopups();
+    topups.push(topup);
+    saveUnassignedTopups(topups);
+
+    return topup;
+}
+
+// Every top-up still needing (full or partial) source assignment —
+// whether it's tied to a still-open wallet or parked in the long-term
+// Unresolved pool from a closed period.
+function getPendingUnassignedTopups() {
+    return getUnassignedTopups().filter(t => t && t.status !== "assigned");
+}
+
+function getRemainingUnassignedAmount(topup) {
+    if (!topup) return 0;
+    return roundCurrency(Math.max(0, Number(topup.amount || 0) - Number(topup.assignedAmount || 0)));
+}
+// =========================
+// 🔗 SOURCES
+// =========================
+function isSavingsSourceSeed(entry) {
+    if (!entry) return false;
+    return entry.type === "income" || entry.type === "deposit";
+}
+
+function buildSavingsSourceLedger(entries) {
+    let data = Array.isArray(entries) ? entries : [];
+
+    let sources = data.filter(isSavingsSourceSeed);
+
+    return sources.map(s => {
+        let sid = String(s.id);
+
+        let incoming = data
+            .filter(t => String(t.id) !== sid && String(t.sourceId) === sid && Number(t.amount || 0) > 0)
+            .reduce((sum, t) => sum + Number(t.amount || 0), 0);
+
+        let outgoing = data
+            .filter(t => String(t.id) !== sid && String(t.sourceId) === sid && Number(t.amount || 0) < 0)
+            .reduce((sum, t) => sum + Math.abs(Number(t.amount || 0)), 0);
+
+        let base = Math.max(0, Number(s.amount || 0));
+        let remaining = base + incoming - outgoing;
+
+        return {
+            source: s,
+            incoming,
+            outgoing,
+            remaining
+        };
+    });
+}
+
+function getSourceRemainingById(sourceId, entries) {
+    let scoped = getSavings() || [];
+    let ledger = buildSavingsSourceLedger(entries || scoped);
+    let row = ledger.find(x => String(x.source.id) === String(sourceId));
+    return row ? Number(row.remaining || 0) : 0;
+}
+
+
+// Manually (or automatically, at closure) assign part or all of an
+// Unassigned Top-Up to a real Savings source. Creates a real Savings
+// ledger entry (reduces that source) but does NOT touch the wallet's
+// totalAllocated again — that already happened the moment the top-up
+// was created.
+function assignUnassignedTopupToSource(topupId, sourceId, amount, method = "manual") {
+    let topups = getUnassignedTopups();
+    let topup = topups.find(t => String(t.id) === String(topupId));
+    if (!topup) return { ok: false, error: "Top-up not found" };
+
+    let remaining = getRemainingUnassignedAmount(topup);
+    let requested = roundCurrency(Math.abs(Number(amount) || 0));
+
+    if (!requested || requested <= 0) {
+        return { ok: false, error: "Enter a valid amount" };
+    }
+    if (requested > remaining) {
+        return { ok: false, error: `Only ${formatCurrency(remaining)} left to assign on this top-up` };
+    }
+
+    let sourceAvailable = getSourceRemainingById(sourceId);
+    if (requested > sourceAvailable) {
+        return { ok: false, error: `Selected source only has ${formatCurrency(sourceAvailable)} available` };
+    }
+
+    let savings = getSavings();
+    let entry = {
+        id: (typeof crypto !== "undefined" && crypto.randomUUID) ? crypto.randomUUID() : `sav_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`,
+        type: "unassigned_topup_resolution",
+        amount: -requested,
+        sourceId,
+        entity: "Budget Wallet",
+        paymentType: null,
+        person: null,
+        note: `Resolved top-up${topup.note ? " — " + topup.note : ""}${method === "auto" ? " (auto-assigned)" : ""}`,
+        date: new Date().toISOString(),
+        monthKey: new Date().toISOString().slice(0, 7),
+        periodKey: null,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        targetBudgetId: topup.budgetWalletId,
+        budgetWalletId: topup.budgetWalletId,
+        linkedTopupId: topup.id
+    };
+    savings.push(entry);
+    saveSavings(savings);
+
+    topup.assignedAmount = roundCurrency(Number(topup.assignedAmount || 0) + requested);
+    topup.assignments.push({
+        sourceId,
+        amount: requested,
+        date: new Date().toISOString(),
+        method,
+        savingsEntryId: entry.id
+    });
+    topup.status = topup.assignedAmount >= topup.amount ? "assigned" : "partially_assigned";
+    topup.updatedAt = new Date().toISOString();
+
+    saveUnassignedTopups(topups);
+
+    return { ok: true, topup, entry };
+}
+
+// ⚠️ Section 12/13: try to auto-resolve every still-unassigned top-up
+// in a wallet, using the most recent eligible Bank deposit first (by
+// its real remaining balance), splitting across as many deposits as
+// needed. Whatever can't be covered gets parked in the standing
+// Unresolved Pool — never blocks anything, always stays traceable.
+function autoResolveWalletTopups(wallet) {
+    if (!wallet || !wallet.budgetId) return;
+
+    let topups = getUnassignedTopups();
+    let pending = topups.filter(t => t && t.budgetWalletId === wallet.budgetId && t.status !== "assigned" && !t.parked);
+    if (!pending.length) return;
+
+    pending.forEach(topup => {
+        let remaining = getRemainingUnassignedAmount(topup);
+        if (remaining <= 0) return;
+
+        let savings = getSavings();
+        let eligibleDeposits = savings
+            .filter(e => e && e.type === "deposit" && String(e.paymentType || "") === "Bank")
+            .map(e => ({ id: e.id, date: e.date, remaining: getSourceRemainingById(e.id, savings) }))
+            .filter(d => d.remaining > 0)
+            .sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0));
+
+        let need = remaining;
+
+        eligibleDeposits.forEach(dep => {
+            if (need <= 0) return;
+            let use = roundCurrency(Math.min(dep.remaining, need));
+            if (use <= 0) return;
+
+            let result = assignUnassignedTopupToSource(topup.id, dep.id, use, "auto");
+            if (result && result.ok) {
+                need = roundCurrency(need - use);
+            }
+        });
+
+        let stillRemaining = getRemainingUnassignedAmount(topup);
+        if (stillRemaining > 0) {
+            let all = getUnassignedTopups();
+            let live = all.find(t => t.id === topup.id);
+            if (live) {
+                live.parked = true;
+                live.parkedFromBudgetId = wallet.budgetId;
+                live.updatedAt = new Date().toISOString();
+                saveUnassignedTopups(all);
+            }
+        }
+    });
+}
+
+// Runs once per app load: any Budget Wallet that is no longer the
+// active period's wallet (i.e. its period has closed) gets its
+// still-unassigned top-ups auto-resolved. Guarded by
+// topupsAutoResolved so a wallet is only ever processed once, no
+// matter how many times the app is opened afterward.
+function autoResolveClosedWalletTopups() {
+    let activePeriodKey = typeof getActivePeriodKey === "function" ? getActivePeriodKey() : null;
+    let budgets = getBudgets();
+    let toProcess = budgets.filter(b => b && b.isBudgetWallet === true && b.periodKey && b.periodKey !== activePeriodKey && !b.topupsAutoResolved);
+
+    if (!toProcess.length) return;
+
+    toProcess.forEach(wallet => {
+        autoResolveWalletTopups(wallet);
+    });
+
+    let refreshed = getBudgets();
+    toProcess.forEach(processedWallet => {
+        let live = refreshed.find(b => b.budgetId === processedWallet.budgetId);
+        if (live) live.topupsAutoResolved = true;
+    });
+    saveBudgets(refreshed);
+}
+// =========================
+// 🖥️ BUDGET WALLET SCREEN (Overview / Top-Up / Apply Source)
+// =========================
+function renderBudgetWalletOverview() {
+    let periodKey = typeof getActivePeriodKey === "function" ? getActivePeriodKey() : null;
+    let budgets = getBudgets();
+    let wallet = periodKey ? budgets.find(b => b && b.periodKey === periodKey && b.isBudgetWallet === true) : null;
+
+    let totalAllocated = wallet ? Number(wallet.totalAllocated || 0) : 0;
+    let spent = wallet ? Math.max(0, getNetSpentForBudget(wallet.budgetId, getExpenses())) : 0;
+    let remaining = totalAllocated - spent;
+
+    let topups = getUnassignedTopups();
+    let unassignedTotal = wallet
+        ? topups
+            .filter(t => t && t.budgetWalletId === wallet.budgetId && !t.parked)
+            .reduce((sum, t) => sum + getRemainingUnassignedAmount(t), 0)
+        : 0;
+
+    let assignedTotal = Math.max(0, totalAllocated - unassignedTotal);
+
+    let setText = (id, value) => {
+        let el = document.getElementById(id);
+        if (el) el.textContent = formatCurrency(value);
+    };
+
+    setText("walletAssignedTotal", assignedTotal);
+    setText("walletUnassignedTotal", unassignedTotal);
+    setText("walletSpentTotal", spent);
+    setText("walletRemainingTotal", remaining);
+}
+
+function handleCreateUnassignedTopup() {
+    let amountInput = document.getElementById("topupAmount");
+    let noteInput = document.getElementById("topupNote");
+    let dateInput = document.getElementById("topupDate");
+
+    let amount = Number(amountInput ? amountInput.value : 0);
+    if (!amount || amount <= 0) {
+        showToast("Enter a valid amount");
+        return;
+    }
+
+    let date = dateInput && dateInput.value ? new Date(dateInput.value).toISOString() : new Date().toISOString();
+    let note = noteInput ? noteInput.value : "";
+
+    let topup = createUnassignedTopup({ amount, note, date });
+    if (!topup) {
+        showToast("Could not create top-up. Is a Budget Period active?");
+        return;
+    }
+
+    showToast("Top-up added ✅");
+
+    if (amountInput) amountInput.value = "";
+    if (noteInput) noteInput.value = "";
+
+    renderBudgetWalletOverview();
+    if (typeof renderBudgetEntries === "function") renderBudgetEntries();
+    if (typeof loadBudgetScreen === "function") loadBudgetScreen();
+    if (typeof loadDashboard === "function") loadDashboard();
+}
+
+function renderApplySourceTab() {
+    let container = document.getElementById("pendingTopupsList");
+    if (!container) return;
+
+    let pending = getPendingUnassignedTopups();
+
+    if (!pending.length) {
+        container.innerHTML = "<p class='empty-state'>No unassigned top-ups right now.</p>";
+        return;
+    }
+
+    container.innerHTML = "";
+
+    pending.slice().reverse().forEach(t => {
+        let remaining = getRemainingUnassignedAmount(t);
+        let dateText = new Date(t.date).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
+
+        let div = document.createElement("div");
+        div.className = "expense-item transaction-card";
+        div.innerHTML = `
+            <div class="transaction-card-head">
+                <div class="history-type">${t.parked ? "🗂 Unresolved Pool" : "💠 Unassigned Top-Up"}</div>
+                <div class="transaction-title">${escapeHtml(t.note || "-")}</div>
+            </div>
+            <div class="transaction-meta-grid">
+                <span class="entry-label">Date</span>
+                <span class="entry-value">${escapeHtml(dateText)}</span>
+                <span class="entry-label">Original Amount</span>
+                <span class="entry-value">${escapeHtml(formatCurrency(t.amount))}</span>
+                <span class="entry-label">Still Unassigned</span>
+                <span class="entry-value">${escapeHtml(formatCurrency(remaining))}</span>
+            </div>
+            <div class="transaction-card-foot">
+                <div class="history-actions">
+                    <button class="entry-action-btn" type="button" onclick="openAssignTopupModal('${escapeHtml(t.id)}')">Assign Source</button>
+                </div>
+            </div>
+        `;
+        container.appendChild(div);
+    });
+}
+
+function ensureAssignTopupModal() {
+    let existing = document.getElementById("assignTopupModal");
+    if (existing) return existing;
+
+    let modal = document.createElement("div");
+    modal.id = "assignTopupModal";
+    modal.className = "modal hidden";
+    modal.innerHTML = `
+      <div class="modal-content" onclick="event.stopPropagation()">
+        <h3>Assign Source</h3>
+        <p class="modal-sub" id="assignTopupContext"></p>
+
+        <label for="assignTopupSource">Savings Source</label>
+        <select id="assignTopupSource"></select>
+
+        <label for="assignTopupAmount">Amount to Assign</label>
+        <input type="number" id="assignTopupAmount" placeholder="Amount">
+
+        <div class="modal-actions">
+          <button class="secondary" type="button" onclick="closeAssignTopupModal()">Cancel</button>
+          <button class="primary" type="button" onclick="confirmAssignTopup()">Assign</button>
+        </div>
+      </div>
+    `;
+    modal.addEventListener("click", closeAssignTopupModal);
+    document.body.appendChild(modal);
+    return modal;
+}
+
+function closeAssignTopupModal() {
+    let modal = document.getElementById("assignTopupModal");
+    if (modal) {
+        modal.classList.add("hidden");
+        modal.style.display = "none";
+    }
+}
+
+let currentAssignTopupId = null;
+
+function openAssignTopupModal(topupId) {
+    let topup = getUnassignedTopups().find(t => String(t.id) === String(topupId));
+    if (!topup) return;
+
+    currentAssignTopupId = topupId;
+    let modal = ensureAssignTopupModal();
+
+    let remaining = getRemainingUnassignedAmount(topup);
+    let contextEl = document.getElementById("assignTopupContext");
+    if (contextEl) {
+        contextEl.textContent = `${formatCurrency(remaining)} still unassigned from top-up dated ${new Date(topup.date).toLocaleDateString("en-IN")}${topup.note ? " — " + topup.note : ""}`;
+    }
+
+    let sourceSelect = document.getElementById("assignTopupSource");
+    if (sourceSelect) {
+        let savings = getSavings();
+        let ledger = buildSavingsSourceLedger(savings);
+        sourceSelect.innerHTML = "<option value=''>Select Source</option>";
+        ledger.forEach(item => {
+            if (Number(item.remaining || 0) <= 0) return;
+            let opt = document.createElement("option");
+            opt.value = item.source.id;
+            opt.textContent = `${item.source.note || "Savings Source"} — ${formatCurrency(item.remaining)} left`;
+            sourceSelect.appendChild(opt);
+        });
+    }
+
+    let amountInput = document.getElementById("assignTopupAmount");
+    if (amountInput) amountInput.value = remaining ? String(remaining) : "";
+
+    modal.classList.remove("hidden");
+    modal.style.display = "flex";
+}
+
+function confirmAssignTopup() {
+    if (!currentAssignTopupId) return;
+
+    let sourceId = document.getElementById("assignTopupSource")?.value || "";
+    let amount = document.getElementById("assignTopupAmount")?.value || "";
+
+    if (!sourceId) {
+        showToast("Select a source");
+        return;
+    }
+
+    let result = assignUnassignedTopupToSource(currentAssignTopupId, sourceId, amount);
+    if (!result.ok) {
+        showToast(result.error || "Could not assign");
+        return;
+    }
+
+    showToast("Source assigned ✅");
+    closeAssignTopupModal();
+    renderApplySourceTab();
+    renderBudgetWalletOverview();
+    if (typeof loadSavings === "function") loadSavings();
+    if (typeof loadSourceOptions === "function") loadSourceOptions();
+}
+
+// Section 11 rule: notify on open if anything still needs resolving.
+function notifyPendingUnassignedTopups() {
+    let pending = getPendingUnassignedTopups();
+    if (!pending.length) return;
+    let total = pending.reduce((sum, t) => sum + getRemainingUnassignedAmount(t), 0);
+    showToast(`${pending.length} unassigned top-up(s) totaling ${formatCurrency(total)} — resolve them in Budget → Apply Source`);
+}
+
 // Expose core storage helpers on `window` only if not already provided by another module.
 if (typeof window !== 'undefined') {
     window.getExpenses = window.getExpenses || getExpenses;
@@ -1956,29 +2460,49 @@ function handleRefundResolutionChange() {
     updateLinkedRemainingUI();
 }
 
-function resolveBudgetSourceIdForTransferBack(budget, savingsEntries) {
-    if (!budget || !budget.budgetId) return null;
+// ⚠️ FIX (Issue 01): A wallet's remaining balance can now legitimately
+// come from MULTIPLE Savings sources (Issue 02 removed the old "one
+// source per budget row" assumption). This walks the wallet's real
+// funding history oldest → newest, consuming "spent" against the
+// oldest funding first — so whatever's left over is attributed to the
+// most recently added funding first (matches how spending already
+// worked in practice). Returns an array of {budgetId, sourceId, amount}
+// covering up to `requestAmount`.
+function computeTransferBackAllocations(budgetId, requestAmount) {
+    let amount = roundCurrency(Math.abs(Number(requestAmount) || 0));
+    if (!amount || !budgetId) return [];
 
-    if (budget.sourceId) return String(budget.sourceId);
-    if (budget.linkedSourceSavingsId) return String(budget.linkedSourceSavingsId);
-    if (Array.isArray(budget.linkedSourceSavingsIds) && budget.linkedSourceSavingsIds.length) {
-        return String(budget.linkedSourceSavingsIds[0]);
-    }
+    let funding = typeof getBudgetFundingSources === "function" ? getBudgetFundingSources(budgetId) : [];
+    // getBudgetFundingSources already sorts oldest → newest.
 
-    let savings = Array.isArray(savingsEntries) ? savingsEntries : [];
-    let relatedAllocations = savings
-        .filter(entry => {
-            if (!entry || !entry.sourceId) return false;
-            let isAllocation = entry.type === "budget_allocation" || entry.type === "withdraw_budget";
-            return isAllocation && String(entry.targetBudgetId || "") === String(budget.budgetId);
-        })
-        .sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0));
+    let expenses = getExpenses();
+    let spent = Math.max(0, getNetSpentForBudget(budgetId, expenses));
 
-    if (relatedAllocations.length) {
-        return String(relatedAllocations[0].sourceId);
-    }
+    let remainingPerEvent = [];
+    let spendLeft = spent;
 
-    return null;
+    funding.forEach(f => {
+        let used = Math.min(f.amount, spendLeft);
+        spendLeft = roundCurrency(Math.max(0, spendLeft - used));
+        let remains = roundCurrency(f.amount - used);
+        if (remains > 0) {
+            remainingPerEvent.push({ sourceId: f.sourceId, amount: remains });
+        }
+    });
+
+    let allocations = [];
+    let need = amount;
+
+    remainingPerEvent.forEach(r => {
+        if (need <= 0) return;
+        let use = roundCurrency(Math.min(r.amount, need));
+        if (use > 0) {
+            allocations.push({ budgetId, sourceId: r.sourceId, amount: use });
+            need = roundCurrency(need - use);
+        }
+    });
+
+    return allocations;
 }
 
 function buildTransferBackPlan(requestAmount, selectedBudgetId = null) {
@@ -1993,20 +2517,13 @@ function buildTransferBackPlan(requestAmount, selectedBudgetId = null) {
         budgets = budgets.filter(b => String(b.budgetId || "") === selectedId);
     }
 
-    let savingsEntries = (typeof getSavings === "function") ? getSavings() : [];
-
     let expenses = getExpenses();
     let candidates = budgets.map(b => {
         let spent = Math.max(0, getNetSpentForBudget(b.budgetId, expenses));
         let allocated = roundCurrency(Math.max(0, Number(b.totalAllocated || 0)));
         let available = roundCurrency(Math.max(0, allocated - spent));
-        let resolvedSourceId = resolveBudgetSourceIdForTransferBack(b, savingsEntries) || String(b.sourceId || "");
-        return {
-            budgetId: b.budgetId,
-            sourceId: resolvedSourceId,
-            available
-        };
-    }).filter(c => c.available > 0 && !!c.sourceId);
+        return { budgetId: b.budgetId, available };
+    }).filter(c => c.available > 0);
 
     if (!candidates.length) {
         return {
@@ -2014,29 +2531,25 @@ function buildTransferBackPlan(requestAmount, selectedBudgetId = null) {
             allocations: [],
             remaining: amount,
             totalAvailable: 0,
-            selectedBudgetId: selectedId || null,
-            selectedSourceId: null
+            selectedBudgetId: selectedId || null
         };
     }
 
     let chosen = candidates[0];
     let use = roundCurrency(Math.min(chosen.available, amount));
-    let allocations = use > 0
-        ? [{
-            budgetId: chosen.budgetId,
-            sourceId: chosen.sourceId,
-            amount: use
-        }]
-        : [];
-    let remaining = roundCurrency(Math.max(0, amount - use));
+
+    // ⚠️ FIX (Issue 01): split the return across every real source that
+    // funded this wallet, instead of forcing it onto just one.
+    let allocations = use > 0 ? computeTransferBackAllocations(chosen.budgetId, use) : [];
+    let allocated = roundCurrency(allocations.reduce((sum, a) => sum + a.amount, 0));
+    let remaining = roundCurrency(Math.max(0, amount - allocated));
 
     return {
         amount,
         allocations,
         remaining,
         totalAvailable: roundCurrency(candidates.reduce((sum, c) => sum + c.available, 0)),
-        selectedBudgetId: chosen.budgetId,
-        selectedSourceId: chosen.sourceId
+        selectedBudgetId: chosen.budgetId
     };
 }
 
@@ -2057,6 +2570,12 @@ async function quickCloseBudgetTransferBack(group, relatedBudgetIds) {
 
         if (remaining <= 0) continue;
 
+        // ⚠️ Section 12/13: resolve any unassigned top-up money in this
+        // wallet to a real source before computing the split.
+        if (budgetRow && typeof autoResolveWalletTopups === "function") {
+            autoResolveWalletTopups(budgetRow);
+        }
+
         let plan = buildTransferBackPlan(remaining, budgetId);
         if (!plan.allocations.length || plan.remaining > 0) {
             failures.push(budgetId);
@@ -2069,9 +2588,11 @@ async function quickCloseBudgetTransferBack(group, relatedBudgetIds) {
             amount: a.amount
         }));
         let uniqueSources = [...new Set(transferBackTrail.map(a => a.sourceId))];
-        let resolvedSourceId = uniqueSources.length === 1 ? uniqueSources[0] : null;
 
-        if (!resolvedSourceId) {
+        // ⚠️ FIX (Issue 01): no longer requires exactly one source —
+        // transferBackTrail already supports (and the code below already
+        // correctly handles) crediting several sources at once.
+        if (!uniqueSources.length) {
             failures.push(budgetId);
             continue;
         }
@@ -2088,7 +2609,7 @@ async function quickCloseBudgetTransferBack(group, relatedBudgetIds) {
             budgetId,
             allocationTrail: transferBackTrail.map(a => ({ budgetId: a.budgetId, amount: roundCurrency(convertToBase(a.amount)) })),
             transferBackTrail,
-            linkedSourceSavingsId: resolvedSourceId,
+            linkedSourceSavingsId: uniqueSources[0] || null,
             linkedSourceSavingsIds: uniqueSources
         });
 
@@ -2404,11 +2925,17 @@ async function handleAddExpense() {
             return;
         }
 
+        // ⚠️ Section 12/13: resolve any unassigned top-up money first.
+        let walletForTransferBack = getBudgets().find(b => String(b.budgetId) === String(budgetId));
+        if (walletForTransferBack && typeof autoResolveWalletTopups === "function") {
+            autoResolveWalletTopups(walletForTransferBack);
+        }
+
         let plan = buildTransferBackPlan(amount, budgetId);
         if (!plan.allocations.length || plan.remaining > 0) {
             showToast(`Only ${formatCurrency(plan.totalAvailable)} can be transferred back now`);
             return;
-        }
+        }   
 
         let transferBackTrail = plan.allocations.map(a => ({
             budgetId: a.budgetId,
@@ -2417,9 +2944,9 @@ async function handleAddExpense() {
         }));
 
         let uniqueSources = [...new Set(transferBackTrail.map(a => a.sourceId))];
-        let resolvedSourceId = uniqueSources.length === 1 ? uniqueSources[0] : null;
 
-        if (!resolvedSourceId) {
+        // ⚠️ FIX (Issue 01): no longer requires exactly one source.
+        if (!uniqueSources.length) {
             showToast("Unable to resolve source for selected budget");
             return;
         }
@@ -2435,7 +2962,7 @@ async function handleAddExpense() {
             budgetId,
             allocationTrail: transferBackTrail.map(a => ({ budgetId: a.budgetId, amount: a.amount })),
             transferBackTrail,
-            linkedSourceSavingsId: resolvedSourceId,
+            linkedSourceSavingsId: uniqueSources[0] || null,
             linkedSourceSavingsIds: uniqueSources,
             attachmentId: nonExpAttachment.attachmentId,
             attachmentStatus: nonExpAttachment.status,
@@ -2961,6 +3488,8 @@ window.addEventListener("load", function () {
         startHeadline();
         if (typeof refreshSettingsPanels === "function") refreshSettingsPanels();
         startAutoBackup();
+        autoResolveClosedWalletTopups();
+        notifyPendingUnassignedTopups();
         refreshDashboardLayout();
 
     } catch (e) {
@@ -2988,6 +3517,10 @@ window.showScreen = function showScreen(id) {
     if (id === "history") loadHistory();
     if (id === "budgetEntries") {
         renderBudgetEntries();
+    }
+    if (id === "budget") {
+        renderBudgetWalletOverview();
+        if (typeof loadBudgetScreen === "function") loadBudgetScreen();
     }
     if (id === "graph") {
         loadGraph();
