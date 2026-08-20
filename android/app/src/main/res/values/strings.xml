@@ -1,7 +1,0 @@
-<?xml version='1.0' encoding='utf-8'?>
-<resources>
-    <string name="app_name">MyMoneyTracker</string>
-    <string name="title_activity_main">MyMoneyTracker</string>
-    <string name="package_name">com.gopichand.mymoneytracker</string>
-    <string name="custom_url_scheme">com.gopichand.mymoneytracker</string>
-</resources>
