@@ -1068,6 +1068,36 @@ async function addSavings() {
         entry.attachmentError = attachmentMeta.error;
         data.push(entry);
     }
+    else if (type === "adjustment") {
+        const sourceId = String(sourceSelect?.value || "");
+        const direction = document.getElementById("sAdjustmentDirection")?.value || "increase";
+
+        if (!sourceId) {
+            showToast("Select source ❗", "warning");
+            return;
+        }
+
+        if (!note || !note.trim()) {
+            showToast("Reason is required for adjustment ❗", "warning");
+            return;
+        }
+
+        const signedAmount = direction === "decrease" ? -Math.abs(amount) : Math.abs(amount);
+
+        const entry = createSavingsEntry({
+            type: "adjustment",
+            amount: signedAmount,
+            sourceId,
+            entity,
+            payment,
+            note,
+            date
+        });
+        if (attachmentMeta.attachmentId) entry.attachmentId = attachmentMeta.attachmentId;
+        entry.attachmentStatus = attachmentMeta.status;
+        entry.attachmentError = attachmentMeta.error;
+        data.push(entry);
+    }
     else {
         showToast("Unsupported savings transaction type", "warning");
         return;
@@ -1246,24 +1276,7 @@ function upsertActiveBudgetWalletFromSavings(entry) {
     localStorage.setItem("budgets", JSON.stringify(budgets));
     return wallet;
 }
-// ⚠️ NEW (Issue 02): Funding-source traceability for a Budget Wallet.
-// Derived on demand from Savings entries — nothing new is stored, so this
-// can never drift out of sync with the actual transaction history.
-function getBudgetFundingSources(budgetId) {
-    if (!budgetId) return [];
 
-    let savings = (typeof getSavings === "function") ? getSavings() : (JSON.parse(localStorage.getItem("savingsTransactions")) || []);
-
-    return savings
-        .filter(entry => entry && String(entry.budgetWalletId || entry.targetBudgetId || "") === String(budgetId))
-        .map(entry => ({
-            sourceId: entry.sourceId || null,
-            amount: Math.abs(Number(entry.amount || 0)),
-            date: entry.date || entry.createdAt || null,
-            note: entry.note || ""
-        }))
-        .sort((a, b) => new Date(a.date) - new Date(b.date));
-}
 // =========================
 // 🗓️ FORMAT HELPERS
 // =========================
@@ -1528,48 +1541,6 @@ function renderSavingsHistory(data) {
 
         container.appendChild(div);
     });
-}
-// =========================
-// 🔗 SOURCES
-// =========================
-function isSavingsSourceSeed(entry) {
-    if (!entry) return false;
-    return entry.type === "income" || entry.type === "deposit";
-}
-
-function buildSavingsSourceLedger(entries) {
-    let data = Array.isArray(entries) ? entries : [];
-
-    let sources = data.filter(isSavingsSourceSeed);
-
-    return sources.map(s => {
-        let sid = String(s.id);
-
-        let incoming = data
-            .filter(t => String(t.id) !== sid && String(t.sourceId) === sid && Number(t.amount || 0) > 0)
-            .reduce((sum, t) => sum + Number(t.amount || 0), 0);
-
-        let outgoing = data
-            .filter(t => String(t.id) !== sid && String(t.sourceId) === sid && Number(t.amount || 0) < 0)
-            .reduce((sum, t) => sum + Math.abs(Number(t.amount || 0)), 0);
-
-        let base = Math.max(0, Number(s.amount || 0));
-        let remaining = base + incoming - outgoing;
-
-        return {
-            source: s,
-            incoming,
-            outgoing,
-            remaining
-        };
-    });
-}
-
-function getSourceRemainingById(sourceId, entries) {
-    let scoped = getSavings() || [];
-    let ledger = buildSavingsSourceLedger(entries || scoped);
-    let row = ledger.find(x => String(x.source.id) === String(sourceId));
-    return row ? Number(row.remaining || 0) : 0;
 }
 
 // Returns all source-seed entries (used as available sources)
@@ -2497,9 +2468,10 @@ function handleSavingsTypeChange() {
     let refund = document.getElementById("refundWrapper");
     let person = document.getElementById("sPersonWrapper");
     let personHelp = document.getElementById("sPersonHelp");
+    let adjustmentDirection = document.getElementById("sAdjustmentDirectionWrapper");
 
     // reset
-    [source, refund, person]
+    [source, refund, person, adjustmentDirection]
         .filter(Boolean)
         .forEach(el => { el.style.display = "none"; });
 
@@ -2517,6 +2489,12 @@ function handleSavingsTypeChange() {
         return;
     }
 
+    if (type === "adjustment") {
+        if (source) source.style.display = "block";
+        if (adjustmentDirection) adjustmentDirection.style.display = "block";
+        loadSourceOptions({ includeUsed: true });
+        return;
+    }
     if (type === "refund") {
         if (refund) refund.style.display = "block";
         if (person) person.style.display = "block";

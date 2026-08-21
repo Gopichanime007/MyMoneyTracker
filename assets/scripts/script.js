@@ -646,6 +646,24 @@ function getSourceRemainingById(sourceId, entries) {
     return row ? Number(row.remaining || 0) : 0;
 }
 
+// ⚠️ Funding-source traceability for a Budget Wallet (Issue 02 / Issue 01).
+// Derived on demand from Savings entries — nothing new is stored, so this
+// can never drift out of sync with the actual transaction history.
+function getBudgetFundingSources(budgetId) {
+    if (!budgetId) return [];
+
+    let savings = (typeof getSavings === "function") ? getSavings() : [];
+
+    return savings
+        .filter(entry => entry && String(entry.budgetWalletId || entry.targetBudgetId || "") === String(budgetId))
+        .map(entry => ({
+            sourceId: entry.sourceId || null,
+            amount: Math.abs(Number(entry.amount || 0)),
+            date: entry.date || entry.createdAt || null,
+            note: entry.note || ""
+        }))
+        .sort((a, b) => new Date(a.date) - new Date(b.date));
+}
 
 // Manually (or automatically, at closure) assign part or all of an
 // Unassigned Top-Up to a real Savings source. Creates a real Savings
@@ -792,8 +810,16 @@ function renderBudgetWalletOverview() {
     let wallet = periodKey ? budgets.find(b => b && b.periodKey === periodKey && b.isBudgetWallet === true) : null;
 
     let totalAllocated = wallet ? Number(wallet.totalAllocated || 0) : 0;
-    let spent = wallet ? Math.max(0, getNetSpentForBudget(wallet.budgetId, getExpenses())) : 0;
-    let remaining = totalAllocated - spent;
+    let expenses = getExpenses();
+
+    // Remaining keeps using the existing, already-correct net-spent figure
+    // (adjustments included) — untouched on purpose.
+    let netSpentIncludingAdjustments = wallet ? Math.max(0, getNetSpentForBudget(wallet.budgetId, expenses)) : 0;
+    let remaining = totalAllocated - netSpentIncludingAdjustments;
+
+    // What the user actually sees as "Spent" excludes adjustments.
+    let realSpent = wallet ? Math.max(0, getRealSpentForBudget(wallet.budgetId, expenses)) : 0;
+    let netAdjustment = wallet ? getNetAdjustmentForBudget(wallet.budgetId, expenses) : 0;
 
     let topups = getUnassignedTopups();
     let unassignedTotal = wallet
@@ -811,10 +837,10 @@ function renderBudgetWalletOverview() {
 
     setText("walletAssignedTotal", assignedTotal);
     setText("walletUnassignedTotal", unassignedTotal);
-    setText("walletSpentTotal", spent);
+    setText("walletSpentTotal", realSpent);
     setText("walletRemainingTotal", remaining);
+    setText("walletAdjustmentTotal", netAdjustment);
 }
-
 function handleCreateUnassignedTopup() {
     let amountInput = document.getElementById("topupAmount");
     let noteInput = document.getElementById("topupNote");
@@ -1785,6 +1811,69 @@ function getNetSpentForBudget(budgetId, expensesList) {
         else if (Number(e.amount || 0) > 0) {
             net -= contrib;
         }
+    }
+
+    return roundCurrency(net);
+}
+
+// "Real" spending only — excludes Adjustment entries, since a correction
+// isn't the same thing as spending. getNetSpentForBudget stays untouched
+// on purpose: Remaining-balance math everywhere else in the app already
+// correctly factors adjustments in, and shouldn't be disturbed.
+function getRealSpentForBudget(budgetId, expensesList) {
+    let expenses = Array.isArray(expensesList) ? expensesList : getExpenses();
+    let net = 0;
+
+    for (let e of expenses) {
+        if (!e || e.type === "adjustment") continue;
+
+        let contrib = 0;
+        if (Array.isArray(e.allocationTrail) && e.allocationTrail.length) {
+            for (let a of e.allocationTrail) {
+                if (String(a.budgetId) === String(budgetId)) {
+                    contrib += Math.abs(a.amount || 0);
+                }
+            }
+        } else if (String(e.budgetId) === String(budgetId)) {
+            contrib += Math.abs(e.amount || 0);
+        }
+
+        if (!contrib) continue;
+
+        if (e.type === 'recovery' || e.type === 'refund' || e.type === 'income' || e.type === 'budget_income') {
+            net -= contrib;
+        } else if (e.type === 'transfer_back' || e.amount < 0 || e.type === 'expense' || e.type === 'loss' || e.type === 'transfer') {
+            net += contrib;
+        } else if (Number(e.amount || 0) > 0) {
+            net -= contrib;
+        }
+    }
+
+    return roundCurrency(net);
+}
+
+// Net Adjustment total for a Budget Wallet, signed — negative means
+// corrected downward, positive means corrected upward.
+function getNetAdjustmentForBudget(budgetId, expensesList) {
+    let expenses = Array.isArray(expensesList) ? expensesList : getExpenses();
+    let net = 0;
+
+    for (let e of expenses) {
+        if (!e || e.type !== "adjustment") continue;
+
+        let contrib = 0;
+        if (Array.isArray(e.allocationTrail) && e.allocationTrail.length) {
+            for (let a of e.allocationTrail) {
+                if (String(a.budgetId) === String(budgetId)) {
+                    contrib += Math.abs(Number(a.amount) || 0);
+                }
+            }
+        } else if (String(e.budgetId) === String(budgetId)) {
+            contrib += Math.abs(Number(e.amount) || 0);
+        }
+
+        if (!contrib) continue;
+        net += Number(e.amount || 0) < 0 ? -contrib : contrib;
     }
 
     return roundCurrency(net);
@@ -2935,7 +3024,7 @@ async function handleAddExpense() {
         if (!plan.allocations.length || plan.remaining > 0) {
             showToast(`Only ${formatCurrency(plan.totalAvailable)} can be transferred back now`);
             return;
-        }   
+        }
 
         let transferBackTrail = plan.allocations.map(a => ({
             budgetId: a.budgetId,
@@ -6383,6 +6472,10 @@ function loadBudgetOptions(options = null) {
             let sourceId = resolveBudgetSourceIdForTransferBack(b, savingsEntries);
             return available > 0 && !!sourceId;
         });
+    }
+    if (mode === "adjustment") {
+        let activeKey = typeof getActivePeriodKey === "function" ? getActivePeriodKey() : null;
+        filtered = budgets.filter(b => b && activeKey && b.periodKey === activeKey);
     }
 
     if (!filtered.length) {
