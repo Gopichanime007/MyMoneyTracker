@@ -124,8 +124,12 @@
   function getLedgerDataSourceEntries(expenses) {
     return (Array.isArray(expenses) ? expenses : [])
       .filter((entry) => {
-        const amount = safeNumber(entry && entry.amount, 0);
-        return entry && (entry.type === 'expense' || entry.type === 'loss' || amount < 0);
+        if (!entry) return false;
+        // Corrections and Budget-closure returns aren't real spending —
+        // don't let them inflate a day's "Spent" figure.
+        if (entry.type === 'adjustment' || entry.type === 'transfer_back') return false;
+        const amount = safeNumber(entry.amount, 0);
+        return entry.type === 'expense' || entry.type === 'loss' || amount < 0;
       })
       .filter((entry) => !activeExpenseFilter || activeExpenseFilter(entry))
       .map((entry) => ({
@@ -134,18 +138,8 @@
       }));
   }
 
-  function createSummaryRow(entries, kind, openingBalance, closingBalance, label) {
-    return {
-      type: 'summary',
-      kind, // 'week' | 'month' — used as the CSS row class (week-summary / month-summary)
-      label,
-      budget: entries.reduce((sum, e) => sum + e.budget, 0),
-      spent: entries.reduce((sum, e) => sum + e.spent, 0),
-      savings: entries.reduce((sum, e) => sum + e.savings, 0),
-      deficit: entries.reduce((sum, e) => sum + e.deficit, 0),
-      openingBalance,
-      closingBalance
-    };
+  function getDaysInMonth(date) {
+    return new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate();
   }
 
   /**
@@ -160,8 +154,6 @@
     const expenses = Array.isArray(expensesOverride) ? expensesOverride : getStoredExpenses();
     const rawEntries = getLedgerDataSourceEntries(expenses);
 
-    // Step 1 — sum expenses per calendar date (rule 2, rule 8: only
-    // dates that actually have expense records are kept).
     const dailyTotals = new Map();
     rawEntries.forEach((entry) => {
       const dateKey = getDateKey(entry.date);
@@ -169,29 +161,23 @@
       dailyTotals.set(dateKey, (dailyTotals.get(dateKey) || 0) + entry.spent);
     });
 
-    // Step 2 — ascending date order (rule 9).
     const sortedDates = [...dailyTotals.keys()].sort((a, b) => new Date(a) - new Date(b));
 
     const budget = safeNumber(dailyBudget, 100);
     const rows = [];
-    let runningBalance = 0; // rule 3: previous running balance starts at 0
 
-    let weekBucket = [];
-    let weekOpeningBalance = 0;
-    let monthBucket = [];
-    let monthOpeningBalance = 0;
+    // ⚠️ Week and Month each track against their OWN fixed budget
+    // (dailyBudget × 7, dailyBudget × days-in-that-month) — every new
+    // period opens fresh at its full budget, with no carryover of the
+    // previous period's surplus or deficit.
+    let weekSpentSoFar = 0;
     let weekCounter = 0;
+    let monthSpentSoFar = 0;
 
     sortedDates.forEach((dateKey, index) => {
-      // Snapshot the balance BEFORE today's entry, the moment a
-      // new bucket starts — this becomes that bucket's opening balance.
-      if (weekBucket.length === 0) weekOpeningBalance = runningBalance;
-      if (monthBucket.length === 0) monthOpeningBalance = runningBalance;
-
       const date = parseDate(dateKey);
       const spent = dailyTotals.get(dateKey);
 
-      // Step 3 — Savings / Deficit (rule 2's if/else-if/else).
       let savings = 0;
       let deficit = 0;
       if (spent < budget) {
@@ -200,8 +186,9 @@
         deficit = spent - budget;
       }
 
-      // Step 4 — running balance (rule 3).
-      runningBalance += savings - deficit;
+      const weekBudget = budget * 7;
+      weekSpentSoFar += spent;
+      monthSpentSoFar += spent;
 
       const row = {
         type: 'entry',
@@ -212,15 +199,12 @@
         spent,
         savings,
         deficit,
-        runningBalance
+        // How much of THIS week's ₹weekBudget is left after today.
+        runningBalance: weekBudget - weekSpentSoFar
       };
 
       rows.push(row);
-      weekBucket.push(row);
-      monthBucket.push(row);
 
-      // Step 5 — decide if a week/month boundary was just crossed,
-      // by peeking at the next date that actually has expenses.
       const nextDateKey = sortedDates[index + 1];
       const nextDate = nextDateKey ? parseDate(nextDateKey) : null;
       const isLastRecord = !nextDate;
@@ -230,13 +214,35 @@
 
       if (weekEnds) {
         weekCounter += 1;
-        rows.push(createSummaryRow(weekBucket, 'week', weekOpeningBalance, runningBalance, `Week ${weekCounter} Summary`));
-        weekBucket = [];
+        rows.push({
+          type: 'summary',
+          kind: 'week',
+          label: `Week ${weekCounter} Summary`,
+          budget: weekBudget,
+          spent: weekSpentSoFar,
+          savings: Math.max(0, weekBudget - weekSpentSoFar),
+          deficit: Math.max(0, weekSpentSoFar - weekBudget),
+          openingBalance: weekBudget,
+          closingBalance: weekBudget - weekSpentSoFar
+        });
+        weekSpentSoFar = 0;
       }
 
       if (monthEnds) {
-        rows.push(createSummaryRow(monthBucket, 'month', monthOpeningBalance, runningBalance, `${getMonthLabel(date)} Summary`));
-        monthBucket = [];
+        const daysInMonth = getDaysInMonth(date);
+        const monthBudget = budget * daysInMonth;
+        rows.push({
+          type: 'summary',
+          kind: 'month',
+          label: `${getMonthLabel(date)} Summary`,
+          budget: monthBudget,
+          spent: monthSpentSoFar,
+          savings: Math.max(0, monthBudget - monthSpentSoFar),
+          deficit: Math.max(0, monthSpentSoFar - monthBudget),
+          openingBalance: monthBudget,
+          closingBalance: monthBudget - monthSpentSoFar
+        });
+        monthSpentSoFar = 0;
       }
     });
 
@@ -366,6 +372,7 @@
   root.initDailyBudgetLedgerPage = initDailyBudgetLedgerPage;
   root.setLedgerFilter = setLedgerFilter;
   root.clearLedgerFilter = clearLedgerFilter;
+  root.handleBudgetSave = handleBudgetSave;
 
   if (typeof document !== 'undefined') {
     document.addEventListener('DOMContentLoaded', initDailyBudgetLedgerPage);

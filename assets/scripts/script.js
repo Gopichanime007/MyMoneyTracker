@@ -536,7 +536,7 @@ function getOrCreateActiveBudgetWallet() {
             id: Date.now(),
             type: "budget",
             budgetId: `budget_wallet_${periodKey}_${uid}`,
-            sourceId: "savings_wallet",
+            sourceId: null,
             totalAllocated: 0,
             entity: "Budget Wallet",
             note: "Auto Budget Wallet",
@@ -5374,14 +5374,9 @@ function onDailyLedgerTabOpened() {
     if (saveBtn && !saveBtn.dataset.ledgerBound) {
         saveBtn.dataset.ledgerBound = "true";
         saveBtn.addEventListener("click", function () {
-            let budgetInput = document.getElementById("dailyBudgetInput");
-            let weekStartSelect = document.getElementById("weekStartDaySelect");
-            let config = {
-                dailyBudget: Number(budgetInput ? budgetInput.value : 0) || 0,
-                weekStartDay: Number(weekStartSelect ? weekStartSelect.value : 1) || 1
-            };
-            localStorage.setItem("dailyBudgetLedgerConfig", JSON.stringify(config));
-            window.renderDailyBudgetLedger();
+            if (typeof window.handleBudgetSave === "function") {
+                window.handleBudgetSave();
+            }
         });
     }
 }
