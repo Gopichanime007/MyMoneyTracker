@@ -2880,8 +2880,9 @@ async function deleteSavings(id) {
 
     saveSavings(data);
 
-    // 🔥 adjust budget
-    if (entry.type === "budget_allocation") {
+    // 🔥 adjust budget — covers any funding entry type, matched by the
+    // real budgetWalletId link.
+    if (entry.budgetWalletId) {
         adjustBudgetAfterDelete(entry);
     }
 
@@ -2889,27 +2890,18 @@ async function deleteSavings(id) {
 
     showToast("Deleted successfully 🗑", "success");
 }
+// ⚠️ FIX: match by budgetWalletId — the real, precise link — instead of
+// entity+period guesswork. Also now covers every funding entry type
+// (normal Move-to-Budget AND resolved Unassigned Top-Ups), not just one.
 function adjustBudgetAfterDelete(entry) {
+    if (!entry || !entry.budgetWalletId) return;
 
     let budgets = JSON.parse(localStorage.getItem("budgets")) || [];
-
-    let periodKey = entry.periodKey;
-    let fallbackMonth = entry.monthKey;
-
-    let budget = budgets.find(b =>
-        b.entity === entry.entity &&
-        (
-            (periodKey && b.periodKey === periodKey) ||
-            (!periodKey && b.monthKey === fallbackMonth)
-        )
-    );
+    let budget = budgets.find(b => b && String(b.budgetId || b.id || "") === String(entry.budgetWalletId));
 
     if (budget) {
-        budget.totalAllocated -= Math.abs(entry.amount);
-
-        if (budget.totalAllocated < 0) {
-            budget.totalAllocated = 0;
-        }
+        budget.totalAllocated = Math.max(0, Number(budget.totalAllocated || 0) - Math.abs(Number(entry.amount) || 0));
+        budget.updatedAt = new Date().toISOString();
     }
 
     localStorage.setItem("budgets", JSON.stringify(budgets));

@@ -1094,6 +1094,21 @@ function summarizeDeleteImpact(plan) {
     if ((plan.attachments || []).length) parts.push(`${plan.attachments.length} attachments`);
     return parts.length ? parts.join(", ") : "no dependent records";
 }
+// Which Budget Wallets are actually affected if these specific Savings
+// entries get deleted — matched by the real budgetWalletId link on each
+// funding transaction, not a wallet's own (now shared/ambiguous)
+// sourceId field.
+function getBudgetWalletsAffectedBySavingsIds(savingsIdSet, savingsList, budgetsList) {
+    let affected = new Set();
+    (Array.isArray(savingsList) ? savingsList : []).forEach(s => {
+        if (!s || !s.budgetWalletId) return;
+        if (!savingsIdSet.has(String(s.id))) return;
+        let bid = String(s.budgetWalletId);
+        let exists = (Array.isArray(budgetsList) ? budgetsList : []).some(b => String((b && (b.budgetId || b.id)) || "") === bid);
+        if (exists) affected.add(bid);
+    });
+    return affected;
+}
 
 function validateTransactionDependencies(scope, ids, cascade) {
     let idSet = new Set((Array.isArray(ids) ? ids : [ids]).map(v => String(v)));
@@ -1152,17 +1167,17 @@ function validateTransactionDependencies(scope, ids, cascade) {
                 }
             });
 
-            let deletedSourceIds = new Set([...savingsDelete]);
+            // let deletedSourceIds = new Set([...savingsDelete]);
 
-            budgets.forEach(b => {
-                if (!b || !b.sourceId) return;
-                let bid = String(b.budgetId || b.id || "");
-                if (!bid || budgetDelete.has(bid)) return;
-                if (deletedSourceIds.has(String(b.sourceId)) && cascade) {
-                    budgetDelete.add(bid);
-                    changed = true;
-                }
-            });
+            // budgets.forEach(b => {
+            //     if (!b || !b.sourceId) return;
+            //     let bid = String(b.budgetId || b.id || "");
+            //     if (!bid || budgetDelete.has(bid)) return;
+            //     if (deletedSourceIds.has(String(b.sourceId)) && cascade) {
+            //         budgetDelete.add(bid);
+            //         changed = true;
+            //     }
+            // });
 
             expenses.forEach(e => {
                 let eid = String(e.id);
@@ -1220,10 +1235,12 @@ function validateTransactionDependencies(scope, ids, cascade) {
         })
         .map(s => String(s.id));
 
-    let childBudgets = budgets
-        .filter(b => scope === "savings" && b && b.sourceId && idSet.has(String(b.sourceId)))
-        .map(b => String(b.budgetId || b.id || ""))
-        .filter(Boolean);
+    // ⚠️ FIX: a Budget Wallet can be funded by several Savings entries
+    // now, so "does this affect a budget" is answered by checking real
+    // funding links, not a wallet's own sourceId.
+    let childBudgets = scope === "savings"
+        ? [...getBudgetWalletsAffectedBySavingsIds(idSet, savings, budgets)]
+        : [];
 
     let attachments = [];
     expenses.forEach(e => { if (expenseDelete.has(String(e.id)) && e.attachmentId) attachments.push(String(e.attachmentId)); });
@@ -1269,9 +1286,9 @@ async function executeDeletePlan(plan) {
         budgets = budgets.filter(b => !budgetIds.has(String(b.budgetId || b.id || "")));
     }
 
-    if (!budgetIds.size && removedSavings.length && typeof adjustBudgetAfterDelete === "function") {
+    if (removedSavings.length && typeof adjustBudgetAfterDelete === "function") {
         removedSavings.forEach(entry => {
-            if (entry && entry.type === "budget_allocation") {
+            if (entry && entry.budgetWalletId) {
                 try { adjustBudgetAfterDelete(entry); } catch (e) { }
             }
         });

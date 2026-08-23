@@ -88,7 +88,8 @@
 
       <div class="section-heading">
         <h4>Items</h4>
-        <button class="secondary tiny-btn" id="addOrderItemBtn" type="button" onclick="openOrderItemModal()">Add Item</button>
+        <button class="secondary tiny-btn" id="addOrderItemBtn" type="button" onclick="openOrderItemModal()">Add
+          Item</button>
       </div>
 
       <div class="table-wrapper">
@@ -111,7 +112,8 @@
 
       <div class="section-heading">
         <h4>Charges</h4>
-        <button class="secondary tiny-btn" id="addOrderChargeBtn" type="button" onclick="openOrderChargeModal()">Add Charge</button>
+        <button class="secondary tiny-btn" id="addOrderChargeBtn" type="button" onclick="openOrderChargeModal()">Add
+          Charge</button>
       </div>
       <div id="orderChargesList"></div>
 
@@ -142,10 +144,14 @@
         <h4>Actions</h4>
       </div>
       <div class="workflow-actions" id="orderWorkflowActions">
-        <button class="primary" type="button" data-order-action="confirmed" onclick="completePurchase()">Confirm</button>
-        <button class="secondary" type="button" data-order-action="processing" onclick="advanceOrderStatus('processing')">Process</button>
-        <button class="secondary" type="button" data-order-action="completed" onclick="advanceOrderStatus('completed')">Complete</button>
-        <button class="secondary danger" type="button" data-order-action="cancelled" onclick="cancelOrder()">Cancel</button>
+        <button class="primary" type="button" data-order-action="confirmed"
+          onclick="completePurchase()">Confirm</button>
+        <button class="secondary" type="button" data-order-action="processing"
+          onclick="advanceOrderStatus('processing')">Process</button>
+        <button class="secondary" type="button" data-order-action="completed"
+          onclick="advanceOrderStatus('completed')">Complete</button>
+        <button class="secondary danger" type="button" data-order-action="cancelled"
+          onclick="cancelOrder()">Cancel</button>
       </div>
 
       <details class="secondary-accordion">
@@ -251,6 +257,7 @@
   <script src="../assets/scripts/storage.js"></script>
   <script src="../assets/scripts/script.js"></script>
   <script src="../assets/scripts/order.js"></script>
+  <script src="assets/scripts/applyTheme.js"></script>
 </body>
 
 </html>
