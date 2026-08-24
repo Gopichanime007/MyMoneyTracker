@@ -110,8 +110,22 @@
       <div class="card">
         <h3>Add Expense</h3>
 
-        <label for="entryType">Entry Type</label>
-        <select id="entryType" onchange="handleEntryTypeUIChange()">
+        <div class="tab-bar" data-tab-group="entryTypeTabs">
+          <button type="button" class="tab-bar-btn is-active" data-tab-key="expense"
+            onclick="selectEntryType('expense')">Expense</button>
+          <button type="button" class="tab-bar-btn" data-tab-key="income"
+            onclick="selectEntryType('income')">Income</button>
+          <button type="button" class="tab-bar-btn" data-tab-key="transfer"
+            onclick="selectEntryType('transfer')">Transfer</button>
+          <button type="button" class="tab-bar-btn" data-tab-key="refund"
+            onclick="selectEntryType('refund')">Refund</button>
+          <button type="button" class="tab-bar-btn" data-tab-key="transfer_back"
+            onclick="selectEntryType('transfer_back')">Transfer Back</button>
+          <button type="button" class="tab-bar-btn" data-tab-key="adjustment"
+            onclick="selectEntryType('adjustment')">Adjustment</button>
+        </div>
+
+        <select id="entryType" class="hidden" onchange="handleEntryTypeUIChange()">
           <option value="expense">Expense</option>
           <option value="income">Income</option>
           <option value="transfer">Transfer</option>
@@ -297,7 +311,7 @@
           <button type="button" class="tab-bar-btn is-active" data-tab-key="overview"
             onclick="activateTab('budgetWalletTabs','overview', renderBudgetWalletOverview)">Overview</button>
           <button type="button" class="tab-bar-btn" data-tab-key="topup"
-            onclick="activateTab('budgetWalletTabs','topup')">Top-Up</button>
+            onclick="activateTab('budgetWalletTabs','topup', prefillTopupForm)">Top-Up</button>
           <button type="button" class="tab-bar-btn" data-tab-key="apply"
             onclick="activateTab('budgetWalletTabs','apply', renderApplySourceTab)">Apply Source</button>
         </div>
@@ -413,99 +427,103 @@
     <!-- ================= SETTINGS ================= -->
     <section id="settings" class="screen">
       <div class="card">
-
         <h3>Settings</h3>
-        <h4>Currency</h4>
-        <select onchange="changeCurrency(this.value)">
-          <option value="INR">INR (₹)</option>
-          <option value="USD">USD ($)</option>
-          <option value="EUR">EUR (€)</option>
-          <option value="GBP">GBP (£)</option>
-        </select>
-        <!-- Theme -->
-        <h4>Appearance Mode</h4>
-        <select id="appearanceModeSelect" onchange="applyAppearanceSettings(this.value)">
-          <option value="metallic">Metallic</option>
-          <option value="matte">Matte</option>
-          <option value="glossy">Glossy</option>
-          <option value="chromium">Chromium</option>
-          <option value="glass">Glass</option>
-          <option value="paper">Paper</option>
-          <option value="neon">Neon</option>
-        </select>
 
-        <h4>Accent Color</h4>
-        <select id="accentColorSelect" onchange="handleTheme(this.value)">
-          <option value="purple">Purple</option>
-          <option value="blue">Blue</option>
-          <option value="emerald">Emerald</option>
-          <option value="orange">Orange</option>
-          <option value="red">Red</option>
-          <option value="custom">Custom</option>
-        </select>
-        <input type="text" id="hexInput" placeholder="Apply custom theme using hex code (e.g. #4caf50)">
-        <button class="secondary" onclick="applyHex()">Apply</button>
-
-        <input type="color" id="colorPicker" class="hidden" onchange="applyCustomColor(this.value)">
-
-        <!-- Category -->
-        <h4>Add Category</h4>
-        <input type="text" id="newCategory" placeholder="New category">
-        <button class="primary" onclick="addCategory()">Add</button>
-
-        <h4 class="clickable-header" onclick="toggleCategory()">
-          Your Categories <span id="catArrow">></span>
-        </h4>
-
-        <!-- Backup -->
-        <h4>Backup & Restore</h4>
-        <div class="btn-group">
-          <button class="primary" onclick="openBackupOptions()">📤 Backup</button>
-          <button class="secondary" onclick="openImportModal()">📥 Import Data</button>
-          <button class="secondary" onclick="openNoSeriesModal()">🔢 No Series</button>
-
-          <!-- <button class="secondary" onclick="runMigration()"> 🔄 Fix Old Data </button> -->
-          <button class="secondary" onclick="openConfirm()">🗑 Reset App</button>
+        <div class="tab-bar" data-tab-group="settingsTabs">
+          <button type="button" class="tab-bar-btn is-active" data-tab-key="general"
+            onclick="activateTab('settingsTabs','general')">General</button>
+          <button type="button" class="tab-bar-btn" data-tab-key="categories"
+            onclick="activateTab('settingsTabs','categories')">Categories</button>
+          <button type="button" class="tab-bar-btn" data-tab-key="backup"
+            onclick="activateTab('settingsTabs','backup', refreshSettingsPanels)">Backup & Data</button>
         </div>
 
-        <h4>Automatic Backup</h4>
-        <div class="form-group">
-          <label for="autoBackupEnabled">
-            <input id="autoBackupEnabled" type="checkbox" onchange="applyAutoBackupSettings()"
-              class="inline-checkbox" />
-            Enable Auto Backup
-          </label>
-
-          <label for="autoBackupFrequency">Backup Frequency</label>
-          <select id="autoBackupFrequency" onchange="applyAutoBackupSettings()">
-            <option value="daily">Daily</option>
-            <option value="weekly">Weekly</option>
-            <option value="monthly">Monthly</option>
+        <div class="tab-panel is-active" data-tab-group="settingsTabs" data-tab-key="general">
+          <h4>Currency</h4>
+          <select onchange="changeCurrency(this.value)">
+            <option value="INR">INR (₹)</option>
+            <option value="USD">USD ($)</option>
+            <option value="EUR">EUR (€)</option>
+            <option value="GBP">GBP (£)</option>
           </select>
 
-          <label for="autoBackupTarget">Backup Target</label>
-          <select id="autoBackupTarget" onchange="applyAutoBackupSettings()">
-            <option value="local_download">Local File Download</option>
-            <option value="google_drive">Google Drive (future-ready)</option>
-            <option value="one_drive">OneDrive (future-ready)</option>
+          <h4>Appearance Mode</h4>
+          <select id="appearanceModeSelect" onchange="applyAppearanceSettings(this.value)">
+            <option value="metallic">Metallic</option>
+            <option value="matte">Matte</option>
+            <option value="glossy">Glossy</option>
+            <option value="chromium">Chromium</option>
+            <option value="glass">Glass</option>
+            <option value="paper">Paper</option>
+            <option value="neon">Neon</option>
           </select>
 
-          <small id="autoBackupLastRun" class="muted-note">Last Backup: Not available</small>
-          <small id="autoBackupNextRun" class="muted-note">Next Scheduled Backup: Not available</small>
-          <small id="autoBackupRetentionState" class="muted-note">Retention: Not available</small>
-          <small id="autoBackupRuntimeState" class="muted-note">Export runtime: checking capabilities...</small>
+          <h4>Accent Color</h4>
+          <select id="accentColorSelect" onchange="handleTheme(this.value)">
+            <option value="purple">Purple</option>
+            <option value="blue">Blue</option>
+            <option value="emerald">Emerald</option>
+            <option value="orange">Orange</option>
+            <option value="red">Red</option>
+            <option value="custom">Custom</option>
+          </select>
+          <input type="text" id="hexInput" placeholder="Apply custom theme using hex code (e.g. #4caf50)">
+          <button class="secondary" onclick="applyHex()">Apply</button>
 
-          <button class="secondary" type="button" onclick="runAutoBackupNow()">Run Backup Now</button>
+          <input type="color" id="colorPicker" class="hidden" onchange="applyCustomColor(this.value)">
         </div>
 
-        <!-- <h4>💸 Loans / Recoveries</h4>
-        <div id="loanSummary"></div>
+        <div class="tab-panel" data-tab-group="settingsTabs" data-tab-key="categories">
+          <h4>Add Category</h4>
+          <input type="text" id="newCategory" placeholder="New category">
+          <button class="primary" onclick="addCategory()">Add</button>
+
+          <h4 class="clickable-header" onclick="toggleCategory()">
+            Your Categories <span id="catArrow">></span>
+          </h4>
+        </div>
+
+        <div class="tab-panel" data-tab-group="settingsTabs" data-tab-key="backup">
+          <h4>Backup & Restore</h4>
+          <div class="btn-group">
+            <button class="primary" onclick="openBackupOptions()">📤 Backup</button>
+            <button class="secondary" onclick="openImportModal()">📥 Import Data</button>
+            <button class="secondary" onclick="openNoSeriesModal()">🔢 No Series</button>
+            <button class="secondary" onclick="openConfirm()">🗑 Reset App</button>
+          </div>
+
+          <h4>Automatic Backup</h4>
+          <div class="form-group">
+            <label for="autoBackupEnabled">
+              <input id="autoBackupEnabled" type="checkbox" onchange="applyAutoBackupSettings()"
+                class="inline-checkbox" />
+              Enable Auto Backup
+            </label>
+
+            <label for="autoBackupFrequency">Backup Frequency</label>
+            <select id="autoBackupFrequency" onchange="applyAutoBackupSettings()">
+              <option value="daily">Daily</option>
+              <option value="weekly">Weekly</option>
+              <option value="monthly">Monthly</option>
+            </select>
+
+            <label for="autoBackupTarget">Backup Target</label>
+            <select id="autoBackupTarget" onchange="applyAutoBackupSettings()">
+              <option value="local_download">Local File Download</option>
+              <option value="google_drive">Google Drive (future-ready)</option>
+              <option value="one_drive">OneDrive (future-ready)</option>
+            </select>
+
+            <small id="autoBackupLastRun" class="muted-note">Last Backup: Not available</small>
+            <small id="autoBackupNextRun" class="muted-note">Next Scheduled Backup: Not available</small>
+            <small id="autoBackupRetentionState" class="muted-note">Retention: Not available</small>
+            <small id="autoBackupRuntimeState" class="muted-note">Export runtime: checking capabilities...</small>
+
+            <button class="secondary" type="button" onclick="runAutoBackupNow()">Run Backup Now</button>
+          </div>
+        </div>
       </div>
-      <div class="app-signature">
-        Developed by <strong>Gopichaninme</strong>
-      </div> -->
     </section>
-
   </div>
 
   <!-- DATE MODAL -->

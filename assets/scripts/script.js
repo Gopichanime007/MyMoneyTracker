@@ -865,6 +865,7 @@ function handleCreateUnassignedTopup() {
 
     if (amountInput) amountInput.value = "";
     if (noteInput) noteInput.value = "";
+    prefillTopupForm();
 
     renderBudgetWalletOverview();
     if (typeof renderBudgetEntries === "function") renderBudgetEntries();
@@ -872,6 +873,20 @@ function handleCreateUnassignedTopup() {
     if (typeof loadDashboard === "function") loadDashboard();
 }
 
+// Pre-fills sensible defaults when the Top-Up tab opens — the whole
+// point of Top-Up is speed, so the form should already be ready to go.
+// Guarded so it never overwrites something you've already started typing.
+function prefillTopupForm() {
+    let dateInput = document.getElementById("topupDate");
+    if (dateInput && !dateInput.value) {
+        dateInput.value = new Date().toISOString().split("T")[0];
+    }
+
+    let noteInput = document.getElementById("topupNote");
+    if (noteInput && !noteInput.value) {
+        noteInput.value = "Quick top-up";
+    }
+}
 function renderApplySourceTab() {
     let container = document.getElementById("pendingTopupsList");
     if (!container) return;
@@ -1010,14 +1025,6 @@ function confirmAssignTopup() {
     renderBudgetWalletOverview();
     if (typeof loadSavings === "function") loadSavings();
     if (typeof loadSourceOptions === "function") loadSourceOptions();
-}
-
-// Section 11 rule: notify on open if anything still needs resolving.
-function notifyPendingUnassignedTopups() {
-    let pending = getPendingUnassignedTopups();
-    if (!pending.length) return;
-    let total = pending.reduce((sum, t) => sum + getRemainingUnassignedAmount(t), 0);
-    showToast(`${pending.length} unassigned top-up(s) totaling ${formatCurrency(total)} — resolve them in Budget → Apply Source`);
 }
 
 // Expose core storage helpers on `window` only if not already provided by another module.
@@ -2903,6 +2910,24 @@ function handleEntryTypeUIChange() {
     if (paymentWrapper) paymentWrapper.style.display = "block";
 }
 
+// Drives the Entry Type tab bar on the Add screen. Keeps the real
+// (hidden) <select id="entryType"> in sync so all existing save/
+// validation logic — which reads that select's value — keeps working
+// completely unchanged.
+function selectEntryType(type) {
+    let select = document.getElementById("entryType");
+    if (select) select.value = type;
+
+    let bar = document.querySelector('.tab-bar[data-tab-group="entryTypeTabs"]');
+    if (bar) {
+        bar.querySelectorAll(".tab-bar-btn").forEach(btn => {
+            btn.classList.toggle("is-active", btn.dataset.tabKey === type);
+        });
+    }
+
+    handleEntryTypeUIChange();
+}
+
 async function handleAddExpense() {
     // guard: ensure form exists on current page
     if (!document.getElementById || !document.getElementById("amount")) return;
@@ -3595,7 +3620,6 @@ window.addEventListener("load", function () {
         if (typeof refreshSettingsPanels === "function") refreshSettingsPanels();
         startAutoBackup();
         autoResolveClosedWalletTopups();
-        notifyPendingUnassignedTopups();
         refreshDashboardLayout();
 
     } catch (e) {
@@ -11572,7 +11596,16 @@ function generateHeadline() {
     let period = getActiveBudgetPeriod();
 
     let messages = [];
-
+    // ⚠️ Section 11: surface pending Unassigned Top-Ups persistently in
+    // the headline rotation instead of a one-time toast — parked/
+    // unresolved amounts can outlive their original period.
+    if (typeof getPendingUnassignedTopups === "function" && typeof getRemainingUnassignedAmount === "function") {
+        let pending = getPendingUnassignedTopups();
+        if (pending.length) {
+            let total = pending.reduce((sum, t) => sum + getRemainingUnassignedAmount(t), 0);
+            messages.push(`${pending.length} unassigned top-up(s) totaling ${formatCurrency(total)} — resolve in Budget → Apply Source.`);
+        }
+    }
     // =========================
     // 🚨 NO ACTIVE PERIOD
     // =========================
