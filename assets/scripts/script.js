@@ -7344,6 +7344,7 @@ function migrateDataVersion(payload, options = {}) {
         budgets: migrateBudgets(source.budgets),
         savings: migrateSavings(source.savings || source.savingsTransactions),
         budgetPeriods: Array.isArray(source.budgetPeriods) ? source.budgetPeriods.slice() : [],
+        unassignedTopups: Array.isArray(source.unassignedTopups) ? source.unassignedTopups.slice() : [],
         categories: Array.isArray(source.categories) ? source.categories.slice() : SCHEMA_DEFAULTS.categories.slice(),
         persons: Array.isArray(source.persons) ? source.persons.slice() : [],
         settings: migrateSettings(source.settings),
@@ -7378,6 +7379,7 @@ function applySchemaMigrationsToLocalStorage() {
             budgets: JSON.parse(localStorage.getItem("budgets") || "[]"),
             savings: JSON.parse(localStorage.getItem("savingsTransactions") || "[]"),
             budgetPeriods: JSON.parse(localStorage.getItem("bp") || "[]"),
+            unassignedTopups: JSON.parse(localStorage.getItem("unassignedTopups") || "[]"),
             categories: JSON.parse(localStorage.getItem("categories") || "[]"),
             persons: JSON.parse(localStorage.getItem("persons") || "[]"),
             settings: {
@@ -7407,6 +7409,7 @@ function applySchemaMigrationsToLocalStorage() {
         localStorage.setItem("budgets", JSON.stringify(migrated.budgets));
         localStorage.setItem("savingsTransactions", JSON.stringify(migrated.savings));
         localStorage.setItem("bp", JSON.stringify(migrated.budgetPeriods));
+        localStorage.setItem("unassignedTopups", JSON.stringify(migrated.unassignedTopups || []));
         localStorage.setItem("categories", JSON.stringify(migrated.categories));
         localStorage.setItem("persons", JSON.stringify(migrated.persons));
         localStorage.setItem("orders", JSON.stringify(migrated.orders));
@@ -8056,6 +8059,7 @@ function importData() {
         if (Array.isArray(data.categories)) localStorage.setItem("categories", JSON.stringify(data.categories));
         if (Array.isArray(data.persons)) localStorage.setItem("persons", JSON.stringify(data.persons));
         if (Array.isArray(data.budgetPeriods)) localStorage.setItem("bp", JSON.stringify(data.budgetPeriods));
+        if (Array.isArray(data.unassignedTopups)) localStorage.setItem("unassignedTopups", JSON.stringify(data.unassignedTopups));
         if (data.quotations && typeof data.quotations === "object") {
             localStorage.setItem("quotationData", JSON.stringify(data.quotations.quotationData || null));
             localStorage.setItem("quotationItems", JSON.stringify(Array.isArray(data.quotations.quotationItems) ? data.quotations.quotationItems : []));
@@ -8884,7 +8888,35 @@ function toggleBudgetEntryDetails(id) {
     if (!details) return;
     details.style.display = details.style.display === "none" ? "block" : "none";
 }
-
+// Normalizes a Savings funding transaction (Move to Budget, or a
+// resolved Unassigned Top-Up) into the same shape the expense-based
+// history rows use, so both render through the same existing template.
+function normalizeFundingEntryForBudgetHistory(s) {
+    return {
+        id: s.id,
+        type: s.type,
+        purpose: s.note || "",
+        category: null,
+        date: s.date,
+        createdAt: s.createdAt || s.date,
+        // Flip sign: this is an INFLOW to the wallet, even though it's
+        // an outflow from Savings.
+        amount: Math.abs(Number(s.amount) || 0),
+        paymentType: s.paymentType,
+        entity: s.entity,
+        attachmentId: s.attachmentId || null,
+        attachmentStatus: s.attachmentStatus || "none",
+        linkedTransactionId: null,
+        resolutionType: null,
+        refundType: null,
+        // A wallet-specific running balance across a merged
+        // expense+funding timeline isn't computed here — these rows
+        // show "-" instead of the (unrelated) Savings ledger balance.
+        BalanceAfterTransaction: null,
+        runningBalance: null,
+        __source: "savings"
+    };
+}
 function openBudgetDetails(group) {
     let budgets = getBudgets();
     let expenses = getExpenses();
@@ -8912,6 +8944,17 @@ function openBudgetDetails(group) {
         }
         return relatedBudgetIds.includes(e.budgetId);
     });
+
+    // ⚠️ FIX: funding transactions (Move to Budget, resolved Top-Ups)
+    // live in Savings, not Expenses — they were never being shown here
+    // at all. Kept as a SEPARATE list from `related` on purpose: the
+    // Used/Credited math just below must stay expense-only.
+    let fundingEntries = savings
+        .filter(s => s && s.budgetWalletId && relatedBudgetIds.includes(s.budgetWalletId))
+        .map(normalizeFundingEntryForBudgetHistory);
+
+    let displayEntries = related.concat(fundingEntries)
+        .sort((a, b) => new Date(a.date || 0) - new Date(b.date || 0));
 
     let used = relatedBudgetIds.reduce((sum, budgetId) => {
         return sum + getNetSpentForBudget(budgetId, related);
@@ -8951,16 +8994,17 @@ function openBudgetDetails(group) {
 
     let entriesHtml = "";
 
-    if (!related.length) {
+    if (!displayEntries.length) {
         entriesHtml = "<p>No entries</p>";
     } else {
-        related.forEach(e => {
+        displayEntries.forEach(e => {
             let compactDate = new Date(e.date || Date.now()).toLocaleDateString("en-GB", {
                 day: "2-digit",
                 month: "short",
                 year: "numeric"
             });
-            let runningBalance = Number(e.BalanceAfterTransaction ?? e.runningBalance ?? 0);
+            let hasBalance = e.BalanceAfterTransaction != null || e.runningBalance != null;
+            let runningBalance = hasBalance ? Number(e.BalanceAfterTransaction ?? e.runningBalance ?? 0) : null;
             let snapshot = getExpenseResolutionSnapshot(e.linkedTransactionId || e.id, related);
             let attachmentText = e.attachmentId
                 ? `Linked (${e.attachmentStatus || "linked"})`
@@ -8979,7 +9023,7 @@ function openBudgetDetails(group) {
                         <span class="entry-label">Notes</span>
                         <span class="entry-value">${escapeHtml(e.purpose || "-")}</span>
                         <span class="entry-label">Running Balance</span>
-                        <span class="entry-value">${escapeHtml(formatCurrency(runningBalance))}</span>
+                        <span class="entry-value">${runningBalance == null ? "-" : escapeHtml(formatCurrency(runningBalance))}</span>
                     </div>
 
                     <div class="transaction-card-foot">
@@ -9005,7 +9049,7 @@ function openBudgetDetails(group) {
                         <div class="entry-attachment-actions">
                             <button class="entry-action-btn" type="button" onclick="viewAttachmentById('${escapeHtml(e.attachmentId)}')">View</button>
                             <button class="entry-action-btn" type="button" onclick="downloadAttachmentById('${escapeHtml(e.attachmentId)}')">Download</button>
-                            <button class="entry-action-btn is-danger" type="button" onclick="deleteTransactionAttachment('expense','${escapeHtml(e.id)}','${escapeHtml(e.attachmentId)}')">Delete</button>
+                                                        <button class="entry-action-btn is-danger" type="button" onclick="deleteTransactionAttachment('${e.__source === "savings" ? "savings" : "expense"}','${escapeHtml(e.id)}','${escapeHtml(e.attachmentId)}')">Delete</button>
                         </div>` : ""}
                     </div>
                 </div>
@@ -12210,6 +12254,11 @@ function getFullAppData() {
         budgetPeriods:
             JSON.parse(
                 localStorage.getItem("bp")
+            ) || [],
+
+        unassignedTopups:
+            JSON.parse(
+                localStorage.getItem("unassignedTopups")
             ) || [],
 
         quotations: {
