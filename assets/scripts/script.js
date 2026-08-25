@@ -7909,249 +7909,956 @@ function validateImportPayload(parsed) {
     };
 }
 
+// function importData() {
+//     setImportStage("validation-input");
+//     let text = normalizeImportRawText(document.getElementById("importText")?.value || "");
+//     const baselineSignature = getImportTextSignature(text);
+//     const hashBeforeParse = `${baselineSignature.length}:${baselineSignature.hash32}`;
+
+//     // Requested UAT diagnostics immediately before parse.
+//     console.log(window.__lastImportFileMeta?.fileName || "manual_text");
+//     console.log(Number(window.__lastImportFileMeta?.fileSize || 0));
+//     console.log(text.length);
+//     console.log(text.substring(7000, 7100));
+//     console.log("hashDisk", window.__lastImportPipeline?.disk?.hash || "n/a");
+//     console.log("hashBeforeParse", hashBeforeParse);
+
+//     console.info("Import raw diagnostics", {
+//         fileName: window.__lastImportFileMeta?.fileName || "manual_text",
+//         fileSize: Number(window.__lastImportFileMeta?.fileSize || 0),
+//         typeofContent: typeof text,
+//         contentLength: text.length,
+//         signature: baselineSignature,
+//         normalization: window.__lastImportNormalizationMeta || null,
+//         hashBeforeParse,
+//         pipeline: window.__lastImportPipeline || null
+//     });
+
+//     // UAT requested pre-parse raw section logging around known failure offsets.
+//     console.log(text.substring(7000, 7150));
+//     window.__lastImportContentSample7000 = text.substring(7000, 7150);
+//     window.__lastImportCharCodes7000 = getImportCharCodes(text, 7000, 7060);
+
+//     if (!text) {
+//         showToast("Paste data");
+//         return;
+//     }
+
+//     let parsed;
+//     try {
+//         setImportStage("json-parse");
+//         parsed = JSON.parse(text);
+//     } catch (err) {
+//         const parseError = getJsonParseErrorMessage(err);
+//         const parsePosition = getJsonParseErrorPosition(err);
+//         const fragStart = Number.isFinite(parsePosition) ? Math.max(0, parsePosition - 40) : 0;
+//         const fragEnd = Number.isFinite(parsePosition) ? Math.min(text.length, parsePosition + 110) : Math.min(text.length, 150);
+//         const fragment = text.substring(fragStart, fragEnd);
+//         const codeStart = Number.isFinite(parsePosition) ? Math.max(0, parsePosition - 15) : 0;
+//         const codeEnd = Number.isFinite(parsePosition) ? Math.min(text.length, parsePosition + 15) : Math.min(text.length, 30);
+//         const parseWindowCodes = getImportCharCodes(text, codeStart, codeEnd);
+
+//         window.__lastImportCorruptFragment = fragment;
+//         window.__lastImportParseWindowCodes = parseWindowCodes;
+//         console.error("Import parse fragment", {
+//             parsePosition,
+//             fragment,
+//             parseWindowCodes,
+//             signature: baselineSignature,
+//             normalization: window.__lastImportNormalizationMeta || null
+//         });
+
+//         setImportStage("json-parse-failed", {
+//             error: parseError,
+//             parsePosition,
+//             fragment
+//         });
+//         renderImportValidationReport({
+//             version: "unknown",
+//             found: { expenses: 0, savings: 0, budgets: 0, budgetPeriods: 0 },
+//             imported: { expenses: 0, savings: 0, budgets: 0, budgetPeriods: 0 },
+//             warnings: [],
+//             errors: [parseError]
+//         });
+//         showToast("JSON Parse Error", "error");
+//         return;
+//     }
+
+//     const incomingVersion = validateIncomingImportVersion(
+//         parsed && parsed.meta && Object.prototype.hasOwnProperty.call(parsed.meta, "version")
+//             ? parsed.meta.version
+//             : null
+//     );
+
+//     if (!incomingVersion.supported) {
+//         setImportStage("version-validation-failed", {
+//             version: incomingVersion.display
+//         });
+
+//         const normalizationResult = normalizeImportPayload(parsed, { skipMigration: true });
+//         const diagnostics = buildImportDiagnostics(normalizationResult.normalized);
+//         const found = {
+//             expenses: diagnostics.expensesCount,
+//             savings: diagnostics.savingsCount,
+//             budgets: diagnostics.budgetsCount,
+//             budgetPeriods: diagnostics.budgetPeriodsCount
+//         };
+
+//         renderImportValidationReport({
+//             version: "unknown",
+//             found,
+//             imported: { expenses: 0, savings: 0, budgets: 0, budgetPeriods: 0 },
+//             warnings: normalizationResult.report.warnings || [],
+//             normalization: normalizationResult.report,
+//             errors: [`Unsupported Version: ${incomingVersion.display}`]
+//         });
+
+//         showToast("Import Validation Failed", "error");
+//         return;
+//     }
+
+//     setImportStage("normalization");
+//     const normalizationResult = normalizeImportPayload(parsed);
+//     const normalizedParsed = normalizationResult.normalized;
+//     window.__lastImportNormalizationReport = normalizationResult.report;
+
+//     setImportStage("schema-validation");
+//     const diagnostics = buildImportDiagnostics(normalizedParsed);
+//     console.info("Import parse diagnostics", diagnostics);
+
+//     const validation = validateImportPayload(normalizedParsed);
+//     const found = {
+//         expenses: diagnostics.expensesCount,
+//         savings: diagnostics.savingsCount,
+//         budgets: diagnostics.budgetsCount,
+//         budgetPeriods: diagnostics.budgetPeriodsCount
+//     };
+
+//     if (validation.errors.length) {
+//         setImportStage("schema-validation-failed", { errors: validation.errors });
+//         renderImportValidationReport({
+//             version: validation.version,
+//             found,
+//             imported: { expenses: 0, savings: 0, budgets: 0, budgetPeriods: 0 },
+//             warnings: validation.warnings.concat(normalizationResult.report.warnings || []),
+//             normalization: normalizationResult.report,
+//             errors: validation.errors
+//         });
+//         showToast("Import Validation Failed", "error");
+//         return;
+//     }
+
+//     const data = validation.normalized;
+
+//     try {
+//         setImportStage("import-mapping");
+//         if (Array.isArray(data.expenses)) saveExpenses(data.expenses);
+//         if (Array.isArray(data.budgets)) saveBudgets(data.budgets);
+//         if (Array.isArray(data.savings)) saveSavings(data.savings);
+//         if (Array.isArray(data.orders)) localStorage.setItem("orders", JSON.stringify(data.orders));
+//         if (Array.isArray(data.categories)) localStorage.setItem("categories", JSON.stringify(data.categories));
+//         if (Array.isArray(data.persons)) localStorage.setItem("persons", JSON.stringify(data.persons));
+//         if (Array.isArray(data.budgetPeriods)) localStorage.setItem("bp", JSON.stringify(data.budgetPeriods));
+//         if (Array.isArray(data.unassignedTopups)) localStorage.setItem("unassignedTopups", JSON.stringify(data.unassignedTopups));
+//         if (data.quotations && typeof data.quotations === "object") {
+//             localStorage.setItem("quotationData", JSON.stringify(data.quotations.quotationData || null));
+//             localStorage.setItem("quotationItems", JSON.stringify(Array.isArray(data.quotations.quotationItems) ? data.quotations.quotationItems : []));
+//             localStorage.setItem("quotationCharges", JSON.stringify(Array.isArray(data.quotations.quotationCharges) ? data.quotations.quotationCharges : []));
+//             localStorage.setItem("quotationRegistry", JSON.stringify(Array.isArray(data.quotations.quotationRegistry) ? data.quotations.quotationRegistry : []));
+//             localStorage.setItem("quotationMeta", JSON.stringify(data.quotations.quotationMeta || null));
+//             localStorage.setItem("activeQuotationId", JSON.stringify(data.quotations.activeQuotationId || null));
+//             localStorage.setItem("documentRelations", JSON.stringify(Array.isArray(data.quotations.documentRelations) ? data.quotations.documentRelations : []));
+//             localStorage.setItem("noSeriesConfig", JSON.stringify(data.quotations.noSeriesConfig || null));
+//         }
+
+//         if (data.settings) {
+//             if (data.settings.currencyCode) localStorage.setItem("currencyCode", data.settings.currencyCode);
+//             if (data.settings.appearanceMode) setAppearanceMode(data.settings.appearanceMode);
+
+//             if (data.settings.accentColor) {
+//                 changeTheme(data.settings.accentColor);
+//             } else if (data.settings.theme) {
+//                 changeTheme(data.settings.theme);
+//             }
+
+//             if (Object.prototype.hasOwnProperty.call(data.settings, "autoBackupEnabled") || data.settings.autoBackupFrequency || data.settings.autoBackupTarget) {
+//                 saveAutoBackupSettings({
+//                     enabled: !!data.settings.autoBackupEnabled,
+//                     frequency: data.settings.autoBackupFrequency || "weekly",
+//                     target: data.settings.autoBackupTarget || "local_download"
+//                 });
+//             } else if (Object.prototype.hasOwnProperty.call(data.settings, "autoBackup") || data.settings.backupFrequency) {
+//                 saveAutoBackupSettings({
+//                     enabled: !!data.settings.autoBackup,
+//                     frequency: data.settings.backupFrequency || "weekly",
+//                     target: "local_download"
+//                 });
+//             }
+
+//         }
+
+//         runIntegrityRepairSilently();
+//         setImportStage("ledger-rebuild");
+//         loadTheme();
+//         syncThemeSelectors();
+//         refreshSettingsPanels();
+
+//         loadHistory();
+//         loadBudgetOptions();
+//         loadDashboard();
+//         loadGraph();
+//         if (typeof renderBudgetEntries === "function") renderBudgetEntries();
+//         if (typeof renderIncomeList === "function") renderIncomeList();
+//         if (typeof loadSavings === "function") loadSavings();
+
+//         renderImportValidationReport({
+//             version: validation.version,
+//             found,
+//             imported: {
+//                 expenses: Array.isArray(data.expenses) ? data.expenses.length : 0,
+//                 savings: Array.isArray(data.savings) ? data.savings.length : 0,
+//                 budgets: Array.isArray(data.budgets) ? data.budgets.length : 0,
+//                 budgetPeriods: Array.isArray(data.budgetPeriods) ? data.budgetPeriods.length : 0
+//             },
+//             warnings: validation.warnings.concat(normalizationResult.report.warnings || []),
+//             normalization: normalizationResult.report,
+//             errors: []
+//         });
+
+//         showToast("Import successful ✅");
+//         setImportStage("completed");
+
+//         const importText = document.getElementById("importText");
+//         if (importText) importText.value = "";
+//         closeImportModal();
+//     } catch (err) {
+//         console.error(err);
+//         setImportStage("import-mapping-failed", { error: err && err.message ? err.message : "unknown" });
+//         renderImportValidationReport({
+//             version: validation.version,
+//             found,
+//             imported: { expenses: 0, savings: 0, budgets: 0, budgetPeriods: 0 },
+//             warnings: validation.warnings.concat(normalizationResult.report.warnings || []),
+//             normalization: normalizationResult.report,
+//             errors: ["Import Validation Failed: invalid transactions or data mapping"]
+//         });
+//         showToast("Import Validation Failed", "error");
+//     }
+// }
+
+// if (typeof window !== "undefined") {
+//     window.importData = importData;
+//     window.exportDataAsJSON = exportDataAsJSON;
+//     window.decodeImportTextCandidates = decodeImportTextCandidates;
+//     window.chooseImportDecodedText = chooseImportDecodedText;
+//     window.getImportByteSignature = getImportByteSignature;
+// }
+/**
+ * Apply validated import data to the application.
+ *
+ * This is the single authoritative data-mapping layer
+ * shared by Manual Import and Job Queue Import.
+ *
+ * IMPORTANT:
+ * This function performs DATA changes only.
+ * UI refreshes remain outside this function.
+ *
+ * @param {Object} data
+ * @returns {Object} import statistics
+ */
+function applyImportData(data) {
+
+    if (!data || typeof data !== "object") {
+        throw new Error(
+            "Import data mapping requires a valid data object."
+        );
+    }
+
+    const imported = {
+        expenses: 0,
+        budgets: 0,
+        savings: 0,
+        orders: 0,
+        categories: 0,
+        persons: 0,
+        budgetPeriods: 0,
+        unassignedTopups: 0
+    };
+
+
+    /*
+     * ---------------------------------------------------------
+     * EXPENSES
+     * ---------------------------------------------------------
+     */
+
+    if (Array.isArray(data.expenses)) {
+
+        saveExpenses(data.expenses);
+
+        imported.expenses =
+            data.expenses.length;
+    }
+
+
+    /*
+     * ---------------------------------------------------------
+     * BUDGETS
+     * ---------------------------------------------------------
+     */
+
+    if (Array.isArray(data.budgets)) {
+
+        saveBudgets(data.budgets);
+
+        imported.budgets =
+            data.budgets.length;
+    }
+
+
+    /*
+     * ---------------------------------------------------------
+     * SAVINGS
+     * ---------------------------------------------------------
+     */
+
+    if (Array.isArray(data.savings)) {
+
+        saveSavings(data.savings);
+
+        imported.savings =
+            data.savings.length;
+    }
+
+
+    /*
+     * ---------------------------------------------------------
+     * ORDERS
+     * ---------------------------------------------------------
+     */
+
+    if (Array.isArray(data.orders)) {
+
+        localStorage.setItem(
+            "orders",
+            JSON.stringify(data.orders)
+        );
+
+        imported.orders =
+            data.orders.length;
+    }
+
+
+    /*
+     * ---------------------------------------------------------
+     * CATEGORIES
+     * ---------------------------------------------------------
+     */
+
+    if (Array.isArray(data.categories)) {
+
+        localStorage.setItem(
+            "categories",
+            JSON.stringify(data.categories)
+        );
+
+        imported.categories =
+            data.categories.length;
+    }
+
+
+    /*
+     * ---------------------------------------------------------
+     * PERSONS
+     * ---------------------------------------------------------
+     */
+
+    if (Array.isArray(data.persons)) {
+
+        localStorage.setItem(
+            "persons",
+            JSON.stringify(data.persons)
+        );
+
+        imported.persons =
+            data.persons.length;
+    }
+
+
+    /*
+     * ---------------------------------------------------------
+     * BUDGET PERIODS
+     * ---------------------------------------------------------
+     */
+
+    if (Array.isArray(data.budgetPeriods)) {
+
+        localStorage.setItem(
+            "bp",
+            JSON.stringify(data.budgetPeriods)
+        );
+
+        imported.budgetPeriods =
+            data.budgetPeriods.length;
+    }
+
+
+    /*
+     * ---------------------------------------------------------
+     * UNASSIGNED TOPUPS
+     * ---------------------------------------------------------
+     */
+
+    if (Array.isArray(data.unassignedTopups)) {
+
+        localStorage.setItem(
+            "unassignedTopups",
+            JSON.stringify(data.unassignedTopups)
+        );
+
+        imported.unassignedTopups =
+            data.unassignedTopups.length;
+    }
+
+
+    /*
+     * ---------------------------------------------------------
+     * QUOTATIONS
+     * ---------------------------------------------------------
+     */
+
+    if (
+        data.quotations &&
+        typeof data.quotations === "object"
+    ) {
+
+        localStorage.setItem(
+            "quotationData",
+            JSON.stringify(
+                data.quotations.quotationData || null
+            )
+        );
+
+        localStorage.setItem(
+            "quotationItems",
+            JSON.stringify(
+                Array.isArray(
+                    data.quotations.quotationItems
+                )
+                    ? data.quotations.quotationItems
+                    : []
+            )
+        );
+
+        localStorage.setItem(
+            "quotationCharges",
+            JSON.stringify(
+                Array.isArray(
+                    data.quotations.quotationCharges
+                )
+                    ? data.quotations.quotationCharges
+                    : []
+            )
+        );
+
+        localStorage.setItem(
+            "quotationRegistry",
+            JSON.stringify(
+                Array.isArray(
+                    data.quotations.quotationRegistry
+                )
+                    ? data.quotations.quotationRegistry
+                    : []
+            )
+        );
+
+        localStorage.setItem(
+            "quotationMeta",
+            JSON.stringify(
+                data.quotations.quotationMeta || null
+            )
+        );
+
+        localStorage.setItem(
+            "activeQuotationId",
+            JSON.stringify(
+                data.quotations.activeQuotationId || null
+            )
+        );
+
+        localStorage.setItem(
+            "documentRelations",
+            JSON.stringify(
+                Array.isArray(
+                    data.quotations.documentRelations
+                )
+                    ? data.quotations.documentRelations
+                    : []
+            )
+        );
+
+        localStorage.setItem(
+            "noSeriesConfig",
+            JSON.stringify(
+                data.quotations.noSeriesConfig || null
+            )
+        );
+    }
+
+
+    /*
+     * ---------------------------------------------------------
+     * SETTINGS
+     * ---------------------------------------------------------
+     */
+
+    if (data.settings) {
+
+        if (data.settings.currencyCode) {
+
+            localStorage.setItem(
+                "currencyCode",
+                data.settings.currencyCode
+            );
+        }
+
+
+        if (data.settings.appearanceMode) {
+
+            setAppearanceMode(
+                data.settings.appearanceMode
+            );
+        }
+
+
+        if (data.settings.accentColor) {
+
+            changeTheme(
+                data.settings.accentColor
+            );
+
+        } else if (data.settings.theme) {
+
+            changeTheme(
+                data.settings.theme
+            );
+        }
+
+
+        if (
+            Object.prototype.hasOwnProperty.call(
+                data.settings,
+                "autoBackupEnabled"
+            ) ||
+            data.settings.autoBackupFrequency ||
+            data.settings.autoBackupTarget
+        ) {
+
+            saveAutoBackupSettings({
+                enabled:
+                    !!data.settings.autoBackupEnabled,
+
+                frequency:
+                    data.settings.autoBackupFrequency ||
+                    "weekly",
+
+                target:
+                    data.settings.autoBackupTarget ||
+                    "local_download"
+            });
+
+        } else if (
+            Object.prototype.hasOwnProperty.call(
+                data.settings,
+                "autoBackup"
+            ) ||
+            data.settings.backupFrequency
+        ) {
+
+            saveAutoBackupSettings({
+                enabled:
+                    !!data.settings.autoBackup,
+
+                frequency:
+                    data.settings.backupFrequency ||
+                    "weekly",
+
+                target:
+                    "local_download"
+            });
+        }
+    }
+
+
+    /*
+     * ---------------------------------------------------------
+     * INTEGRITY REPAIR
+     * ---------------------------------------------------------
+     */
+
+    runIntegrityRepairSilently();
+
+
+    return imported;
+}
 function importData() {
     setImportStage("validation-input");
-    let text = normalizeImportRawText(document.getElementById("importText")?.value || "");
-    const baselineSignature = getImportTextSignature(text);
-    const hashBeforeParse = `${baselineSignature.length}:${baselineSignature.hash32}`;
 
-    // Requested UAT diagnostics immediately before parse.
-    console.log(window.__lastImportFileMeta?.fileName || "manual_text");
-    console.log(Number(window.__lastImportFileMeta?.fileSize || 0));
+    const importText = document.getElementById("importText");
+    const text = normalizeImportRawText(
+        importText?.value || ""
+    );
+
+    const baselineSignature =
+        getImportTextSignature(text);
+
+    const hashBeforeParse =
+        `${baselineSignature.length}:${baselineSignature.hash32}`;
+
+    /*
+     * ---------------------------------------------------------
+     * EXISTING IMPORT DIAGNOSTICS
+     * ---------------------------------------------------------
+     *
+     * Keep the existing UAT diagnostics exactly where they
+     * belong. The Import Engine should not own UI diagnostics.
+     */
+
+    console.log(
+        window.__lastImportFileMeta?.fileName ||
+        "manual_text"
+    );
+
+    console.log(
+        Number(
+            window.__lastImportFileMeta?.fileSize ||
+            0
+        )
+    );
+
     console.log(text.length);
-    console.log(text.substring(7000, 7100));
-    console.log("hashDisk", window.__lastImportPipeline?.disk?.hash || "n/a");
-    console.log("hashBeforeParse", hashBeforeParse);
 
-    console.info("Import raw diagnostics", {
-        fileName: window.__lastImportFileMeta?.fileName || "manual_text",
-        fileSize: Number(window.__lastImportFileMeta?.fileSize || 0),
-        typeofContent: typeof text,
-        contentLength: text.length,
-        signature: baselineSignature,
-        normalization: window.__lastImportNormalizationMeta || null,
-        hashBeforeParse,
-        pipeline: window.__lastImportPipeline || null
-    });
+    console.log(
+        text.substring(7000, 7100)
+    );
 
-    // UAT requested pre-parse raw section logging around known failure offsets.
-    console.log(text.substring(7000, 7150));
-    window.__lastImportContentSample7000 = text.substring(7000, 7150);
-    window.__lastImportCharCodes7000 = getImportCharCodes(text, 7000, 7060);
+    console.log(
+        "hashDisk",
+        window.__lastImportPipeline?.disk?.hash ||
+        "n/a"
+    );
+
+    console.log(
+        "hashBeforeParse",
+        hashBeforeParse
+    );
+
+    console.info(
+        "Import raw diagnostics",
+        {
+            fileName:
+                window.__lastImportFileMeta?.fileName ||
+                "manual_text",
+
+            fileSize:
+                Number(
+                    window.__lastImportFileMeta?.fileSize ||
+                    0
+                ),
+
+            typeofContent:
+                typeof text,
+
+            contentLength:
+                text.length,
+
+            signature:
+                baselineSignature,
+
+            normalization:
+                window.__lastImportNormalizationMeta ||
+                null,
+
+            hashBeforeParse,
+
+            pipeline:
+                window.__lastImportPipeline ||
+                null
+        }
+    );
+
+    /*
+     * UAT requested pre-parse raw section logging.
+     */
+
+    console.log(
+        text.substring(7000, 7150)
+    );
+
+    window.__lastImportContentSample7000 =
+        text.substring(7000, 7150);
+
+    window.__lastImportCharCodes7000 =
+        getImportCharCodes(
+            text,
+            7000,
+            7060
+        );
+
+
+    /*
+     * ---------------------------------------------------------
+     * EMPTY INPUT
+     * ---------------------------------------------------------
+     */
 
     if (!text) {
         showToast("Paste data");
         return;
     }
 
-    let parsed;
-    try {
-        setImportStage("json-parse");
-        parsed = JSON.parse(text);
-    } catch (err) {
-        const parseError = getJsonParseErrorMessage(err);
-        const parsePosition = getJsonParseErrorPosition(err);
-        const fragStart = Number.isFinite(parsePosition) ? Math.max(0, parsePosition - 40) : 0;
-        const fragEnd = Number.isFinite(parsePosition) ? Math.min(text.length, parsePosition + 110) : Math.min(text.length, 150);
-        const fragment = text.substring(fragStart, fragEnd);
-        const codeStart = Number.isFinite(parsePosition) ? Math.max(0, parsePosition - 15) : 0;
-        const codeEnd = Number.isFinite(parsePosition) ? Math.min(text.length, parsePosition + 15) : Math.min(text.length, 30);
-        const parseWindowCodes = getImportCharCodes(text, codeStart, codeEnd);
 
-        window.__lastImportCorruptFragment = fragment;
-        window.__lastImportParseWindowCodes = parseWindowCodes;
-        console.error("Import parse fragment", {
-            parsePosition,
-            fragment,
-            parseWindowCodes,
-            signature: baselineSignature,
-            normalization: window.__lastImportNormalizationMeta || null
-        });
+    /*
+     * ---------------------------------------------------------
+     * IMPORT THROUGH THE CENTRAL IMPORT ENGINE
+     * ---------------------------------------------------------
+     *
+     * importData() now acts as the UI adapter.
+     *
+     * ImportEngine owns:
+     * - JSON parsing
+     * - Version validation
+     * - Normalization
+     * - Schema validation
+     * - Data mapping
+     * - Integrity repair
+     *
+     * This means Job Queue and Manual Import can use the
+     * same import logic.
+     */
 
-        setImportStage("json-parse-failed", {
-            error: parseError,
-            parsePosition,
-            fragment
-        });
-        renderImportValidationReport({
-            version: "unknown",
-            found: { expenses: 0, savings: 0, budgets: 0, budgetPeriods: 0 },
-            imported: { expenses: 0, savings: 0, budgets: 0, budgetPeriods: 0 },
-            warnings: [],
-            errors: [parseError]
-        });
-        showToast("JSON Parse Error", "error");
-        return;
-    }
+    ImportEngine.importPayload(
+        text,
+        {
+            fileName:
+                window.__lastImportFileMeta?.fileName ||
+                "manual_text",
 
-    const incomingVersion = validateIncomingImportVersion(
-        parsed && parsed.meta && Object.prototype.hasOwnProperty.call(parsed.meta, "version")
-            ? parsed.meta.version
-            : null
-    );
+            updateProgress: data => {
 
-    if (!incomingVersion.supported) {
-        setImportStage("version-validation-failed", {
-            version: incomingVersion.display
-        });
-
-        const normalizationResult = normalizeImportPayload(parsed, { skipMigration: true });
-        const diagnostics = buildImportDiagnostics(normalizationResult.normalized);
-        const found = {
-            expenses: diagnostics.expensesCount,
-            savings: diagnostics.savingsCount,
-            budgets: diagnostics.budgetsCount,
-            budgetPeriods: diagnostics.budgetPeriodsCount
-        };
-
-        renderImportValidationReport({
-            version: "unknown",
-            found,
-            imported: { expenses: 0, savings: 0, budgets: 0, budgetPeriods: 0 },
-            warnings: normalizationResult.report.warnings || [],
-            normalization: normalizationResult.report,
-            errors: [`Unsupported Version: ${incomingVersion.display}`]
-        });
-
-        showToast("Import Validation Failed", "error");
-        return;
-    }
-
-    setImportStage("normalization");
-    const normalizationResult = normalizeImportPayload(parsed);
-    const normalizedParsed = normalizationResult.normalized;
-    window.__lastImportNormalizationReport = normalizationResult.report;
-
-    setImportStage("schema-validation");
-    const diagnostics = buildImportDiagnostics(normalizedParsed);
-    console.info("Import parse diagnostics", diagnostics);
-
-    const validation = validateImportPayload(normalizedParsed);
-    const found = {
-        expenses: diagnostics.expensesCount,
-        savings: diagnostics.savingsCount,
-        budgets: diagnostics.budgetsCount,
-        budgetPeriods: diagnostics.budgetPeriodsCount
-    };
-
-    if (validation.errors.length) {
-        setImportStage("schema-validation-failed", { errors: validation.errors });
-        renderImportValidationReport({
-            version: validation.version,
-            found,
-            imported: { expenses: 0, savings: 0, budgets: 0, budgetPeriods: 0 },
-            warnings: validation.warnings.concat(normalizationResult.report.warnings || []),
-            normalization: normalizationResult.report,
-            errors: validation.errors
-        });
-        showToast("Import Validation Failed", "error");
-        return;
-    }
-
-    const data = validation.normalized;
-
-    try {
-        setImportStage("import-mapping");
-        if (Array.isArray(data.expenses)) saveExpenses(data.expenses);
-        if (Array.isArray(data.budgets)) saveBudgets(data.budgets);
-        if (Array.isArray(data.savings)) saveSavings(data.savings);
-        if (Array.isArray(data.orders)) localStorage.setItem("orders", JSON.stringify(data.orders));
-        if (Array.isArray(data.categories)) localStorage.setItem("categories", JSON.stringify(data.categories));
-        if (Array.isArray(data.persons)) localStorage.setItem("persons", JSON.stringify(data.persons));
-        if (Array.isArray(data.budgetPeriods)) localStorage.setItem("bp", JSON.stringify(data.budgetPeriods));
-        if (Array.isArray(data.unassignedTopups)) localStorage.setItem("unassignedTopups", JSON.stringify(data.unassignedTopups));
-        if (data.quotations && typeof data.quotations === "object") {
-            localStorage.setItem("quotationData", JSON.stringify(data.quotations.quotationData || null));
-            localStorage.setItem("quotationItems", JSON.stringify(Array.isArray(data.quotations.quotationItems) ? data.quotations.quotationItems : []));
-            localStorage.setItem("quotationCharges", JSON.stringify(Array.isArray(data.quotations.quotationCharges) ? data.quotations.quotationCharges : []));
-            localStorage.setItem("quotationRegistry", JSON.stringify(Array.isArray(data.quotations.quotationRegistry) ? data.quotations.quotationRegistry : []));
-            localStorage.setItem("quotationMeta", JSON.stringify(data.quotations.quotationMeta || null));
-            localStorage.setItem("activeQuotationId", JSON.stringify(data.quotations.activeQuotationId || null));
-            localStorage.setItem("documentRelations", JSON.stringify(Array.isArray(data.quotations.documentRelations) ? data.quotations.documentRelations : []));
-            localStorage.setItem("noSeriesConfig", JSON.stringify(data.quotations.noSeriesConfig || null));
-        }
-
-        if (data.settings) {
-            if (data.settings.currencyCode) localStorage.setItem("currencyCode", data.settings.currencyCode);
-            if (data.settings.appearanceMode) setAppearanceMode(data.settings.appearanceMode);
-
-            if (data.settings.accentColor) {
-                changeTheme(data.settings.accentColor);
-            } else if (data.settings.theme) {
-                changeTheme(data.settings.theme);
-            }
-
-            if (Object.prototype.hasOwnProperty.call(data.settings, "autoBackupEnabled") || data.settings.autoBackupFrequency || data.settings.autoBackupTarget) {
-                saveAutoBackupSettings({
-                    enabled: !!data.settings.autoBackupEnabled,
-                    frequency: data.settings.autoBackupFrequency || "weekly",
-                    target: data.settings.autoBackupTarget || "local_download"
-                });
-            } else if (Object.prototype.hasOwnProperty.call(data.settings, "autoBackup") || data.settings.backupFrequency) {
-                saveAutoBackupSettings({
-                    enabled: !!data.settings.autoBackup,
-                    frequency: data.settings.backupFrequency || "weekly",
-                    target: "local_download"
-                });
-            }
-
-        }
-
-        runIntegrityRepairSilently();
-        setImportStage("ledger-rebuild");
-        loadTheme();
-        syncThemeSelectors();
-        refreshSettingsPanels();
-
-        loadHistory();
-        loadBudgetOptions();
-        loadDashboard();
-        loadGraph();
-        if (typeof renderBudgetEntries === "function") renderBudgetEntries();
-        if (typeof renderIncomeList === "function") renderIncomeList();
-        if (typeof loadSavings === "function") loadSavings();
-
-        renderImportValidationReport({
-            version: validation.version,
-            found,
-            imported: {
-                expenses: Array.isArray(data.expenses) ? data.expenses.length : 0,
-                savings: Array.isArray(data.savings) ? data.savings.length : 0,
-                budgets: Array.isArray(data.budgets) ? data.budgets.length : 0,
-                budgetPeriods: Array.isArray(data.budgetPeriods) ? data.budgetPeriods.length : 0
+                if (
+                    data &&
+                    typeof data.progress === "number"
+                ) {
+                    console.info(
+                        "Import progress",
+                        data.progress
+                    );
+                }
             },
-            warnings: validation.warnings.concat(normalizationResult.report.warnings || []),
-            normalization: normalizationResult.report,
-            errors: []
+
+            info: (
+                message,
+                details = {}
+            ) => {
+
+                console.info(
+                    message,
+                    details
+                );
+            },
+
+            warning: (
+                message,
+                details = {}
+            ) => {
+
+                console.warn(
+                    message,
+                    details
+                );
+            },
+
+            error: (
+                message,
+                details = {}
+            ) => {
+
+                console.error(
+                    message,
+                    details
+                );
+            }
+        }
+    )
+        .then(result => {
+
+            /*
+             * -------------------------------------------------
+             * LEDGER / UI REBUILD
+             * -------------------------------------------------
+             *
+             * These remain in script.js because they are UI
+             * responsibilities, not Import Engine responsibilities.
+             */
+
+            setImportStage("ledger-rebuild");
+
+            loadTheme();
+            syncThemeSelectors();
+            refreshSettingsPanels();
+
+            loadHistory();
+            loadBudgetOptions();
+            loadDashboard();
+            loadGraph();
+
+            if (
+                typeof renderBudgetEntries ===
+                "function"
+            ) {
+                renderBudgetEntries();
+            }
+
+            if (
+                typeof renderIncomeList ===
+                "function"
+            ) {
+                renderIncomeList();
+            }
+
+            if (
+                typeof loadSavings ===
+                "function"
+            ) {
+                loadSavings();
+            }
+
+
+            /*
+             * -------------------------------------------------
+             * IMPORT VALIDATION REPORT
+             * -------------------------------------------------
+             */
+
+            renderImportValidationReport({
+
+                version:
+                    result.version,
+
+                found:
+                    result.found || {},
+
+                imported:
+                    result.imported || {
+                        expenses: 0,
+                        savings: 0,
+                        budgets: 0,
+                        budgetPeriods: 0
+                    },
+
+                warnings:
+                    Array.isArray(result.warnings)
+                        ? result.warnings
+                        : [],
+
+                normalization:
+                    result.normalization || {},
+
+                errors:
+                    Array.isArray(result.errors)
+                        ? result.errors
+                        : []
+            });
+
+
+            /*
+             * -------------------------------------------------
+             * SUCCESS
+             * -------------------------------------------------
+             */
+
+            showToast(
+                "Import successful ✅"
+            );
+
+            setImportStage(
+                "completed"
+            );
+
+
+            /*
+             * Clear the manual import field.
+             */
+
+            if (importText) {
+                importText.value = "";
+            }
+
+            closeImportModal();
+        })
+        .catch(err => {
+
+            /*
+             * -------------------------------------------------
+             * IMPORT FAILURE
+             * -------------------------------------------------
+             */
+
+            console.error(
+                "Import Engine failed.",
+                err
+            );
+
+            const errorMessage =
+                err &&
+                    err.message
+                    ? err.message
+                    : "unknown";
+
+
+            setImportStage(
+                "import-mapping-failed",
+                {
+                    error: errorMessage
+                }
+            );
+
+
+            renderImportValidationReport({
+
+                version:
+                    "unknown",
+
+                found: {
+                    expenses: 0,
+                    savings: 0,
+                    budgets: 0,
+                    budgetPeriods: 0
+                },
+
+                imported: {
+                    expenses: 0,
+                    savings: 0,
+                    budgets: 0,
+                    budgetPeriods: 0
+                },
+
+                warnings: [],
+
+                normalization: {},
+
+                errors: [
+                    errorMessage
+                ]
+            });
+
+
+            showToast(
+                "Import Validation Failed",
+                "error"
+            );
         });
-
-        showToast("Import successful ✅");
-        setImportStage("completed");
-
-        const importText = document.getElementById("importText");
-        if (importText) importText.value = "";
-        closeImportModal();
-    } catch (err) {
-        console.error(err);
-        setImportStage("import-mapping-failed", { error: err && err.message ? err.message : "unknown" });
-        renderImportValidationReport({
-            version: validation.version,
-            found,
-            imported: { expenses: 0, savings: 0, budgets: 0, budgetPeriods: 0 },
-            warnings: validation.warnings.concat(normalizationResult.report.warnings || []),
-            normalization: normalizationResult.report,
-            errors: ["Import Validation Failed: invalid transactions or data mapping"]
-        });
-        showToast("Import Validation Failed", "error");
-    }
-}
-
-if (typeof window !== "undefined") {
-    window.importData = importData;
-    window.exportDataAsJSON = exportDataAsJSON;
-    window.decodeImportTextCandidates = decodeImportTextCandidates;
-    window.chooseImportDecodedText = chooseImportDecodedText;
-    window.getImportByteSignature = getImportByteSignature;
 }
 // Fixes old data structure to new system
 function runMigration() {
