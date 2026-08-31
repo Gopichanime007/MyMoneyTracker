@@ -1257,7 +1257,7 @@ function upsertActiveBudgetWalletFromSavings(entry) {
             id: Date.now(),
             type: "budget",
             budgetId: `budget_wallet_${periodKey}_${uid}`,
-            sourceId: sourceId,
+            sourceId: null,
             totalAllocated: 0,
             entity: "Budget Wallet",
             note: "Auto Budget Wallet",
@@ -1551,7 +1551,8 @@ function getAvailableSources() {
 
 function loadSourceOptions({
     showAll = true,
-    includeUsed = true
+    includeUsed = true,
+    includeArchived = false
 } = {}) {
 
     let select = document.getElementById("sourceSelect");
@@ -1577,6 +1578,7 @@ function loadSourceOptions({
         let remaining = Number(item.remaining || 0);
 
         if (!includeUsed && remaining <= 0) return;
+        if (!includeArchived && s.status === "archived") return;
 
         let option = document.createElement("option");
         option.value = s.id;
@@ -1585,6 +1587,10 @@ function loadSourceOptions({
         let status = remaining <= 0
             ? "Used"
             : `₹${remaining} left`;
+
+        if (s.status === "archived") {
+            status += s.archiveReason === "depleted" ? " • Archived (Depleted)" : " • Archived";
+        }
 
         option.textContent = `${s.note || "Savings Source"} — ${status}`;
 
@@ -2323,24 +2329,41 @@ function renderSourceDetails(sourceId) {
     `;
 }
 
-// Renders all income entries and allows navigation to detailed view
+let savingsSourceFilter = "active";
+
+function setSavingsSourceFilter(filter) {
+    savingsSourceFilter = filter;
+    renderIncomeList();
+}
+
 function renderIncomeList() {
 
     let data = getSavings() || [];
-
-    // 🔥 GLOBAL SOURCES
     let scoped = [...data];
+    let allSources = scoped.filter(isSavingsSourceSeed);
 
-    // all source seeds from all periods
-    let sources = scoped.filter(isSavingsSourceSeed);
+    let sources = allSources.filter(s => {
+        if (savingsSourceFilter === "all") return true;
+        if (savingsSourceFilter === "archived") return s.status === "archived";
+        return s.status !== "archived";
+    });
 
     let container = document.getElementById("incomeList");
     if (!container) return;
 
+    let filterBar = document.getElementById("savingsSourceFilterBar");
+    if (filterBar) {
+        filterBar.innerHTML = ["active", "archived", "all"].map(key => {
+            let label = key === "active" ? "Active" : (key === "archived" ? "Archived" : "All");
+            let activeClass = savingsSourceFilter === key ? "is-active" : "";
+            return `<button type="button" class="tab-bar-btn ${activeClass}" onclick="setSavingsSourceFilter('${key}')">${label}</button>`;
+        }).join("");
+    }
+
     container.innerHTML = "";
 
     if (!sources.length) {
-        container.innerHTML = `<p class="empty-state">No savings sources yet</p>`;
+        container.innerHTML = `<p class="empty-state">No savings sources ${savingsSourceFilter === "all" ? "yet" : "in this view"}</p>`;
         return;
     }
 
@@ -2368,11 +2391,11 @@ function renderIncomeList() {
 
         let name = i.note || `${monthYear} Source`;
 
-        let statusText = remaining <= 0
-            ? "Exhausted"
-            : "Active";
-
-        let statusClass = remaining <= 0 ? "is-exhausted" : "is-active";
+        let isArchived = i.status === "archived";
+        let statusText = isArchived
+            ? (i.archiveReason === "depleted" ? "Archived (Depleted)" : "Archived")
+            : (remaining <= 0 ? "Exhausted" : "Active");
+        let statusClass = isArchived ? "is-exhausted" : (remaining <= 0 ? "is-exhausted" : "is-active");
 
         let txCount = scoped.filter(t => String(t.sourceId) === String(i.id)).length;
         let createdDate = new Date(i.createdAt || i.date || Date.now()).toLocaleDateString("en-GB", {
@@ -2416,16 +2439,17 @@ function renderIncomeList() {
             <div class="entry-actions">
                 <button type="button" class="entry-action-btn" data-action="view">View Transactions</button>
                 <button type="button" class="entry-action-btn is-muted" disabled>Edit</button>
+                ${isArchived
+                ? `<button type="button" class="entry-action-btn" data-action="unarchive">Unarchive</button>`
+                : `<button type="button" class="entry-action-btn" data-action="archive">Archive</button>`
+            }
                 <button type="button" class="entry-action-btn is-danger" data-action="delete">Delete</button>
             </div>
         `;
 
-        // 🔥 CLEAN CLICK FLOW (NO RACE CONDITION)
         let viewDetails = () => {
             let id = String(i.id);
-
             showSavingsScreen("details");
-
             requestAnimationFrame(() => {
                 renderSourceDetails(id);
             });
@@ -2438,6 +2462,32 @@ function renderIncomeList() {
             viewBtn.addEventListener("click", (event) => {
                 event.stopPropagation();
                 viewDetails();
+            });
+        }
+
+        let archiveBtn = div.querySelector('[data-action="archive"]');
+        if (archiveBtn) {
+            archiveBtn.addEventListener("click", (event) => {
+                event.stopPropagation();
+                archiveSourceManually(i.id);
+                loadSavings();
+                renderIncomeList();
+                showToast("Source archived 🗄", "success");
+            });
+        }
+
+        let unarchiveBtn = div.querySelector('[data-action="unarchive"]');
+        if (unarchiveBtn) {
+            unarchiveBtn.addEventListener("click", (event) => {
+                event.stopPropagation();
+                let result = unarchiveSource(i.id);
+                if (!result.ok) {
+                    showToast(result.error, "warning");
+                    return;
+                }
+                loadSavings();
+                renderIncomeList();
+                showToast("Source reactivated ✅", "success");
             });
         }
 
@@ -2492,7 +2542,9 @@ function handleSavingsTypeChange() {
     if (type === "adjustment") {
         if (source) source.style.display = "block";
         if (adjustmentDirection) adjustmentDirection.style.display = "block";
-        loadSourceOptions({ includeUsed: true });
+        // Archived (including Depleted) sources must stay pickable here —
+        // this is the only way a Depleted source becomes Active again.
+        loadSourceOptions({ includeUsed: true, includeArchived: true });
         return;
     }
     if (type === "refund") {
@@ -2851,7 +2903,29 @@ async function deleteSavings(id) {
     if (!entry) return;
 
     let rootIds = [String(id)];
-    if (typeof validateTransactionDependencies === "function") {
+
+    // ⚠️ Archive System: a SOURCE with dependents gets archived instead
+    // of destructively deleted — preserves funding history that's
+    // already been spent against, rather than erasing it.
+    if (isSavingsSourceSeed(entry)) {
+        let safePlan = (typeof validateTransactionDependencies === "function")
+            ? validateTransactionDependencies("savings", rootIds, false)
+            : { blocked: false };
+
+        if (safePlan.blocked) {
+            let proceed = await window.AppDialog.confirm(
+                `This source has related records (${safePlan.summary}) and can't be deleted.\n\n` +
+                `Archive it instead? It stops appearing as an active source, but all its history stays intact.`
+            );
+            if (!proceed) return;
+
+            archiveSourceManually(entry.id);
+            loadSavings();
+            if (typeof renderIncomeList === "function") renderIncomeList();
+            showToast("Source archived 🗄", "success");
+            return;
+        }
+    } else if (typeof validateTransactionDependencies === "function") {
         let safePlan = validateTransactionDependencies("savings", rootIds, false);
         if (safePlan.blocked) {
             let proceed = await window.AppDialog.confirm(
@@ -2874,14 +2948,12 @@ async function deleteSavings(id) {
         }
     }
 
-    // 🔥 remove by ID (not index)
+    // No dependents — clean hard delete, exactly as before.
     const deletedId = String(id);
     data = data.filter(e => String(e.id) != deletedId);
 
     saveSavings(data);
 
-    // 🔥 adjust budget — covers any funding entry type, matched by the
-    // real budgetWalletId link.
     if (entry.budgetWalletId) {
         adjustBudgetAfterDelete(entry);
     }

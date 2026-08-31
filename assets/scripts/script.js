@@ -480,9 +480,81 @@ function rebalanceSavingsLedger(entries) {
     return cloned;
 }
 
+// ⚠️ Archive System: keeps every source's archive status in sync with
+// its actual remaining balance, automatically, on every save — so no
+// individual call site can ever forget to check it.
+// - A source that reaches ₹0 remaining auto-archives as "depleted".
+// - A depleted source that gets real funding back above ₹0 auto-returns
+//   to active — this is the ONLY way a depleted source reactivates.
+// - A source the user manually archived (userArchived) is NEVER touched
+//   by this automatic check; only an explicit un-archive changes it.
+function syncAllSourceArchiveStatuses(savingsList) {
+    let data = Array.isArray(savingsList) ? savingsList : [];
+    let sources = data.filter(isSavingsSourceSeed);
+
+    sources.forEach(source => {
+        if (source.archiveReason === "userArchived") return;
+
+        let remaining = getSourceRemainingById(source.id, data);
+        let isDepleted = remaining <= 0;
+        let currentlyDepleted = source.status === "archived" && source.archiveReason === "depleted";
+
+        if (isDepleted && !currentlyDepleted) {
+            source.status = "archived";
+            source.archiveReason = "depleted";
+            source.archivedAt = new Date().toISOString();
+            source.archivedBy = "system";
+        } else if (!isDepleted && currentlyDepleted) {
+            source.status = "active";
+            source.archiveReason = "none";
+            source.archivedAt = null;
+            source.archivedBy = null;
+        }
+    });
+}
+
+// Manual archive — always allowed, regardless of balance. Distinct from
+// automatic "depleted" archiving: a deliberate choice, never
+// auto-reversed by balance changes.
+function archiveSourceManually(sourceId) {
+    let data = getSavings();
+    let source = data.find(s => String(s.id) === String(sourceId) && isSavingsSourceSeed(s));
+    if (!source) return false;
+
+    source.status = "archived";
+    source.archiveReason = "userArchived";
+    source.archivedAt = new Date().toISOString();
+    source.archivedBy = "user";
+
+    saveSavings(data);
+    return true;
+}
+
+// Un-archive — only works for a source the USER archived. A Depleted
+// source can only become active again by receiving real funding (an
+// Increase Adjustment), never through this button.
+function unarchiveSource(sourceId) {
+    let data = getSavings();
+    let source = data.find(s => String(s.id) === String(sourceId) && isSavingsSourceSeed(s));
+    if (!source) return { ok: false, error: "Source not found" };
+
+    if (source.archiveReason !== "userArchived") {
+        return { ok: false, error: "This source is archived because it's depleted — add funding (an Increase Adjustment) to reactivate it instead." };
+    }
+
+    source.status = "active";
+    source.archiveReason = "none";
+    source.archivedAt = null;
+    source.archivedBy = null;
+
+    saveSavings(data);
+    return { ok: true };
+}
+
 function saveSavings(data) {
     try {
         let safe = Array.isArray(data) ? data : [];
+        syncAllSourceArchiveStatuses(safe);
         let rebalanced = rebalanceSavingsLedger(safe);
         localStorage.setItem("savingsTransactions", JSON.stringify(rebalanced));
     } catch (err) {
@@ -7475,7 +7547,8 @@ function normalizeImportPayload(parsed, options = {}) {
         "settings",
         "meta",
         "orders",
-        "quotations"
+        "quotations",
+        "__expectedAssertions"
     ]);
 
     const expenseAllowed = new Set([
@@ -8778,13 +8851,14 @@ function importData() {
              * -------------------------------------------------
              */
 
-            showToast(
-                "Import successful ✅"
-            );
+            showToast("Import successful ✅");
+            setImportStage("completed");
 
-            setImportStage(
-                "completed"
-            );
+            if (Array.isArray(data.__expectedAssertions) && data.__expectedAssertions.length) {
+                let results = runTestAssertions(data.__expectedAssertions);
+                renderTestAssertionReport(results);
+                return; // keep the report visible instead of closing the modal
+            }
 
 
             /*
@@ -13453,4 +13527,107 @@ try {
     // ignore non-browser contexts
 }
 
+// =========================
+// 🧪 TEST ASSERTION RUNNER
+// =========================
+// Checks live app state against a set of expected values embedded in a
+// test JSON file. Every check reuses the SAME functions the real app
+// uses (getNetSpentForBudget, getSourceRemainingById, etc.) — never
+// reimplements the math — so a failing assertion means a real bug, not
+// a second, possibly-wrong copy of the calculation disagreeing.
+function runTestAssertions(assertions) {
+    if (!Array.isArray(assertions) || !assertions.length) return [];
+
+    let expenses = getExpenses();
+    let budgets = getBudgets();
+    let savings = getSavings();
+
+    function findWallet(a) {
+        if (a.budgetId) return budgets.find(b => String(b.budgetId) === String(a.budgetId));
+        if (a.periodKey) return budgets.find(b => b.periodKey === a.periodKey && b.isBudgetWallet === true);
+        return null;
+    }
+
+    return assertions.map(a => {
+        let actual;
+        let pass = false;
+
+        try {
+            switch (a.check) {
+                case "budgetWalletTotal": {
+                    let w = findWallet(a);
+                    actual = w ? Number(w.totalAllocated || 0) : null;
+                    break;
+                }
+                case "budgetWalletRemaining": {
+                    let w = findWallet(a);
+                    actual = w ? Number(w.totalAllocated || 0) - getNetSpentForBudget(w.budgetId, expenses) : null;
+                    break;
+                }
+                case "budgetRealSpent": {
+                    let w = findWallet(a);
+                    actual = w ? getRealSpentForBudget(w.budgetId, expenses) : null;
+                    break;
+                }
+                case "budgetAdjustmentTotal": {
+                    let w = findWallet(a);
+                    actual = w ? getNetAdjustmentForBudget(w.budgetId, expenses) : null;
+                    break;
+                }
+                case "walletCountForPeriod": {
+                    actual = budgets.filter(b => b.periodKey === a.periodKey && b.isBudgetWallet === true).length;
+                    break;
+                }
+                case "sourceRemaining": {
+                    actual = getSourceRemainingById(a.sourceId, savings);
+                    break;
+                }
+                case "sourceStatus": {
+                    let s = savings.find(x => String(x.id) === String(a.sourceId));
+                    actual = s ? (s.status || "active") : null;
+                    break;
+                }
+                case "unassignedTopupCount": {
+                    actual = getPendingUnassignedTopups().length;
+                    break;
+                }
+                case "unassignedTopupTotal": {
+                    actual = getPendingUnassignedTopups().reduce((sum, t) => sum + getRemainingUnassignedAmount(t), 0);
+                    break;
+                }
+                default:
+                    actual = undefined;
+            }
+        } catch (err) {
+            actual = `error: ${err.message}`;
+        }
+
+        pass = typeof actual === "number" && typeof a.expected === "number"
+            ? Math.abs(actual - a.expected) < 0.01
+            : actual === a.expected;
+
+        return {
+            description: a.description || a.check,
+            expected: a.expected,
+            actual,
+            pass
+        };
+    });
+}
+
+function renderTestAssertionReport(results) {
+    if (!results.length) return;
+
+    let passCount = results.filter(r => r.pass).length;
+    let lines = results.map(r =>
+        `${r.pass ? "✅" : "❌"} ${r.description} — expected ${r.expected}, got ${r.actual}`
+    );
+
+    let report = document.getElementById("importValidationReport");
+    if (report) {
+        report.textContent = `TEST RESULTS: ${passCount}/${results.length} passed\n\n` + lines.join("\n");
+    }
+
+    showToast(`Test results: ${passCount}/${results.length} passed`, passCount === results.length ? "success" : "warning");
+}
 ///Pushing refund to savings and logging refund in expenses to MoneyTracker.    
