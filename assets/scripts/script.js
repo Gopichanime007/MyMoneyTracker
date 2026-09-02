@@ -1634,20 +1634,21 @@ function repairDataIntegrity() {
         }
     });
 
-    // Relink savings budget allocations with unresolved target budget ids.
+    // Relink savings budget allocations only when the intended wallet is
+    // explicit or uniquely identified by its budget period. A savings
+    // source can fund multiple wallets and is never a wallet identity.
     savings.forEach(s => {
         if (!s || s.type !== "budget_allocation") return;
         let current = String(s.targetBudgetId || "");
         if (current && current !== "__auto__" && budgetById.has(current)) return;
 
-        let candidate = budgets.find(b => {
-            if (!b) return false;
-            if (s.periodKey && b.periodKey !== s.periodKey) return false;
-            return String(b.sourceId || "") === String(s.sourceId || "");
-        });
-
-        if (!candidate) {
-            candidate = budgets.find(b => b && String(b.sourceId || "") === String(s.sourceId || ""));
+        let candidate = s.budgetWalletId && budgetById.get(String(s.budgetWalletId));
+        if (!candidate && s.periodKey) {
+            let periodWallets = budgets.filter(b => {
+                if (!b || b.periodKey !== s.periodKey) return false;
+                return b.isBudgetWallet === true || String(b.entity || "").toLowerCase() === "budget wallet";
+            });
+            if (periodWallets.length === 1) candidate = periodWallets[0];
         }
 
         if (candidate) {
