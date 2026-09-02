@@ -80,6 +80,15 @@ function convertToBase(amount) {
     }
 }
 
+// Rounds to 2 decimal places (paise/cents) to eliminate floating-point drift
+// from repeated addition/subtraction across many ledger entries.
+function roundCurrency(value) {
+    let num = Number(value);
+    if (!Number.isFinite(num)) return 0;
+    return Math.round((num + Number.EPSILON) * 100) / 100;
+}
+
+
 // =========================
 // 💰 FORMAT (USE EVERYWHERE)
 // =========================
@@ -112,7 +121,6 @@ function changeCurrency(code) {
         loadBudgetScreen();
         renderBudgetEntries();
         renderCategoryBreakdown(groupByCategory(getExpenses()));
-        updateBudgetEfficiency();
 
 
     } catch (err) {
@@ -244,6 +252,17 @@ function saveExpenses(data) {
         let safe = Array.isArray(data) ? data : [];
         let rebalanced = rebalanceExpenseLedger(safe, getBudgets());
         localStorage.setItem("expenses", JSON.stringify(rebalanced));
+
+        const changeEvent = new CustomEvent('expenses:changed', {
+            detail: { expenses: rebalanced }
+        });
+
+        if (typeof window !== 'undefined') {
+            window.dispatchEvent(changeEvent);
+        }
+        if (typeof document !== 'undefined') {
+            document.dispatchEvent(changeEvent);
+        }
     } catch (err) {
         console.error('saveExpenses failed', err);
     }
@@ -461,14 +480,623 @@ function rebalanceSavingsLedger(entries) {
     return cloned;
 }
 
+// ⚠️ Archive System: keeps every source's archive status in sync with
+// its actual remaining balance, automatically, on every save — so no
+// individual call site can ever forget to check it.
+// - A source that reaches ₹0 remaining auto-archives as "depleted".
+// - A depleted source that gets real funding back above ₹0 auto-returns
+//   to active — this is the ONLY way a depleted source reactivates.
+// - A source the user manually archived (userArchived) is NEVER touched
+//   by this automatic check; only an explicit un-archive changes it.
+function syncAllSourceArchiveStatuses(savingsList) {
+    let data = Array.isArray(savingsList) ? savingsList : [];
+    let sources = data.filter(isSavingsSourceSeed);
+
+    sources.forEach(source => {
+        if (source.archiveReason === "userArchived") return;
+
+        let remaining = getSourceRemainingById(source.id, data);
+        let isDepleted = remaining <= 0;
+        let currentlyDepleted = source.status === "archived" && source.archiveReason === "depleted";
+
+        if (isDepleted && !currentlyDepleted) {
+            source.status = "archived";
+            source.archiveReason = "depleted";
+            source.archivedAt = new Date().toISOString();
+            source.archivedBy = "system";
+        } else if (!isDepleted && currentlyDepleted) {
+            source.status = "active";
+            source.archiveReason = "none";
+            source.archivedAt = null;
+            source.archivedBy = null;
+        }
+    });
+}
+
+// Manual archive — always allowed, regardless of balance. Distinct from
+// automatic "depleted" archiving: a deliberate choice, never
+// auto-reversed by balance changes.
+function archiveSourceManually(sourceId) {
+    let data = getSavings();
+    let source = data.find(s => String(s.id) === String(sourceId) && isSavingsSourceSeed(s));
+    if (!source) return false;
+
+    source.status = "archived";
+    source.archiveReason = "userArchived";
+    source.archivedAt = new Date().toISOString();
+    source.archivedBy = "user";
+
+    saveSavings(data);
+    return true;
+}
+
+// Un-archive — only works for a source the USER archived. A Depleted
+// source can only become active again by receiving real funding (an
+// Increase Adjustment), never through this button.
+function unarchiveSource(sourceId) {
+    let data = getSavings();
+    let source = data.find(s => String(s.id) === String(sourceId) && isSavingsSourceSeed(s));
+    if (!source) return { ok: false, error: "Source not found" };
+
+    if (source.archiveReason !== "userArchived") {
+        return { ok: false, error: "This source is archived because it's depleted — add funding (an Increase Adjustment) to reactivate it instead." };
+    }
+
+    source.status = "active";
+    source.archiveReason = "none";
+    source.archivedAt = null;
+    source.archivedBy = null;
+
+    saveSavings(data);
+    return { ok: true };
+}
+
 function saveSavings(data) {
     try {
         let safe = Array.isArray(data) ? data : [];
+        syncAllSourceArchiveStatuses(safe);
         let rebalanced = rebalanceSavingsLedger(safe);
         localStorage.setItem("savingsTransactions", JSON.stringify(rebalanced));
     } catch (err) {
         console.error('saveSavings failed', err);
     }
+}
+
+// =========================
+// 💠 UNASSIGNED TOP-UPS (Issue 02 Part C)
+// =========================
+// Money added straight into a Budget Wallet without picking a Savings
+// source yet. Savings is NOT touched until a source is assigned (fully
+// or partially) later. Each top-up stays its own permanently traceable
+// record — never merged into a single blob, per the agreed business rule.
+function getUnassignedTopups() {
+    try {
+        return JSON.parse(localStorage.getItem("unassignedTopups")) || [];
+    } catch (err) {
+        return [];
+    }
+}
+
+function saveUnassignedTopups(data) {
+    try {
+        let safe = Array.isArray(data) ? data : [];
+        localStorage.setItem("unassignedTopups", JSON.stringify(safe));
+    } catch (err) {
+        console.error('saveUnassignedTopups failed', err);
+    }
+}
+
+// Same "one wallet per period" identity rule as Issue 02's fix — reused
+// here, not duplicated, so both paths can never disagree with each other.
+function getOrCreateActiveBudgetWallet() {
+    let periodKey = typeof getActivePeriodKey === "function" ? getActivePeriodKey() : null;
+    if (!periodKey) return null;
+
+    let budgets = getBudgets();
+    let wallet = budgets.find(b => b && b.periodKey === periodKey && b.isBudgetWallet === true);
+
+    if (!wallet) {
+        wallet = budgets.find(b => b && b.periodKey === periodKey && (String(b.entity || "").toLowerCase() === "budget wallet"));
+    }
+
+    if (!wallet) {
+        let uid = (typeof crypto !== "undefined" && crypto.randomUUID)
+            ? crypto.randomUUID()
+            : `${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
+
+        wallet = {
+            id: Date.now(),
+            type: "budget",
+            budgetId: `budget_wallet_${periodKey}_${uid}`,
+            sourceId: null,
+            totalAllocated: 0,
+            entity: "Budget Wallet",
+            note: "Auto Budget Wallet",
+            periodKey,
+            monthKey: null,
+            isBudgetWallet: true,
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString()
+        };
+        budgets.push(wallet);
+        saveBudgets(budgets);
+    }
+
+    return wallet;
+}
+
+// Creates a new unassigned top-up: adds straight to the active wallet's
+// spendable total, leaves Savings completely untouched.
+function createUnassignedTopup({ amount, note = "", date = new Date().toISOString() }) {
+    let amt = Math.abs(Number(amount) || 0);
+    if (!amt) return null;
+
+    let wallet = getOrCreateActiveBudgetWallet();
+    if (!wallet) return null;
+
+    let budgets = getBudgets();
+    let liveWallet = budgets.find(b => b && b.budgetId === wallet.budgetId);
+    if (!liveWallet) return null;
+
+    liveWallet.totalAllocated = Number(liveWallet.totalAllocated || 0) + amt;
+    liveWallet.updatedAt = new Date().toISOString();
+    saveBudgets(budgets);
+
+    let topup = {
+        id: (typeof crypto !== "undefined" && crypto.randomUUID) ? crypto.randomUUID() : `topup_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`,
+        amount: amt,
+        note,
+        date,
+        periodKey: liveWallet.periodKey,
+        budgetWalletId: liveWallet.budgetId,
+        assignedAmount: 0,
+        assignments: [],
+        status: "unassigned",
+        parked: false,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+    };
+
+    let topups = getUnassignedTopups();
+    topups.push(topup);
+    saveUnassignedTopups(topups);
+
+    return topup;
+}
+
+// Every top-up still needing (full or partial) source assignment —
+// whether it's tied to a still-open wallet or parked in the long-term
+// Unresolved pool from a closed period.
+function getPendingUnassignedTopups() {
+    return getUnassignedTopups().filter(t => t && t.status !== "assigned");
+}
+
+function getRemainingUnassignedAmount(topup) {
+    if (!topup) return 0;
+    return roundCurrency(Math.max(0, Number(topup.amount || 0) - Number(topup.assignedAmount || 0)));
+}
+// =========================
+// 🔗 SOURCES
+// =========================
+function isSavingsSourceSeed(entry) {
+    if (!entry) return false;
+    return entry.type === "income" || entry.type === "deposit";
+}
+
+function buildSavingsSourceLedger(entries) {
+    let data = Array.isArray(entries) ? entries : [];
+
+    let sources = data.filter(isSavingsSourceSeed);
+
+    return sources.map(s => {
+        let sid = String(s.id);
+
+        let incoming = data
+            .filter(t => String(t.id) !== sid && String(t.sourceId) === sid && Number(t.amount || 0) > 0)
+            .reduce((sum, t) => sum + Number(t.amount || 0), 0);
+
+        let outgoing = data
+            .filter(t => String(t.id) !== sid && String(t.sourceId) === sid && Number(t.amount || 0) < 0)
+            .reduce((sum, t) => sum + Math.abs(Number(t.amount || 0)), 0);
+
+        let base = Math.max(0, Number(s.amount || 0));
+        let remaining = base + incoming - outgoing;
+
+        return {
+            source: s,
+            incoming,
+            outgoing,
+            remaining
+        };
+    });
+}
+
+function getSourceRemainingById(sourceId, entries) {
+    let scoped = getSavings() || [];
+    let ledger = buildSavingsSourceLedger(entries || scoped);
+    let row = ledger.find(x => String(x.source.id) === String(sourceId));
+    return row ? Number(row.remaining || 0) : 0;
+}
+
+// ⚠️ Funding-source traceability for a Budget Wallet (Issue 02 / Issue 01).
+// Derived on demand from Savings entries — nothing new is stored, so this
+// can never drift out of sync with the actual transaction history.
+function getBudgetFundingSources(budgetId) {
+    if (!budgetId) return [];
+
+    let savings = (typeof getSavings === "function") ? getSavings() : [];
+
+    return savings
+        .filter(entry => entry && String(entry.budgetWalletId || entry.targetBudgetId || "") === String(budgetId))
+        .map(entry => ({
+            sourceId: entry.sourceId || null,
+            amount: Math.abs(Number(entry.amount || 0)),
+            date: entry.date || entry.createdAt || null,
+            note: entry.note || ""
+        }))
+        .sort((a, b) => new Date(a.date) - new Date(b.date));
+}
+
+// Manually (or automatically, at closure) assign part or all of an
+// Unassigned Top-Up to a real Savings source. Creates a real Savings
+// ledger entry (reduces that source) but does NOT touch the wallet's
+// totalAllocated again — that already happened the moment the top-up
+// was created.
+function assignUnassignedTopupToSource(topupId, sourceId, amount, method = "manual") {
+    let topups = getUnassignedTopups();
+    let topup = topups.find(t => String(t.id) === String(topupId));
+    if (!topup) return { ok: false, error: "Top-up not found" };
+
+    let remaining = getRemainingUnassignedAmount(topup);
+    let requested = roundCurrency(Math.abs(Number(amount) || 0));
+
+    if (!requested || requested <= 0) {
+        return { ok: false, error: "Enter a valid amount" };
+    }
+    if (requested > remaining) {
+        return { ok: false, error: `Only ${formatCurrency(remaining)} left to assign on this top-up` };
+    }
+
+    let sourceAvailable = getSourceRemainingById(sourceId);
+    if (requested > sourceAvailable) {
+        return { ok: false, error: `Selected source only has ${formatCurrency(sourceAvailable)} available` };
+    }
+
+    let savings = getSavings();
+    let entry = {
+        id: (typeof crypto !== "undefined" && crypto.randomUUID) ? crypto.randomUUID() : `sav_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`,
+        type: "unassigned_topup_resolution",
+        amount: -requested,
+        sourceId,
+        entity: "Budget Wallet",
+        paymentType: null,
+        person: null,
+        note: `Resolved top-up${topup.note ? " — " + topup.note : ""}${method === "auto" ? " (auto-assigned)" : ""}`,
+        date: new Date().toISOString(),
+        monthKey: new Date().toISOString().slice(0, 7),
+        periodKey: null,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        targetBudgetId: topup.budgetWalletId,
+        budgetWalletId: topup.budgetWalletId,
+        linkedTopupId: topup.id
+    };
+    savings.push(entry);
+    saveSavings(savings);
+
+    topup.assignedAmount = roundCurrency(Number(topup.assignedAmount || 0) + requested);
+    topup.assignments.push({
+        sourceId,
+        amount: requested,
+        date: new Date().toISOString(),
+        method,
+        savingsEntryId: entry.id
+    });
+    topup.status = topup.assignedAmount >= topup.amount ? "assigned" : "partially_assigned";
+    topup.updatedAt = new Date().toISOString();
+
+    saveUnassignedTopups(topups);
+
+    return { ok: true, topup, entry };
+}
+
+// ⚠️ Section 12/13: try to auto-resolve every still-unassigned top-up
+// in a wallet, using the most recent eligible Bank deposit first (by
+// its real remaining balance), splitting across as many deposits as
+// needed. Whatever can't be covered gets parked in the standing
+// Unresolved Pool — never blocks anything, always stays traceable.
+function autoResolveWalletTopups(wallet) {
+    if (!wallet || !wallet.budgetId) return;
+
+    let topups = getUnassignedTopups();
+    let pending = topups.filter(t => t && t.budgetWalletId === wallet.budgetId && t.status !== "assigned" && !t.parked);
+    if (!pending.length) return;
+
+    pending.forEach(topup => {
+        let remaining = getRemainingUnassignedAmount(topup);
+        if (remaining <= 0) return;
+
+        let savings = getSavings();
+        let eligibleDeposits = savings
+            .filter(e => e && e.type === "deposit" && String(e.paymentType || "") === "Bank")
+            .map(e => ({ id: e.id, date: e.date, remaining: getSourceRemainingById(e.id, savings) }))
+            .filter(d => d.remaining > 0)
+            .sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0));
+
+        let need = remaining;
+
+        eligibleDeposits.forEach(dep => {
+            if (need <= 0) return;
+            let use = roundCurrency(Math.min(dep.remaining, need));
+            if (use <= 0) return;
+
+            let result = assignUnassignedTopupToSource(topup.id, dep.id, use, "auto");
+            if (result && result.ok) {
+                need = roundCurrency(need - use);
+            }
+        });
+
+        let stillRemaining = getRemainingUnassignedAmount(topup);
+        if (stillRemaining > 0) {
+            let all = getUnassignedTopups();
+            let live = all.find(t => t.id === topup.id);
+            if (live) {
+                live.parked = true;
+                live.parkedFromBudgetId = wallet.budgetId;
+                live.updatedAt = new Date().toISOString();
+                saveUnassignedTopups(all);
+            }
+        }
+    });
+}
+
+// Runs once per app load: any Budget Wallet that is no longer the
+// active period's wallet (i.e. its period has closed) gets its
+// still-unassigned top-ups auto-resolved. Guarded by
+// topupsAutoResolved so a wallet is only ever processed once, no
+// matter how many times the app is opened afterward.
+function autoResolveClosedWalletTopups() {
+    let activePeriodKey = typeof getActivePeriodKey === "function" ? getActivePeriodKey() : null;
+    let budgets = getBudgets();
+    let toProcess = budgets.filter(b => b && b.isBudgetWallet === true && b.periodKey && b.periodKey !== activePeriodKey && !b.topupsAutoResolved);
+
+    if (!toProcess.length) return;
+
+    toProcess.forEach(wallet => {
+        autoResolveWalletTopups(wallet);
+    });
+
+    let refreshed = getBudgets();
+    toProcess.forEach(processedWallet => {
+        let live = refreshed.find(b => b.budgetId === processedWallet.budgetId);
+        if (live) live.topupsAutoResolved = true;
+    });
+    saveBudgets(refreshed);
+}
+// =========================
+// 🖥️ BUDGET WALLET SCREEN (Overview / Top-Up / Apply Source)
+// =========================
+function renderBudgetWalletOverview() {
+    let periodKey = typeof getActivePeriodKey === "function" ? getActivePeriodKey() : null;
+    let budgets = getBudgets();
+    let wallet = periodKey ? budgets.find(b => b && b.periodKey === periodKey && b.isBudgetWallet === true) : null;
+
+    let totalAllocated = wallet ? Number(wallet.totalAllocated || 0) : 0;
+    let expenses = getExpenses();
+
+    // Remaining keeps using the existing, already-correct net-spent figure
+    // (adjustments included) — untouched on purpose.
+    let netSpentIncludingAdjustments = wallet ? Math.max(0, getNetSpentForBudget(wallet.budgetId, expenses)) : 0;
+    let remaining = totalAllocated - netSpentIncludingAdjustments;
+
+    // What the user actually sees as "Spent" excludes adjustments.
+    let realSpent = wallet ? Math.max(0, getRealSpentForBudget(wallet.budgetId, expenses)) : 0;
+    let netAdjustment = wallet ? getNetAdjustmentForBudget(wallet.budgetId, expenses) : 0;
+
+    let topups = getUnassignedTopups();
+    let unassignedTotal = wallet
+        ? topups
+            .filter(t => t && t.budgetWalletId === wallet.budgetId && !t.parked)
+            .reduce((sum, t) => sum + getRemainingUnassignedAmount(t), 0)
+        : 0;
+
+    let assignedTotal = Math.max(0, totalAllocated - unassignedTotal);
+
+    let setText = (id, value) => {
+        let el = document.getElementById(id);
+        if (el) el.textContent = formatCurrency(value);
+    };
+
+    setText("walletAssignedTotal", assignedTotal);
+    setText("walletUnassignedTotal", unassignedTotal);
+    setText("walletSpentTotal", realSpent);
+    setText("walletRemainingTotal", remaining);
+    setText("walletAdjustmentTotal", netAdjustment);
+}
+function handleCreateUnassignedTopup() {
+    let amountInput = document.getElementById("topupAmount");
+    let noteInput = document.getElementById("topupNote");
+    let dateInput = document.getElementById("topupDate");
+
+    let amount = Number(amountInput ? amountInput.value : 0);
+    if (!amount || amount <= 0) {
+        showToast("Enter a valid amount");
+        return;
+    }
+
+    let date = dateInput && dateInput.value ? new Date(dateInput.value).toISOString() : new Date().toISOString();
+    let note = noteInput ? noteInput.value : "";
+
+    let topup = createUnassignedTopup({ amount, note, date });
+    if (!topup) {
+        showToast("Could not create top-up. Is a Budget Period active?");
+        return;
+    }
+
+    showToast("Top-up added ✅");
+
+    if (amountInput) amountInput.value = "";
+    if (noteInput) noteInput.value = "";
+    prefillTopupForm();
+
+    renderBudgetWalletOverview();
+    if (typeof renderBudgetEntries === "function") renderBudgetEntries();
+    if (typeof loadBudgetScreen === "function") loadBudgetScreen();
+    if (typeof loadDashboard === "function") loadDashboard();
+}
+
+// Pre-fills sensible defaults when the Top-Up tab opens — the whole
+// point of Top-Up is speed, so the form should already be ready to go.
+// Guarded so it never overwrites something you've already started typing.
+function prefillTopupForm() {
+    let dateInput = document.getElementById("topupDate");
+    if (dateInput && !dateInput.value) {
+        dateInput.value = new Date().toISOString().split("T")[0];
+    }
+
+    let noteInput = document.getElementById("topupNote");
+    if (noteInput && !noteInput.value) {
+        noteInput.value = "Quick top-up";
+    }
+}
+function renderApplySourceTab() {
+    let container = document.getElementById("pendingTopupsList");
+    if (!container) return;
+
+    let pending = getPendingUnassignedTopups();
+
+    if (!pending.length) {
+        container.innerHTML = "<p class='empty-state'>No unassigned top-ups right now.</p>";
+        return;
+    }
+
+    container.innerHTML = "";
+
+    pending.slice().reverse().forEach(t => {
+        let remaining = getRemainingUnassignedAmount(t);
+        let dateText = new Date(t.date).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
+
+        let div = document.createElement("div");
+        div.className = "expense-item transaction-card";
+        div.innerHTML = `
+            <div class="transaction-card-head">
+                <div class="history-type">${t.parked ? "🗂 Unresolved Pool" : "💠 Unassigned Top-Up"}</div>
+                <div class="transaction-title">${escapeHtml(t.note || "-")}</div>
+            </div>
+            <div class="transaction-meta-grid">
+                <span class="entry-label">Date</span>
+                <span class="entry-value">${escapeHtml(dateText)}</span>
+                <span class="entry-label">Original Amount</span>
+                <span class="entry-value">${escapeHtml(formatCurrency(t.amount))}</span>
+                <span class="entry-label">Still Unassigned</span>
+                <span class="entry-value">${escapeHtml(formatCurrency(remaining))}</span>
+            </div>
+            <div class="transaction-card-foot">
+                <div class="history-actions">
+                    <button class="entry-action-btn" type="button" onclick="openAssignTopupModal('${escapeHtml(t.id)}')">Assign Source</button>
+                </div>
+            </div>
+        `;
+        container.appendChild(div);
+    });
+}
+
+function ensureAssignTopupModal() {
+    let existing = document.getElementById("assignTopupModal");
+    if (existing) return existing;
+
+    let modal = document.createElement("div");
+    modal.id = "assignTopupModal";
+    modal.className = "modal hidden";
+    modal.innerHTML = `
+      <div class="modal-content" onclick="event.stopPropagation()">
+        <h3>Assign Source</h3>
+        <p class="modal-sub" id="assignTopupContext"></p>
+
+        <label for="assignTopupSource">Savings Source</label>
+        <select id="assignTopupSource"></select>
+
+        <label for="assignTopupAmount">Amount to Assign</label>
+        <input type="number" id="assignTopupAmount" placeholder="Amount">
+
+        <div class="modal-actions">
+          <button class="secondary" type="button" onclick="closeAssignTopupModal()">Cancel</button>
+          <button class="primary" type="button" onclick="confirmAssignTopup()">Assign</button>
+        </div>
+      </div>
+    `;
+    modal.addEventListener("click", closeAssignTopupModal);
+    document.body.appendChild(modal);
+    return modal;
+}
+
+function closeAssignTopupModal() {
+    let modal = document.getElementById("assignTopupModal");
+    if (modal) {
+        modal.classList.add("hidden");
+        modal.style.display = "none";
+    }
+}
+
+let currentAssignTopupId = null;
+
+function openAssignTopupModal(topupId) {
+    let topup = getUnassignedTopups().find(t => String(t.id) === String(topupId));
+    if (!topup) return;
+
+    currentAssignTopupId = topupId;
+    let modal = ensureAssignTopupModal();
+
+    let remaining = getRemainingUnassignedAmount(topup);
+    let contextEl = document.getElementById("assignTopupContext");
+    if (contextEl) {
+        contextEl.textContent = `${formatCurrency(remaining)} still unassigned from top-up dated ${new Date(topup.date).toLocaleDateString("en-IN")}${topup.note ? " — " + topup.note : ""}`;
+    }
+
+    let sourceSelect = document.getElementById("assignTopupSource");
+    if (sourceSelect) {
+        let savings = getSavings();
+        let ledger = buildSavingsSourceLedger(savings);
+        sourceSelect.innerHTML = "<option value=''>Select Source</option>";
+        ledger.forEach(item => {
+            if (Number(item.remaining || 0) <= 0) return;
+            let opt = document.createElement("option");
+            opt.value = item.source.id;
+            opt.textContent = `${item.source.note || "Savings Source"} — ${formatCurrency(item.remaining)} left`;
+            sourceSelect.appendChild(opt);
+        });
+    }
+
+    let amountInput = document.getElementById("assignTopupAmount");
+    if (amountInput) amountInput.value = remaining ? String(remaining) : "";
+
+    modal.classList.remove("hidden");
+    modal.style.display = "flex";
+}
+
+function confirmAssignTopup() {
+    if (!currentAssignTopupId) return;
+
+    let sourceId = document.getElementById("assignTopupSource")?.value || "";
+    let amount = document.getElementById("assignTopupAmount")?.value || "";
+
+    if (!sourceId) {
+        showToast("Select a source");
+        return;
+    }
+
+    let result = assignUnassignedTopupToSource(currentAssignTopupId, sourceId, amount);
+    if (!result.ok) {
+        showToast(result.error || "Could not assign");
+        return;
+    }
+
+    showToast("Source assigned ✅");
+    closeAssignTopupModal();
+    renderApplySourceTab();
+    renderBudgetWalletOverview();
+    if (typeof loadSavings === "function") loadSavings();
+    if (typeof loadSourceOptions === "function") loadSourceOptions();
 }
 
 // Expose core storage helpers on `window` only if not already provided by another module.
@@ -498,8 +1126,6 @@ if (typeof window !== 'undefined') {
     window.calculateAverageSpendingByType = window.calculateAverageSpendingByType || calculateAverageSpendingByType;
     window.loadGraph = window.loadGraph || loadGraph;
     window.updateGraphSummary = window.updateGraphSummary || updateGraphSummary;
-    window.updateBudgetEfficiency = window.updateBudgetEfficiency || updateBudgetEfficiency;
-    window.computeBudgetEfficiencyMetrics = window.computeBudgetEfficiencyMetrics || computeBudgetEfficiencyMetrics;
     window.loadBudgetOptions = window.loadBudgetOptions || loadBudgetOptions;
     window.autoSelectExpenseBudget = window.autoSelectExpenseBudget || autoSelectExpenseBudget;
     window.resetExpenseBudgetSelectionState = window.resetExpenseBudgetSelectionState || resetExpenseBudgetSelectionState;
@@ -546,6 +1172,21 @@ function summarizeDeleteImpact(plan) {
     if ((plan.childBudgets || []).length) parts.push(`${plan.childBudgets.length} linked budgets`);
     if ((plan.attachments || []).length) parts.push(`${plan.attachments.length} attachments`);
     return parts.length ? parts.join(", ") : "no dependent records";
+}
+// Which Budget Wallets are actually affected if these specific Savings
+// entries get deleted — matched by the real budgetWalletId link on each
+// funding transaction, not a wallet's own (now shared/ambiguous)
+// sourceId field.
+function getBudgetWalletsAffectedBySavingsIds(savingsIdSet, savingsList, budgetsList) {
+    let affected = new Set();
+    (Array.isArray(savingsList) ? savingsList : []).forEach(s => {
+        if (!s || !s.budgetWalletId) return;
+        if (!savingsIdSet.has(String(s.id))) return;
+        let bid = String(s.budgetWalletId);
+        let exists = (Array.isArray(budgetsList) ? budgetsList : []).some(b => String((b && (b.budgetId || b.id)) || "") === bid);
+        if (exists) affected.add(bid);
+    });
+    return affected;
 }
 
 function validateTransactionDependencies(scope, ids, cascade) {
@@ -605,17 +1246,17 @@ function validateTransactionDependencies(scope, ids, cascade) {
                 }
             });
 
-            let deletedSourceIds = new Set([...savingsDelete]);
+            // let deletedSourceIds = new Set([...savingsDelete]);
 
-            budgets.forEach(b => {
-                if (!b || !b.sourceId) return;
-                let bid = String(b.budgetId || b.id || "");
-                if (!bid || budgetDelete.has(bid)) return;
-                if (deletedSourceIds.has(String(b.sourceId)) && cascade) {
-                    budgetDelete.add(bid);
-                    changed = true;
-                }
-            });
+            // budgets.forEach(b => {
+            //     if (!b || !b.sourceId) return;
+            //     let bid = String(b.budgetId || b.id || "");
+            //     if (!bid || budgetDelete.has(bid)) return;
+            //     if (deletedSourceIds.has(String(b.sourceId)) && cascade) {
+            //         budgetDelete.add(bid);
+            //         changed = true;
+            //     }
+            // });
 
             expenses.forEach(e => {
                 let eid = String(e.id);
@@ -673,10 +1314,12 @@ function validateTransactionDependencies(scope, ids, cascade) {
         })
         .map(s => String(s.id));
 
-    let childBudgets = budgets
-        .filter(b => scope === "savings" && b && b.sourceId && idSet.has(String(b.sourceId)))
-        .map(b => String(b.budgetId || b.id || ""))
-        .filter(Boolean);
+    // ⚠️ FIX: a Budget Wallet can be funded by several Savings entries
+    // now, so "does this affect a budget" is answered by checking real
+    // funding links, not a wallet's own sourceId.
+    let childBudgets = scope === "savings"
+        ? [...getBudgetWalletsAffectedBySavingsIds(idSet, savings, budgets)]
+        : [];
 
     let attachments = [];
     expenses.forEach(e => { if (expenseDelete.has(String(e.id)) && e.attachmentId) attachments.push(String(e.attachmentId)); });
@@ -722,9 +1365,9 @@ async function executeDeletePlan(plan) {
         budgets = budgets.filter(b => !budgetIds.has(String(b.budgetId || b.id || "")));
     }
 
-    if (!budgetIds.size && removedSavings.length && typeof adjustBudgetAfterDelete === "function") {
+    if (removedSavings.length && typeof adjustBudgetAfterDelete === "function") {
         removedSavings.forEach(entry => {
-            if (entry && entry.type === "budget_allocation") {
+            if (entry && entry.budgetWalletId) {
                 try { adjustBudgetAfterDelete(entry); } catch (e) { }
             }
         });
@@ -991,20 +1634,21 @@ function repairDataIntegrity() {
         }
     });
 
-    // Relink savings budget allocations with unresolved target budget ids.
+    // Relink savings budget allocations only when the intended wallet is
+    // explicit or uniquely identified by its budget period. A savings
+    // source can fund multiple wallets and is never a wallet identity.
     savings.forEach(s => {
         if (!s || s.type !== "budget_allocation") return;
         let current = String(s.targetBudgetId || "");
         if (current && current !== "__auto__" && budgetById.has(current)) return;
 
-        let candidate = budgets.find(b => {
-            if (!b) return false;
-            if (s.periodKey && b.periodKey !== s.periodKey) return false;
-            return String(b.sourceId || "") === String(s.sourceId || "");
-        });
-
-        if (!candidate) {
-            candidate = budgets.find(b => b && String(b.sourceId || "") === String(s.sourceId || ""));
+        let candidate = s.budgetWalletId && budgetById.get(String(s.budgetWalletId));
+        if (!candidate && s.periodKey) {
+            let periodWallets = budgets.filter(b => {
+                if (!b || b.periodKey !== s.periodKey) return false;
+                return b.isBudgetWallet === true || String(b.entity || "").toLowerCase() === "budget wallet";
+            });
+            if (periodWallets.length === 1) candidate = periodWallets[0];
         }
 
         if (candidate) {
@@ -1266,7 +1910,70 @@ function getNetSpentForBudget(budgetId, expensesList) {
         }
     }
 
-    return net;
+    return roundCurrency(net);
+}
+
+// "Real" spending only — excludes Adjustment entries, since a correction
+// isn't the same thing as spending. getNetSpentForBudget stays untouched
+// on purpose: Remaining-balance math everywhere else in the app already
+// correctly factors adjustments in, and shouldn't be disturbed.
+function getRealSpentForBudget(budgetId, expensesList) {
+    let expenses = Array.isArray(expensesList) ? expensesList : getExpenses();
+    let net = 0;
+
+    for (let e of expenses) {
+        if (!e || e.type === "adjustment") continue;
+
+        let contrib = 0;
+        if (Array.isArray(e.allocationTrail) && e.allocationTrail.length) {
+            for (let a of e.allocationTrail) {
+                if (String(a.budgetId) === String(budgetId)) {
+                    contrib += Math.abs(a.amount || 0);
+                }
+            }
+        } else if (String(e.budgetId) === String(budgetId)) {
+            contrib += Math.abs(e.amount || 0);
+        }
+
+        if (!contrib) continue;
+
+        if (e.type === 'recovery' || e.type === 'refund' || e.type === 'income' || e.type === 'budget_income') {
+            net -= contrib;
+        } else if (e.type === 'transfer_back' || e.amount < 0 || e.type === 'expense' || e.type === 'loss' || e.type === 'transfer') {
+            net += contrib;
+        } else if (Number(e.amount || 0) > 0) {
+            net -= contrib;
+        }
+    }
+
+    return roundCurrency(net);
+}
+
+// Net Adjustment total for a Budget Wallet, signed — negative means
+// corrected downward, positive means corrected upward.
+function getNetAdjustmentForBudget(budgetId, expensesList) {
+    let expenses = Array.isArray(expensesList) ? expensesList : getExpenses();
+    let net = 0;
+
+    for (let e of expenses) {
+        if (!e || e.type !== "adjustment") continue;
+
+        let contrib = 0;
+        if (Array.isArray(e.allocationTrail) && e.allocationTrail.length) {
+            for (let a of e.allocationTrail) {
+                if (String(a.budgetId) === String(budgetId)) {
+                    contrib += Math.abs(Number(a.amount) || 0);
+                }
+            }
+        } else if (String(e.budgetId) === String(budgetId)) {
+            contrib += Math.abs(Number(e.amount) || 0);
+        }
+
+        if (!contrib) continue;
+        net += Number(e.amount || 0) < 0 ? -contrib : contrib;
+    }
+
+    return roundCurrency(net);
 }
 
 function getNetSpentForBudgetSet(budgetIds, expensesList) {
@@ -1637,7 +2344,6 @@ async function deleteExpenseUI(id) {
             loadHistory();
             loadDashboard();
             loadGraph();
-            updateBudgetEfficiency();
             renderBudgetEntries();
             loadBudgetOptions();
             if (typeof loadSavings === "function") loadSavings();
@@ -1654,7 +2360,6 @@ async function deleteExpenseUI(id) {
         loadHistory();
         loadDashboard();
         loadGraph();
-        updateBudgetEfficiency();
         renderBudgetEntries();
         resetExpenseBudgetSelectionState();
         loadBudgetOptions();
@@ -1766,6 +2471,34 @@ function normalizeResolutionType(value) {
     };
 
     return mapped[raw] || "open";
+}
+
+function resolveRefundLinkTargets(snapshotOrOriginal, fallbackBudgetId = null) {
+    const original = snapshotOrOriginal && snapshotOrOriginal.original
+        ? snapshotOrOriginal.original
+        : snapshotOrOriginal || null;
+
+    const sourceCandidates = [];
+    if (original && Array.isArray(original.linkedSourceSavingsIds) && original.linkedSourceSavingsIds.length) {
+        original.linkedSourceSavingsIds.forEach(id => {
+            if (id !== undefined && id !== null && id !== "") sourceCandidates.push(String(id));
+        });
+    }
+    if (original && original.linkedSourceSavingsId) sourceCandidates.push(String(original.linkedSourceSavingsId));
+    if (original && original.sourceId) sourceCandidates.push(String(original.sourceId));
+    if (original && original.linkedSourceId) sourceCandidates.push(String(original.linkedSourceId));
+    if (original && original.budgetWalletSourceId) sourceCandidates.push(String(original.budgetWalletSourceId));
+    if (original && original.source) sourceCandidates.push(String(original.source));
+    if (original && original.entity) sourceCandidates.push(String(original.entity));
+
+    const uniqueSources = [...new Set(sourceCandidates.filter(Boolean))];
+
+    return {
+        budgetId: (original && (original.budgetId || original.targetBudgetId || original.linkedBudgetId)) || fallbackBudgetId || null,
+        linkedSourceSavingsId: uniqueSources[0] || null,
+        linkedSourceSavingsIds: uniqueSources,
+        sourceIds: uniqueSources
+    };
 }
 
 function getExpenseResolutionSnapshot(originalId, expensesList) {
@@ -1913,33 +2646,53 @@ function handleRefundResolutionChange() {
     updateLinkedRemainingUI();
 }
 
-function resolveBudgetSourceIdForTransferBack(budget, savingsEntries) {
-    if (!budget || !budget.budgetId) return null;
+// ⚠️ FIX (Issue 01): A wallet's remaining balance can now legitimately
+// come from MULTIPLE Savings sources (Issue 02 removed the old "one
+// source per budget row" assumption). This walks the wallet's real
+// funding history oldest → newest, consuming "spent" against the
+// oldest funding first — so whatever's left over is attributed to the
+// most recently added funding first (matches how spending already
+// worked in practice). Returns an array of {budgetId, sourceId, amount}
+// covering up to `requestAmount`.
+function computeTransferBackAllocations(budgetId, requestAmount) {
+    let amount = roundCurrency(Math.abs(Number(requestAmount) || 0));
+    if (!amount || !budgetId) return [];
 
-    if (budget.sourceId) return String(budget.sourceId);
-    if (budget.linkedSourceSavingsId) return String(budget.linkedSourceSavingsId);
-    if (Array.isArray(budget.linkedSourceSavingsIds) && budget.linkedSourceSavingsIds.length) {
-        return String(budget.linkedSourceSavingsIds[0]);
-    }
+    let funding = typeof getBudgetFundingSources === "function" ? getBudgetFundingSources(budgetId) : [];
+    // getBudgetFundingSources already sorts oldest → newest.
 
-    let savings = Array.isArray(savingsEntries) ? savingsEntries : [];
-    let relatedAllocations = savings
-        .filter(entry => {
-            if (!entry || !entry.sourceId) return false;
-            let isAllocation = entry.type === "budget_allocation" || entry.type === "withdraw_budget";
-            return isAllocation && String(entry.targetBudgetId || "") === String(budget.budgetId);
-        })
-        .sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0));
+    let expenses = getExpenses();
+    let spent = Math.max(0, getNetSpentForBudget(budgetId, expenses));
 
-    if (relatedAllocations.length) {
-        return String(relatedAllocations[0].sourceId);
-    }
+    let remainingPerEvent = [];
+    let spendLeft = spent;
 
-    return null;
+    funding.forEach(f => {
+        let used = Math.min(f.amount, spendLeft);
+        spendLeft = roundCurrency(Math.max(0, spendLeft - used));
+        let remains = roundCurrency(f.amount - used);
+        if (remains > 0) {
+            remainingPerEvent.push({ sourceId: f.sourceId, amount: remains });
+        }
+    });
+
+    let allocations = [];
+    let need = amount;
+
+    remainingPerEvent.forEach(r => {
+        if (need <= 0) return;
+        let use = roundCurrency(Math.min(r.amount, need));
+        if (use > 0) {
+            allocations.push({ budgetId, sourceId: r.sourceId, amount: use });
+            need = roundCurrency(need - use);
+        }
+    });
+
+    return allocations;
 }
 
 function buildTransferBackPlan(requestAmount, selectedBudgetId = null) {
-    let amount = Math.abs(Number(requestAmount) || 0);
+    let amount = roundCurrency(Math.abs(Number(requestAmount) || 0));
     if (!amount) {
         return { amount: 0, allocations: [], remaining: 0, totalAvailable: 0 };
     }
@@ -1950,20 +2703,13 @@ function buildTransferBackPlan(requestAmount, selectedBudgetId = null) {
         budgets = budgets.filter(b => String(b.budgetId || "") === selectedId);
     }
 
-    let savingsEntries = (typeof getSavings === "function") ? getSavings() : [];
-
     let expenses = getExpenses();
     let candidates = budgets.map(b => {
         let spent = Math.max(0, getNetSpentForBudget(b.budgetId, expenses));
-        let allocated = Math.max(0, Number(b.totalAllocated || 0));
-        let available = Math.max(0, allocated - spent);
-        let resolvedSourceId = resolveBudgetSourceIdForTransferBack(b, savingsEntries) || String(b.sourceId || "");
-        return {
-            budgetId: b.budgetId,
-            sourceId: resolvedSourceId,
-            available
-        };
-    }).filter(c => c.available > 0 && !!c.sourceId);
+        let allocated = roundCurrency(Math.max(0, Number(b.totalAllocated || 0)));
+        let available = roundCurrency(Math.max(0, allocated - spent));
+        return { budgetId: b.budgetId, available };
+    }).filter(c => c.available > 0);
 
     if (!candidates.length) {
         return {
@@ -1971,30 +2717,139 @@ function buildTransferBackPlan(requestAmount, selectedBudgetId = null) {
             allocations: [],
             remaining: amount,
             totalAvailable: 0,
-            selectedBudgetId: selectedId || null,
-            selectedSourceId: null
+            selectedBudgetId: selectedId || null
         };
     }
 
     let chosen = candidates[0];
-    let use = Math.min(chosen.available, amount);
-    let allocations = use > 0
-        ? [{
-            budgetId: chosen.budgetId,
-            sourceId: chosen.sourceId,
-            amount: use
-        }]
-        : [];
-    let remaining = Math.max(0, amount - use);
+    let use = roundCurrency(Math.min(chosen.available, amount));
+
+    // ⚠️ FIX (Issue 01): split the return across every real source that
+    // funded this wallet, instead of forcing it onto just one.
+    let allocations = use > 0 ? computeTransferBackAllocations(chosen.budgetId, use) : [];
+    let allocated = roundCurrency(allocations.reduce((sum, a) => sum + a.amount, 0));
+    let remaining = roundCurrency(Math.max(0, amount - allocated));
 
     return {
         amount,
         allocations,
         remaining,
-        totalAvailable: candidates.reduce((sum, c) => sum + c.available, 0),
-        selectedBudgetId: chosen.budgetId,
-        selectedSourceId: chosen.sourceId
+        totalAvailable: roundCurrency(candidates.reduce((sum, c) => sum + c.available, 0)),
+        selectedBudgetId: chosen.budgetId
     };
+}
+
+// =========================
+// 🔄 QUICK CLOSE — one-tap transfer back from a budget card
+// =========================
+async function quickCloseBudgetTransferBack(group, relatedBudgetIds) {
+    let ids = Array.isArray(relatedBudgetIds) ? relatedBudgetIds : [];
+    let totalTransferred = 0;
+    let failures = [];
+
+    for (let budgetId of ids) {
+        let expenses = getExpenses();
+        let spent = getNetSpentForBudget(budgetId, expenses);
+        let budgetRow = getBudgets().find(b => String(b.budgetId) === String(budgetId));
+        let allocated = roundCurrency(Number(budgetRow && budgetRow.totalAllocated || 0));
+        let remaining = roundCurrency(Math.max(0, allocated - spent));
+
+        if (remaining <= 0) continue;
+
+        // ⚠️ Section 12/13: resolve any unassigned top-up money in this
+        // wallet to a real source before computing the split.
+        if (budgetRow && typeof autoResolveWalletTopups === "function") {
+            autoResolveWalletTopups(budgetRow);
+        }
+
+        let plan = buildTransferBackPlan(remaining, budgetId);
+        if (!plan.allocations.length || plan.remaining > 0) {
+            failures.push(budgetId);
+            continue;
+        }
+
+        let transferBackTrail = plan.allocations.map(a => ({
+            budgetId: a.budgetId,
+            sourceId: a.sourceId,
+            amount: a.amount
+        }));
+        let uniqueSources = [...new Set(transferBackTrail.map(a => a.sourceId))];
+
+        // ⚠️ FIX (Issue 01): no longer requires exactly one source —
+        // transferBackTrail already supports (and the code below already
+        // correctly handles) crediting several sources at once.
+        if (!uniqueSources.length) {
+            failures.push(budgetId);
+            continue;
+        }
+
+        let nowIso = new Date().toISOString();
+
+        let created = addExpense({
+            amount: -Math.abs(plan.amount),
+            category: "Transfer Back",
+            purpose: "Budget Closure",
+            date: nowIso,
+            type: "transfer_back",
+            paymentType: "Cash",
+            budgetId,
+            allocationTrail: transferBackTrail.map(a => ({ budgetId: a.budgetId, amount: roundCurrency(convertToBase(a.amount)) })),
+            transferBackTrail,
+            linkedSourceSavingsId: uniqueSources[0] || null,
+            linkedSourceSavingsIds: uniqueSources
+        });
+
+        if (created && typeof getSavings === "function" && typeof saveSavings === "function") {
+            let savings = getSavings();
+            let grouped = {};
+            transferBackTrail.forEach(a => {
+                grouped[a.sourceId] = (grouped[a.sourceId] || 0) + Number(a.amount || 0);
+            });
+            Object.keys(grouped).forEach(sourceId => {
+                let val = roundCurrency(Math.abs(Number(grouped[sourceId]) || 0));
+                if (!val) return;
+                savings.push({
+                    id: (typeof crypto !== "undefined" && crypto.randomUUID) ? crypto.randomUUID() : `sav_${Date.now()}_${Math.random()}`,
+                    type: "refund",
+                    amount: val,
+                    sourceId,
+                    entity: "Budget Wallet",
+                    paymentType: "Cash",
+                    note: "Budget Closure",
+                    date: nowIso,
+                    monthKey: nowIso.slice(0, 7),
+                    periodKey: (typeof getActivePeriodKey === "function") ? getActivePeriodKey() : null,
+                    createdAt: new Date().toISOString(),
+                    updatedAt: new Date().toISOString(),
+                    linkedTransactionId: created.id,
+                    linkedSourceSavingsId: sourceId,
+                    autoGenerated: true
+                });
+            });
+            saveSavings(savings);
+        }
+
+        totalTransferred += plan.amount;
+    }
+
+    if (totalTransferred > 0) {
+        showToast(`Transferred back ${formatCurrency(totalTransferred)}`);
+    } else if (failures.length) {
+        showToast("Unable to transfer back — check budget source links");
+    } else {
+        showToast("Nothing to transfer back");
+    }
+
+    loadHistory();
+    loadBudgetOptions();
+    loadDashboard();
+    loadGraph();
+    updateProgressBar();
+    renderBudgetEntries();
+}
+
+if (typeof window !== "undefined") {
+    window.quickCloseBudgetTransferBack = quickCloseBudgetTransferBack;
 }
 
 function loadLinkedTransactionOptions(type) {
@@ -2068,9 +2923,10 @@ function handleEntryTypeUIChange() {
     let linkedWrapper = document.getElementById("linkedTransactionWrapper");
     let paymentWrapper = document.getElementById("paymentWrapper");
     let personWrapper = document.getElementById("personWrapper");
+    let adjustmentWrapper = document.getElementById("adjustmentDirectionWrapper");
     let personHelp = document.getElementById("personSelectionHelp");
 
-    [categoryWrapper, budgetWrapper, linkedWrapper, paymentWrapper, personWrapper]
+    [categoryWrapper, budgetWrapper, linkedWrapper, paymentWrapper, personWrapper, adjustmentWrapper]
         .filter(Boolean)
         .forEach(el => { el.style.display = "none"; });
 
@@ -2112,9 +2968,37 @@ function handleEntryTypeUIChange() {
         return;
     }
 
+    if (type === "adjustment") {
+        if (budgetWrapper) budgetWrapper.style.display = "block";
+        if (paymentWrapper) paymentWrapper.style.display = "block";
+        if (adjustmentWrapper) adjustmentWrapper.style.display = "block";
+        if (typeof loadBudgetOptions === "function") {
+            loadBudgetOptions({ mode: "adjustment" });
+        }
+        return;
+    }
+
     // income and other inflows
     if (categoryWrapper) categoryWrapper.style.display = "block";
     if (paymentWrapper) paymentWrapper.style.display = "block";
+}
+
+// Drives the Entry Type tab bar on the Add screen. Keeps the real
+// (hidden) <select id="entryType"> in sync so all existing save/
+// validation logic — which reads that select's value — keeps working
+// completely unchanged.
+function selectEntryType(type) {
+    let select = document.getElementById("entryType");
+    if (select) select.value = type;
+
+    let bar = document.querySelector('.tab-bar[data-tab-group="entryTypeTabs"]');
+    if (bar) {
+        bar.querySelectorAll(".tab-bar-btn").forEach(btn => {
+            btn.classList.toggle("is-active", btn.dataset.tabKey === type);
+        });
+    }
+
+    handleEntryTypeUIChange();
 }
 
 async function handleAddExpense() {
@@ -2132,6 +3016,7 @@ async function handleAddExpense() {
     let linkedTransactionId = document.getElementById("linkedTransactionSelect")?.value || null;
     let refundResolutionType = normalizeResolutionType(document.getElementById("refundResolutionType")?.value || "open");
     let refundType = normalizeRefundType(document.getElementById("refundType")?.value || "custom");
+    let adjustmentDirection = document.getElementById("adjustmentDirection")?.value || "increase";
 
     // ✅ VALIDATION
     if (!(type === "refund" && (refundResolutionType === "consumed" || refundResolutionType === "written_off")) && !amount) {
@@ -2139,8 +3024,13 @@ async function handleAddExpense() {
         return;
     }
 
-    if ((type === "expense" || type === "transfer") && !budgetId) {
+    if ((type === "expense" || type === "transfer" || type === "adjustment") && !budgetId) {
         showToast("Select budget");
+        return;
+    }
+
+    if (type === "adjustment" && (!purpose || !purpose.trim())) {
+        showToast("Reason is required for adjustment");
         return;
     }
 
@@ -2179,9 +3069,13 @@ async function handleAddExpense() {
     }
 
     // ✅ SIGN FIX
-    amount = (type === "expense" || type === "transfer")
-        ? -Math.abs(amount)
-        : Math.abs(amount);
+    if (type === "adjustment") {
+        amount = (adjustmentDirection === "decrease") ? -Math.abs(amount) : Math.abs(amount);
+    } else {
+        amount = (type === "expense" || type === "transfer")
+            ? -Math.abs(amount)
+            : Math.abs(amount);
+    }
 
     // =========================
     // 🧠 DATE FIX LOGIC
@@ -2225,12 +3119,20 @@ async function handleAddExpense() {
         category = "Refund";
     } else if (type === "transfer_back") {
         category = "Transfer Back";
+    } else if (type === "adjustment") {
+        category = "Adjustment";
     }
 
     if (type === "transfer_back") {
         if (!budgetId) {
             showToast("Select budget");
             return;
+        }
+
+        // ⚠️ Section 12/13: resolve any unassigned top-up money first.
+        let walletForTransferBack = getBudgets().find(b => String(b.budgetId) === String(budgetId));
+        if (walletForTransferBack && typeof autoResolveWalletTopups === "function") {
+            autoResolveWalletTopups(walletForTransferBack);
         }
 
         let plan = buildTransferBackPlan(amount, budgetId);
@@ -2246,9 +3148,9 @@ async function handleAddExpense() {
         }));
 
         let uniqueSources = [...new Set(transferBackTrail.map(a => a.sourceId))];
-        let resolvedSourceId = uniqueSources.length === 1 ? uniqueSources[0] : null;
 
-        if (!resolvedSourceId) {
+        // ⚠️ FIX (Issue 01): no longer requires exactly one source.
+        if (!uniqueSources.length) {
             showToast("Unable to resolve source for selected budget");
             return;
         }
@@ -2264,7 +3166,7 @@ async function handleAddExpense() {
             budgetId,
             allocationTrail: transferBackTrail.map(a => ({ budgetId: a.budgetId, amount: a.amount })),
             transferBackTrail,
-            linkedSourceSavingsId: resolvedSourceId,
+            linkedSourceSavingsId: uniqueSources[0] || null,
             linkedSourceSavingsIds: uniqueSources,
             attachmentId: nonExpAttachment.attachmentId,
             attachmentStatus: nonExpAttachment.status,
@@ -2315,7 +3217,34 @@ async function handleAddExpense() {
         loadDashboard();
         loadGraph();
         updateProgressBar();
-        updateBudgetEfficiency();
+        renderBudgetEntries();
+        return;
+    }
+
+    if (type === "adjustment") {
+        addExpense({
+            amount,
+            category,
+            purpose,
+            date: selectedDate.toISOString(),
+            type: "adjustment",
+            paymentType,
+            budgetId,
+            allocationTrail: [{ budgetId, amount: Math.abs(convertToBase(amount)) }],
+            entity: "System Adjustment",
+            attachmentId: nonExpAttachment.attachmentId,
+            attachmentStatus: nonExpAttachment.status,
+            attachmentError: nonExpAttachment.error
+        });
+
+        showToast("Adjustment Added");
+        clearExpenseAttachmentState();
+        resetForm();
+        loadHistory();
+        loadBudgetOptions();
+        loadDashboard();
+        loadGraph();
+        updateProgressBar();
         renderBudgetEntries();
         return;
     }
@@ -2324,6 +3253,7 @@ async function handleAddExpense() {
         let snapshot = getExpenseResolutionSnapshot(linkedTransactionId);
         let pending = Number(snapshot.remainingRefundable || 0);
         let refundAmount = Math.abs(Number(amount) || 0);
+        let linkTargets = resolveRefundLinkTargets(snapshot, budgetId);
 
         if (refundResolutionType !== "consumed" && refundResolutionType !== "written_off") {
             addExpense({
@@ -2334,8 +3264,10 @@ async function handleAddExpense() {
                 type: "refund",
                 paymentType,
                 person,
-                budgetId: snapshot.original ? snapshot.original.budgetId : budgetId,
+                budgetId: linkTargets.budgetId,
                 linkedTransactionId,
+                linkedSourceSavingsId: linkTargets.linkedSourceSavingsId,
+                linkedSourceSavingsIds: linkTargets.linkedSourceSavingsIds,
                 refundType,
                 entity: paymentType,
                 attachmentId: nonExpAttachment.attachmentId,
@@ -2354,8 +3286,10 @@ async function handleAddExpense() {
                 type: "expense_resolution",
                 paymentType: paymentType || "N/A",
                 person,
-                budgetId: snapshot.original ? snapshot.original.budgetId : budgetId,
+                budgetId: linkTargets.budgetId,
                 linkedTransactionId,
+                linkedSourceSavingsId: linkTargets.linkedSourceSavingsId,
+                linkedSourceSavingsIds: linkTargets.linkedSourceSavingsIds,
                 entity: "System",
                 attachmentId: nonExpAttachment.attachmentId,
                 attachmentStatus: nonExpAttachment.status,
@@ -2374,7 +3308,6 @@ async function handleAddExpense() {
         loadDashboard();
         loadGraph();
         updateProgressBar();
-        updateBudgetEfficiency();
         renderBudgetEntries();
         return;
     }
@@ -2406,7 +3339,6 @@ async function handleAddExpense() {
     loadDashboard();   // 🔥 important
     loadGraph();
     updateProgressBar();
-    updateBudgetEfficiency();
     renderBudgetEntries();
     loadBudgetOptions();  // 🔥 refresh graph
 }
@@ -2419,6 +3351,7 @@ function resetForm() {
     if (document.getElementById("linkedTransactionSelect")) document.getElementById("linkedTransactionSelect").value = "";
     if (document.getElementById("refundResolutionType")) document.getElementById("refundResolutionType").value = "open";
     if (document.getElementById("refundType")) document.getElementById("refundType").value = "custom";
+    if (document.getElementById("adjustmentDirection")) document.getElementById("adjustmentDirection").value = "increase";
     if (document.getElementById("personSelect")) document.getElementById("personSelect").value = "";
     if (document.getElementById("amount")) document.getElementById("amount").disabled = false;
     if (document.getElementById("linkedRemainingText")) {
@@ -2729,7 +3662,6 @@ window.addEventListener("load", function () {
         loadDashboard();
         loadBudgetScreen();
         loadGraph("day");
-        updateBudgetEfficiency();
 
         let today = new Date().toISOString().split("T")[0];
         let dateInput = document.getElementById("expenseDate");
@@ -2760,6 +3692,7 @@ window.addEventListener("load", function () {
         startHeadline();
         if (typeof refreshSettingsPanels === "function") refreshSettingsPanels();
         startAutoBackup();
+        autoResolveClosedWalletTopups();
         refreshDashboardLayout();
 
     } catch (e) {
@@ -2787,6 +3720,10 @@ window.showScreen = function showScreen(id) {
     if (id === "history") loadHistory();
     if (id === "budgetEntries") {
         renderBudgetEntries();
+    }
+    if (id === "budget") {
+        renderBudgetWalletOverview();
+        if (typeof loadBudgetScreen === "function") loadBudgetScreen();
     }
     if (id === "graph") {
         loadGraph();
@@ -3188,9 +4125,7 @@ function generatePdfReport(opts = {}) {
 
     const dataSource = (Array.isArray(data) && data.length)
         ? data
-        : (window.currentFilteredExpenses && window.currentFilteredExpenses.length)
-            ? window.currentFilteredExpenses
-            : (typeof getExpenses === 'function' ? getExpenses() : []);
+        : getExportRows("expenses", (typeof getExpenses === 'function' ? getExpenses() : []));
 
     const budgetIdsFromData = new Set();
     dataSource.forEach((entry) => {
@@ -3739,7 +4674,7 @@ try { window.generatePdfReport = generatePdfReport; } catch (e) { /* ignore */ }
 
 // New PDF wrapper (calls modular PDF generator when available)
 function downloadPDF() {
-    const dataSource = (window.currentFilteredExpenses && window.currentFilteredExpenses.length) ? window.currentFilteredExpenses : (typeof getExpenses === 'function' ? getExpenses() : []);
+    const dataSource = getExportRows("expenses", getExpenses());
     if (typeof window.generatePdfReport === 'function') {
         window.generatePdfReport({ data: dataSource });
         return;
@@ -4520,6 +5455,45 @@ function escapeHtml(value) {
         .replace(/'/g, "&#39;");
 }
 
+// =========================
+// 🗂️ TAB BAR HELPER (shared)
+// =========================
+// Generic tab switcher. Works for any tab-bar/tab-panel pair as long as
+// their data-tab-group values match. onActivate lets a specific tab run
+// setup code (e.g. render its content) only the moment it's first opened.
+function activateTab(groupName, tabKey, onActivate) {
+    let bar = document.querySelector(`.tab-bar[data-tab-group="${groupName}"]`);
+    if (!bar) return;
+
+    bar.querySelectorAll(".tab-bar-btn").forEach(btn => {
+        btn.classList.toggle("is-active", btn.dataset.tabKey === tabKey);
+    });
+
+    document.querySelectorAll(`.tab-panel[data-tab-group="${groupName}"]`).forEach(panel => {
+        panel.classList.toggle("is-active", panel.dataset.tabKey === tabKey);
+    });
+
+    if (typeof onActivate === "function") onActivate(tabKey);
+}
+
+// Daily Ledger's own init only runs on DOMContentLoaded inside its own
+// file — but its markup doesn't exist yet at that point when it's a tab.
+// So we call its real render/bind functions ourselves, the first time
+// (and every time) the tab is actually opened.
+function onDailyLedgerTabOpened() {
+    if (typeof window.renderDailyBudgetLedger === "function") {
+        window.renderDailyBudgetLedger();
+    }
+    let saveBtn = document.getElementById("saveDailyBudget");
+    if (saveBtn && !saveBtn.dataset.ledgerBound) {
+        saveBtn.dataset.ledgerBound = "true";
+        saveBtn.addEventListener("click", function () {
+            if (typeof window.handleBudgetSave === "function") {
+                window.handleBudgetSave();
+            }
+        });
+    }
+}
 function getAttachmentApi() {
     return window.reMoAttachments || window.reMoAttachmentsIndexed || null;
 }
@@ -4821,7 +5795,12 @@ function ensureAuditModal() {
     modal.className = "modal";
     modal.innerHTML = `
       <div class="modal-content audit-modal-content" onclick="event.stopPropagation()">
-        <h3>Transaction Details</h3>
+        <div class="audit-modal-header">
+          <div>
+            <h3>Transaction Details</h3>
+            <p class="audit-modal-subtitle">Review the linked budget, source, and resolution state for this entry.</p>
+          </div>
+        </div>
         <div id="txnDetailsBody" class="audit-details-grid"></div>
         <div id="txnAttachmentSection" class="audit-attachments" style="display:none;"></div>
         <div class="modal-actions">
@@ -4960,29 +5939,49 @@ async function openTransactionAuditDetails(scope, transaction) {
         ? allocationRows.map(row => `${String(row.budgetId || "-")} : ${formatCurrency(Math.abs(Number(row.amount || 0)))}`).join(" | ")
         : "-";
 
+    let detailRows = [
+        { label: "Amount", value: formatCurrency(Number(transaction.amount || 0)) },
+        { label: "Date", value: new Date(transaction.date || Date.now()).toLocaleString("en-IN") },
+        { label: "Entry Type", value: transaction.type || "-" },
+        { label: "Running Balance", value: runningBalanceText },
+        { label: "Notes", value: transaction.purpose || transaction.note || "-" },
+        { label: "Budget ID", value: budgetIds.join(", ") || "-" },
+        { label: "Budget Name", value: budgetNames.join(", ") || "-" },
+        { label: "Source ID", value: sourceIds.join(", ") || "-" },
+        { label: "Source Name", value: sourceNames.join(", ") || "-" },
+        { label: "Allocation Details", value: allocationDetails },
+        { label: "Refund Type", value: transaction.type === "refund" ? formatRefundType(transaction.refundType) : "-" },
+        { label: "Resolution Type", value: transaction.resolutionType ? (RESOLUTION_TYPE_LABELS[normalizeResolutionType(transaction.resolutionType)] || transaction.resolutionType) : "-" },
+        { label: "Resolved Amount", value: formatCurrency(Number(transaction.resolvedAmount || 0)) },
+        { label: "Loss Amount", value: formatCurrency(Number(transaction.lossAmount || 0)) },
+        { label: "Linked Transaction", value: transaction.linkedTransactionId || "-" },
+        { label: "Created At", value: new Date(createdAt || Date.now()).toLocaleString("en-IN") }
+    ];
+
+    if (summary && summary.exists) {
+        detailRows.push(
+            { label: "Original Amount", value: formatCurrency(summary.originalAmount) },
+            { label: "Refunded", value: formatCurrency(summary.refunded) },
+            { label: "Loss", value: formatCurrency(summary.loss) },
+            { label: "Status", value: summaryStatusText },
+            { label: "Remaining Refundable", value: formatCurrency(summary.remainingRefundable) }
+        );
+    }
+
     body.innerHTML = `
-      <div><small>Transaction ID</small><div>${escapeHtml(transaction.id || "-")}</div></div>
-      <div><small>Date</small><div>${escapeHtml(new Date(transaction.date || Date.now()).toLocaleString("en-IN"))}</div></div>
-      <div><small>Entry Type</small><div>${escapeHtml(transaction.type || "-")}</div></div>
-      <div><small>Amount</small><div>${escapeHtml(formatCurrency(Number(transaction.amount || 0)))}</div></div>
-      <div><small>Running Balance</small><div>${escapeHtml(runningBalanceText)}</div></div>
-      <div><small>Notes</small><div>${escapeHtml(transaction.purpose || transaction.note || "-")}</div></div>
-      <div><small>Budget ID</small><div>${escapeHtml(budgetIds.join(", ") || "-")}</div></div>
-      <div><small>Budget Name</small><div>${escapeHtml(budgetNames.join(", ") || "-")}</div></div>
-      <div><small>Source ID</small><div>${escapeHtml(sourceIds.join(", ") || "-")}</div></div>
-      <div><small>Source Name</small><div>${escapeHtml(sourceNames.join(", ") || "-")}</div></div>
-      <div><small>Allocation Details</small><div>${escapeHtml(allocationDetails)}</div></div>
-    <div><small>Refund Type</small><div>${escapeHtml(transaction.type === "refund" ? formatRefundType(transaction.refundType) : "-")}</div></div>
-    <div><small>Resolution Type</small><div>${escapeHtml(transaction.resolutionType ? (RESOLUTION_TYPE_LABELS[normalizeResolutionType(transaction.resolutionType)] || transaction.resolutionType) : "-")}</div></div>
-    <div><small>Resolved Amount</small><div>${escapeHtml(formatCurrency(Number(transaction.resolvedAmount || 0)))}</div></div>
-    <div><small>Loss Amount</small><div>${escapeHtml(formatCurrency(Number(transaction.lossAmount || 0)))}</div></div>
-      <div><small>Linked Transaction</small><div>${escapeHtml(transaction.linkedTransactionId || "-")}</div></div>
-      <div><small>Created At</small><div>${escapeHtml(new Date(createdAt || Date.now()).toLocaleString("en-IN"))}</div></div>
-      ${summary && summary.exists ? `<div><small>Original Amount</small><div>${escapeHtml(formatCurrency(summary.originalAmount))}</div></div>` : ""}
-      ${summary && summary.exists ? `<div><small>Refunded</small><div>${escapeHtml(formatCurrency(summary.refunded))}</div></div>` : ""}
-      ${summary && summary.exists ? `<div><small>Loss</small><div>${escapeHtml(formatCurrency(summary.loss))}</div></div>` : ""}
-            ${summary && summary.exists ? `<div><small>Status</small><div>${escapeHtml(summaryStatusText)}</div></div>` : ""}
-      ${summary && summary.exists ? `<div><small>Remaining Refundable</small><div>${escapeHtml(formatCurrency(summary.remainingRefundable))}</div></div>` : ""}
+      <div class="audit-summary-card">
+        <div class="audit-summary-pill">${escapeHtml(transaction.type || "-")}</div>
+        <div class="audit-summary-title">${escapeHtml(transaction.purpose || transaction.note || transaction.category || "Transaction")}</div>
+        <div class="audit-summary-meta">${escapeHtml(new Date(createdAt || Date.now()).toLocaleString("en-IN"))}</div>
+      </div>
+      <div class="audit-details-card">
+        ${detailRows.map(row => `
+          <div class="audit-detail-row">
+            <span class="audit-detail-label">${escapeHtml(row.label)}</span>
+            <span class="audit-detail-value">${escapeHtml(row.value)}</span>
+          </div>
+        `).join("")}
+      </div>
     `;
 
     if (!transaction.attachmentId) {
@@ -5034,6 +6033,9 @@ try {
     window.viewAttachmentById = viewAttachmentById;
     window.downloadAttachmentById = downloadAttachmentById;
     window.deleteTransactionAttachment = deleteTransactionAttachment;
+    window.resolveRefundLinkTargets = resolveRefundLinkTargets;
+    window.computeBudgetEfficiencyMetrics = computeBudgetEfficiencyMetrics;
+    window.updateBudgetEfficiency = updateBudgetEfficiency;
 } catch (e) {
     // ignore
 }
@@ -5579,6 +6581,10 @@ function loadBudgetOptions(options = null) {
             let sourceId = resolveBudgetSourceIdForTransferBack(b, savingsEntries);
             return available > 0 && !!sourceId;
         });
+    }
+    if (mode === "adjustment") {
+        let activeKey = typeof getActivePeriodKey === "function" ? getActivePeriodKey() : null;
+        filtered = budgets.filter(b => b && activeKey && b.periodKey === activeKey);
     }
 
     if (!filtered.length) {
@@ -6411,6 +7417,7 @@ function migrateDataVersion(payload, options = {}) {
         budgets: migrateBudgets(source.budgets),
         savings: migrateSavings(source.savings || source.savingsTransactions),
         budgetPeriods: Array.isArray(source.budgetPeriods) ? source.budgetPeriods.slice() : [],
+        unassignedTopups: Array.isArray(source.unassignedTopups) ? source.unassignedTopups.slice() : [],
         categories: Array.isArray(source.categories) ? source.categories.slice() : SCHEMA_DEFAULTS.categories.slice(),
         persons: Array.isArray(source.persons) ? source.persons.slice() : [],
         settings: migrateSettings(source.settings),
@@ -6445,6 +7452,7 @@ function applySchemaMigrationsToLocalStorage() {
             budgets: JSON.parse(localStorage.getItem("budgets") || "[]"),
             savings: JSON.parse(localStorage.getItem("savingsTransactions") || "[]"),
             budgetPeriods: JSON.parse(localStorage.getItem("bp") || "[]"),
+            unassignedTopups: JSON.parse(localStorage.getItem("unassignedTopups") || "[]"),
             categories: JSON.parse(localStorage.getItem("categories") || "[]"),
             persons: JSON.parse(localStorage.getItem("persons") || "[]"),
             settings: {
@@ -6474,6 +7482,7 @@ function applySchemaMigrationsToLocalStorage() {
         localStorage.setItem("budgets", JSON.stringify(migrated.budgets));
         localStorage.setItem("savingsTransactions", JSON.stringify(migrated.savings));
         localStorage.setItem("bp", JSON.stringify(migrated.budgetPeriods));
+        localStorage.setItem("unassignedTopups", JSON.stringify(migrated.unassignedTopups || []));
         localStorage.setItem("categories", JSON.stringify(migrated.categories));
         localStorage.setItem("persons", JSON.stringify(migrated.persons));
         localStorage.setItem("orders", JSON.stringify(migrated.orders));
@@ -6539,7 +7548,8 @@ function normalizeImportPayload(parsed, options = {}) {
         "settings",
         "meta",
         "orders",
-        "quotations"
+        "quotations",
+        "__expectedAssertions"
     ]);
 
     const expenseAllowed = new Set([
@@ -6973,249 +7983,957 @@ function validateImportPayload(parsed) {
     };
 }
 
+// function importData() {
+//     setImportStage("validation-input");
+//     let text = normalizeImportRawText(document.getElementById("importText")?.value || "");
+//     const baselineSignature = getImportTextSignature(text);
+//     const hashBeforeParse = `${baselineSignature.length}:${baselineSignature.hash32}`;
+
+//     // Requested UAT diagnostics immediately before parse.
+//     console.log(window.__lastImportFileMeta?.fileName || "manual_text");
+//     console.log(Number(window.__lastImportFileMeta?.fileSize || 0));
+//     console.log(text.length);
+//     console.log(text.substring(7000, 7100));
+//     console.log("hashDisk", window.__lastImportPipeline?.disk?.hash || "n/a");
+//     console.log("hashBeforeParse", hashBeforeParse);
+
+//     console.info("Import raw diagnostics", {
+//         fileName: window.__lastImportFileMeta?.fileName || "manual_text",
+//         fileSize: Number(window.__lastImportFileMeta?.fileSize || 0),
+//         typeofContent: typeof text,
+//         contentLength: text.length,
+//         signature: baselineSignature,
+//         normalization: window.__lastImportNormalizationMeta || null,
+//         hashBeforeParse,
+//         pipeline: window.__lastImportPipeline || null
+//     });
+
+//     // UAT requested pre-parse raw section logging around known failure offsets.
+//     console.log(text.substring(7000, 7150));
+//     window.__lastImportContentSample7000 = text.substring(7000, 7150);
+//     window.__lastImportCharCodes7000 = getImportCharCodes(text, 7000, 7060);
+
+//     if (!text) {
+//         showToast("Paste data");
+//         return;
+//     }
+
+//     let parsed;
+//     try {
+//         setImportStage("json-parse");
+//         parsed = JSON.parse(text);
+//     } catch (err) {
+//         const parseError = getJsonParseErrorMessage(err);
+//         const parsePosition = getJsonParseErrorPosition(err);
+//         const fragStart = Number.isFinite(parsePosition) ? Math.max(0, parsePosition - 40) : 0;
+//         const fragEnd = Number.isFinite(parsePosition) ? Math.min(text.length, parsePosition + 110) : Math.min(text.length, 150);
+//         const fragment = text.substring(fragStart, fragEnd);
+//         const codeStart = Number.isFinite(parsePosition) ? Math.max(0, parsePosition - 15) : 0;
+//         const codeEnd = Number.isFinite(parsePosition) ? Math.min(text.length, parsePosition + 15) : Math.min(text.length, 30);
+//         const parseWindowCodes = getImportCharCodes(text, codeStart, codeEnd);
+
+//         window.__lastImportCorruptFragment = fragment;
+//         window.__lastImportParseWindowCodes = parseWindowCodes;
+//         console.error("Import parse fragment", {
+//             parsePosition,
+//             fragment,
+//             parseWindowCodes,
+//             signature: baselineSignature,
+//             normalization: window.__lastImportNormalizationMeta || null
+//         });
+
+//         setImportStage("json-parse-failed", {
+//             error: parseError,
+//             parsePosition,
+//             fragment
+//         });
+//         renderImportValidationReport({
+//             version: "unknown",
+//             found: { expenses: 0, savings: 0, budgets: 0, budgetPeriods: 0 },
+//             imported: { expenses: 0, savings: 0, budgets: 0, budgetPeriods: 0 },
+//             warnings: [],
+//             errors: [parseError]
+//         });
+//         showToast("JSON Parse Error", "error");
+//         return;
+//     }
+
+//     const incomingVersion = validateIncomingImportVersion(
+//         parsed && parsed.meta && Object.prototype.hasOwnProperty.call(parsed.meta, "version")
+//             ? parsed.meta.version
+//             : null
+//     );
+
+//     if (!incomingVersion.supported) {
+//         setImportStage("version-validation-failed", {
+//             version: incomingVersion.display
+//         });
+
+//         const normalizationResult = normalizeImportPayload(parsed, { skipMigration: true });
+//         const diagnostics = buildImportDiagnostics(normalizationResult.normalized);
+//         const found = {
+//             expenses: diagnostics.expensesCount,
+//             savings: diagnostics.savingsCount,
+//             budgets: diagnostics.budgetsCount,
+//             budgetPeriods: diagnostics.budgetPeriodsCount
+//         };
+
+//         renderImportValidationReport({
+//             version: "unknown",
+//             found,
+//             imported: { expenses: 0, savings: 0, budgets: 0, budgetPeriods: 0 },
+//             warnings: normalizationResult.report.warnings || [],
+//             normalization: normalizationResult.report,
+//             errors: [`Unsupported Version: ${incomingVersion.display}`]
+//         });
+
+//         showToast("Import Validation Failed", "error");
+//         return;
+//     }
+
+//     setImportStage("normalization");
+//     const normalizationResult = normalizeImportPayload(parsed);
+//     const normalizedParsed = normalizationResult.normalized;
+//     window.__lastImportNormalizationReport = normalizationResult.report;
+
+//     setImportStage("schema-validation");
+//     const diagnostics = buildImportDiagnostics(normalizedParsed);
+//     console.info("Import parse diagnostics", diagnostics);
+
+//     const validation = validateImportPayload(normalizedParsed);
+//     const found = {
+//         expenses: diagnostics.expensesCount,
+//         savings: diagnostics.savingsCount,
+//         budgets: diagnostics.budgetsCount,
+//         budgetPeriods: diagnostics.budgetPeriodsCount
+//     };
+
+//     if (validation.errors.length) {
+//         setImportStage("schema-validation-failed", { errors: validation.errors });
+//         renderImportValidationReport({
+//             version: validation.version,
+//             found,
+//             imported: { expenses: 0, savings: 0, budgets: 0, budgetPeriods: 0 },
+//             warnings: validation.warnings.concat(normalizationResult.report.warnings || []),
+//             normalization: normalizationResult.report,
+//             errors: validation.errors
+//         });
+//         showToast("Import Validation Failed", "error");
+//         return;
+//     }
+
+//     const data = validation.normalized;
+
+//     try {
+//         setImportStage("import-mapping");
+//         if (Array.isArray(data.expenses)) saveExpenses(data.expenses);
+//         if (Array.isArray(data.budgets)) saveBudgets(data.budgets);
+//         if (Array.isArray(data.savings)) saveSavings(data.savings);
+//         if (Array.isArray(data.orders)) localStorage.setItem("orders", JSON.stringify(data.orders));
+//         if (Array.isArray(data.categories)) localStorage.setItem("categories", JSON.stringify(data.categories));
+//         if (Array.isArray(data.persons)) localStorage.setItem("persons", JSON.stringify(data.persons));
+//         if (Array.isArray(data.budgetPeriods)) localStorage.setItem("bp", JSON.stringify(data.budgetPeriods));
+//         if (Array.isArray(data.unassignedTopups)) localStorage.setItem("unassignedTopups", JSON.stringify(data.unassignedTopups));
+//         if (data.quotations && typeof data.quotations === "object") {
+//             localStorage.setItem("quotationData", JSON.stringify(data.quotations.quotationData || null));
+//             localStorage.setItem("quotationItems", JSON.stringify(Array.isArray(data.quotations.quotationItems) ? data.quotations.quotationItems : []));
+//             localStorage.setItem("quotationCharges", JSON.stringify(Array.isArray(data.quotations.quotationCharges) ? data.quotations.quotationCharges : []));
+//             localStorage.setItem("quotationRegistry", JSON.stringify(Array.isArray(data.quotations.quotationRegistry) ? data.quotations.quotationRegistry : []));
+//             localStorage.setItem("quotationMeta", JSON.stringify(data.quotations.quotationMeta || null));
+//             localStorage.setItem("activeQuotationId", JSON.stringify(data.quotations.activeQuotationId || null));
+//             localStorage.setItem("documentRelations", JSON.stringify(Array.isArray(data.quotations.documentRelations) ? data.quotations.documentRelations : []));
+//             localStorage.setItem("noSeriesConfig", JSON.stringify(data.quotations.noSeriesConfig || null));
+//         }
+
+//         if (data.settings) {
+//             if (data.settings.currencyCode) localStorage.setItem("currencyCode", data.settings.currencyCode);
+//             if (data.settings.appearanceMode) setAppearanceMode(data.settings.appearanceMode);
+
+//             if (data.settings.accentColor) {
+//                 changeTheme(data.settings.accentColor);
+//             } else if (data.settings.theme) {
+//                 changeTheme(data.settings.theme);
+//             }
+
+//             if (Object.prototype.hasOwnProperty.call(data.settings, "autoBackupEnabled") || data.settings.autoBackupFrequency || data.settings.autoBackupTarget) {
+//                 saveAutoBackupSettings({
+//                     enabled: !!data.settings.autoBackupEnabled,
+//                     frequency: data.settings.autoBackupFrequency || "weekly",
+//                     target: data.settings.autoBackupTarget || "local_download"
+//                 });
+//             } else if (Object.prototype.hasOwnProperty.call(data.settings, "autoBackup") || data.settings.backupFrequency) {
+//                 saveAutoBackupSettings({
+//                     enabled: !!data.settings.autoBackup,
+//                     frequency: data.settings.backupFrequency || "weekly",
+//                     target: "local_download"
+//                 });
+//             }
+
+//         }
+
+//         runIntegrityRepairSilently();
+//         setImportStage("ledger-rebuild");
+//         loadTheme();
+//         syncThemeSelectors();
+//         refreshSettingsPanels();
+
+//         loadHistory();
+//         loadBudgetOptions();
+//         loadDashboard();
+//         loadGraph();
+//         if (typeof renderBudgetEntries === "function") renderBudgetEntries();
+//         if (typeof renderIncomeList === "function") renderIncomeList();
+//         if (typeof loadSavings === "function") loadSavings();
+
+//         renderImportValidationReport({
+//             version: validation.version,
+//             found,
+//             imported: {
+//                 expenses: Array.isArray(data.expenses) ? data.expenses.length : 0,
+//                 savings: Array.isArray(data.savings) ? data.savings.length : 0,
+//                 budgets: Array.isArray(data.budgets) ? data.budgets.length : 0,
+//                 budgetPeriods: Array.isArray(data.budgetPeriods) ? data.budgetPeriods.length : 0
+//             },
+//             warnings: validation.warnings.concat(normalizationResult.report.warnings || []),
+//             normalization: normalizationResult.report,
+//             errors: []
+//         });
+
+//         showToast("Import successful ✅");
+//         setImportStage("completed");
+
+//         const importText = document.getElementById("importText");
+//         if (importText) importText.value = "";
+//         closeImportModal();
+//     } catch (err) {
+//         console.error(err);
+//         setImportStage("import-mapping-failed", { error: err && err.message ? err.message : "unknown" });
+//         renderImportValidationReport({
+//             version: validation.version,
+//             found,
+//             imported: { expenses: 0, savings: 0, budgets: 0, budgetPeriods: 0 },
+//             warnings: validation.warnings.concat(normalizationResult.report.warnings || []),
+//             normalization: normalizationResult.report,
+//             errors: ["Import Validation Failed: invalid transactions or data mapping"]
+//         });
+//         showToast("Import Validation Failed", "error");
+//     }
+// }
+
+// if (typeof window !== "undefined") {
+//     window.importData = importData;
+//     window.exportDataAsJSON = exportDataAsJSON;
+//     window.decodeImportTextCandidates = decodeImportTextCandidates;
+//     window.chooseImportDecodedText = chooseImportDecodedText;
+//     window.getImportByteSignature = getImportByteSignature;
+// }
+/**
+ * Apply validated import data to the application.
+ *
+ * This is the single authoritative data-mapping layer
+ * shared by Manual Import and Job Queue Import.
+ *
+ * IMPORTANT:
+ * This function performs DATA changes only.
+ * UI refreshes remain outside this function.
+ *
+ * @param {Object} data
+ * @returns {Object} import statistics
+ */
+function applyImportData(data) {
+
+    if (!data || typeof data !== "object") {
+        throw new Error(
+            "Import data mapping requires a valid data object."
+        );
+    }
+
+    const imported = {
+        expenses: 0,
+        budgets: 0,
+        savings: 0,
+        orders: 0,
+        categories: 0,
+        persons: 0,
+        budgetPeriods: 0,
+        unassignedTopups: 0
+    };
+
+
+    /*
+     * ---------------------------------------------------------
+     * EXPENSES
+     * ---------------------------------------------------------
+     */
+
+    if (Array.isArray(data.expenses)) {
+
+        saveExpenses(data.expenses);
+
+        imported.expenses =
+            data.expenses.length;
+    }
+
+
+    /*
+     * ---------------------------------------------------------
+     * BUDGETS
+     * ---------------------------------------------------------
+     */
+
+    if (Array.isArray(data.budgets)) {
+
+        saveBudgets(data.budgets);
+
+        imported.budgets =
+            data.budgets.length;
+    }
+
+
+    /*
+     * ---------------------------------------------------------
+     * SAVINGS
+     * ---------------------------------------------------------
+     */
+
+    if (Array.isArray(data.savings)) {
+
+        saveSavings(data.savings);
+
+        imported.savings =
+            data.savings.length;
+    }
+
+
+    /*
+     * ---------------------------------------------------------
+     * ORDERS
+     * ---------------------------------------------------------
+     */
+
+    if (Array.isArray(data.orders)) {
+
+        localStorage.setItem(
+            "orders",
+            JSON.stringify(data.orders)
+        );
+
+        imported.orders =
+            data.orders.length;
+    }
+
+
+    /*
+     * ---------------------------------------------------------
+     * CATEGORIES
+     * ---------------------------------------------------------
+     */
+
+    if (Array.isArray(data.categories)) {
+
+        localStorage.setItem(
+            "categories",
+            JSON.stringify(data.categories)
+        );
+
+        imported.categories =
+            data.categories.length;
+    }
+
+
+    /*
+     * ---------------------------------------------------------
+     * PERSONS
+     * ---------------------------------------------------------
+     */
+
+    if (Array.isArray(data.persons)) {
+
+        localStorage.setItem(
+            "persons",
+            JSON.stringify(data.persons)
+        );
+
+        imported.persons =
+            data.persons.length;
+    }
+
+
+    /*
+     * ---------------------------------------------------------
+     * BUDGET PERIODS
+     * ---------------------------------------------------------
+     */
+
+    if (Array.isArray(data.budgetPeriods)) {
+
+        localStorage.setItem(
+            "bp",
+            JSON.stringify(data.budgetPeriods)
+        );
+
+        imported.budgetPeriods =
+            data.budgetPeriods.length;
+    }
+
+
+    /*
+     * ---------------------------------------------------------
+     * UNASSIGNED TOPUPS
+     * ---------------------------------------------------------
+     */
+
+    if (Array.isArray(data.unassignedTopups)) {
+
+        localStorage.setItem(
+            "unassignedTopups",
+            JSON.stringify(data.unassignedTopups)
+        );
+
+        imported.unassignedTopups =
+            data.unassignedTopups.length;
+    }
+
+
+    /*
+     * ---------------------------------------------------------
+     * QUOTATIONS
+     * ---------------------------------------------------------
+     */
+
+    if (
+        data.quotations &&
+        typeof data.quotations === "object"
+    ) {
+
+        localStorage.setItem(
+            "quotationData",
+            JSON.stringify(
+                data.quotations.quotationData || null
+            )
+        );
+
+        localStorage.setItem(
+            "quotationItems",
+            JSON.stringify(
+                Array.isArray(
+                    data.quotations.quotationItems
+                )
+                    ? data.quotations.quotationItems
+                    : []
+            )
+        );
+
+        localStorage.setItem(
+            "quotationCharges",
+            JSON.stringify(
+                Array.isArray(
+                    data.quotations.quotationCharges
+                )
+                    ? data.quotations.quotationCharges
+                    : []
+            )
+        );
+
+        localStorage.setItem(
+            "quotationRegistry",
+            JSON.stringify(
+                Array.isArray(
+                    data.quotations.quotationRegistry
+                )
+                    ? data.quotations.quotationRegistry
+                    : []
+            )
+        );
+
+        localStorage.setItem(
+            "quotationMeta",
+            JSON.stringify(
+                data.quotations.quotationMeta || null
+            )
+        );
+
+        localStorage.setItem(
+            "activeQuotationId",
+            JSON.stringify(
+                data.quotations.activeQuotationId || null
+            )
+        );
+
+        localStorage.setItem(
+            "documentRelations",
+            JSON.stringify(
+                Array.isArray(
+                    data.quotations.documentRelations
+                )
+                    ? data.quotations.documentRelations
+                    : []
+            )
+        );
+
+        localStorage.setItem(
+            "noSeriesConfig",
+            JSON.stringify(
+                data.quotations.noSeriesConfig || null
+            )
+        );
+    }
+
+
+    /*
+     * ---------------------------------------------------------
+     * SETTINGS
+     * ---------------------------------------------------------
+     */
+
+    if (data.settings) {
+
+        if (data.settings.currencyCode) {
+
+            localStorage.setItem(
+                "currencyCode",
+                data.settings.currencyCode
+            );
+        }
+
+
+        if (data.settings.appearanceMode) {
+
+            setAppearanceMode(
+                data.settings.appearanceMode
+            );
+        }
+
+
+        if (data.settings.accentColor) {
+
+            changeTheme(
+                data.settings.accentColor
+            );
+
+        } else if (data.settings.theme) {
+
+            changeTheme(
+                data.settings.theme
+            );
+        }
+
+
+        if (
+            Object.prototype.hasOwnProperty.call(
+                data.settings,
+                "autoBackupEnabled"
+            ) ||
+            data.settings.autoBackupFrequency ||
+            data.settings.autoBackupTarget
+        ) {
+
+            saveAutoBackupSettings({
+                enabled:
+                    !!data.settings.autoBackupEnabled,
+
+                frequency:
+                    data.settings.autoBackupFrequency ||
+                    "weekly",
+
+                target:
+                    data.settings.autoBackupTarget ||
+                    "local_download"
+            });
+
+        } else if (
+            Object.prototype.hasOwnProperty.call(
+                data.settings,
+                "autoBackup"
+            ) ||
+            data.settings.backupFrequency
+        ) {
+
+            saveAutoBackupSettings({
+                enabled:
+                    !!data.settings.autoBackup,
+
+                frequency:
+                    data.settings.backupFrequency ||
+                    "weekly",
+
+                target:
+                    "local_download"
+            });
+        }
+    }
+
+
+    /*
+     * ---------------------------------------------------------
+     * INTEGRITY REPAIR
+     * ---------------------------------------------------------
+     */
+
+    runIntegrityRepairSilently();
+
+
+    return imported;
+}
 function importData() {
     setImportStage("validation-input");
-    let text = normalizeImportRawText(document.getElementById("importText")?.value || "");
-    const baselineSignature = getImportTextSignature(text);
-    const hashBeforeParse = `${baselineSignature.length}:${baselineSignature.hash32}`;
 
-    // Requested UAT diagnostics immediately before parse.
-    console.log(window.__lastImportFileMeta?.fileName || "manual_text");
-    console.log(Number(window.__lastImportFileMeta?.fileSize || 0));
+    const importText = document.getElementById("importText");
+    const text = normalizeImportRawText(
+        importText?.value || ""
+    );
+
+    const baselineSignature =
+        getImportTextSignature(text);
+
+    const hashBeforeParse =
+        `${baselineSignature.length}:${baselineSignature.hash32}`;
+
+    /*
+     * ---------------------------------------------------------
+     * EXISTING IMPORT DIAGNOSTICS
+     * ---------------------------------------------------------
+     *
+     * Keep the existing UAT diagnostics exactly where they
+     * belong. The Import Engine should not own UI diagnostics.
+     */
+
+    console.log(
+        window.__lastImportFileMeta?.fileName ||
+        "manual_text"
+    );
+
+    console.log(
+        Number(
+            window.__lastImportFileMeta?.fileSize ||
+            0
+        )
+    );
+
     console.log(text.length);
-    console.log(text.substring(7000, 7100));
-    console.log("hashDisk", window.__lastImportPipeline?.disk?.hash || "n/a");
-    console.log("hashBeforeParse", hashBeforeParse);
 
-    console.info("Import raw diagnostics", {
-        fileName: window.__lastImportFileMeta?.fileName || "manual_text",
-        fileSize: Number(window.__lastImportFileMeta?.fileSize || 0),
-        typeofContent: typeof text,
-        contentLength: text.length,
-        signature: baselineSignature,
-        normalization: window.__lastImportNormalizationMeta || null,
-        hashBeforeParse,
-        pipeline: window.__lastImportPipeline || null
-    });
+    console.log(
+        text.substring(7000, 7100)
+    );
 
-    // UAT requested pre-parse raw section logging around known failure offsets.
-    console.log(text.substring(7000, 7150));
-    window.__lastImportContentSample7000 = text.substring(7000, 7150);
-    window.__lastImportCharCodes7000 = getImportCharCodes(text, 7000, 7060);
+    console.log(
+        "hashDisk",
+        window.__lastImportPipeline?.disk?.hash ||
+        "n/a"
+    );
+
+    console.log(
+        "hashBeforeParse",
+        hashBeforeParse
+    );
+
+    console.info(
+        "Import raw diagnostics",
+        {
+            fileName:
+                window.__lastImportFileMeta?.fileName ||
+                "manual_text",
+
+            fileSize:
+                Number(
+                    window.__lastImportFileMeta?.fileSize ||
+                    0
+                ),
+
+            typeofContent:
+                typeof text,
+
+            contentLength:
+                text.length,
+
+            signature:
+                baselineSignature,
+
+            normalization:
+                window.__lastImportNormalizationMeta ||
+                null,
+
+            hashBeforeParse,
+
+            pipeline:
+                window.__lastImportPipeline ||
+                null
+        }
+    );
+
+    /*
+     * UAT requested pre-parse raw section logging.
+     */
+
+    console.log(
+        text.substring(7000, 7150)
+    );
+
+    window.__lastImportContentSample7000 =
+        text.substring(7000, 7150);
+
+    window.__lastImportCharCodes7000 =
+        getImportCharCodes(
+            text,
+            7000,
+            7060
+        );
+
+
+    /*
+     * ---------------------------------------------------------
+     * EMPTY INPUT
+     * ---------------------------------------------------------
+     */
 
     if (!text) {
         showToast("Paste data");
         return;
     }
 
-    let parsed;
-    try {
-        setImportStage("json-parse");
-        parsed = JSON.parse(text);
-    } catch (err) {
-        const parseError = getJsonParseErrorMessage(err);
-        const parsePosition = getJsonParseErrorPosition(err);
-        const fragStart = Number.isFinite(parsePosition) ? Math.max(0, parsePosition - 40) : 0;
-        const fragEnd = Number.isFinite(parsePosition) ? Math.min(text.length, parsePosition + 110) : Math.min(text.length, 150);
-        const fragment = text.substring(fragStart, fragEnd);
-        const codeStart = Number.isFinite(parsePosition) ? Math.max(0, parsePosition - 15) : 0;
-        const codeEnd = Number.isFinite(parsePosition) ? Math.min(text.length, parsePosition + 15) : Math.min(text.length, 30);
-        const parseWindowCodes = getImportCharCodes(text, codeStart, codeEnd);
 
-        window.__lastImportCorruptFragment = fragment;
-        window.__lastImportParseWindowCodes = parseWindowCodes;
-        console.error("Import parse fragment", {
-            parsePosition,
-            fragment,
-            parseWindowCodes,
-            signature: baselineSignature,
-            normalization: window.__lastImportNormalizationMeta || null
-        });
+    /*
+     * ---------------------------------------------------------
+     * IMPORT THROUGH THE CENTRAL IMPORT ENGINE
+     * ---------------------------------------------------------
+     *
+     * importData() now acts as the UI adapter.
+     *
+     * ImportEngine owns:
+     * - JSON parsing
+     * - Version validation
+     * - Normalization
+     * - Schema validation
+     * - Data mapping
+     * - Integrity repair
+     *
+     * This means Job Queue and Manual Import can use the
+     * same import logic.
+     */
 
-        setImportStage("json-parse-failed", {
-            error: parseError,
-            parsePosition,
-            fragment
-        });
-        renderImportValidationReport({
-            version: "unknown",
-            found: { expenses: 0, savings: 0, budgets: 0, budgetPeriods: 0 },
-            imported: { expenses: 0, savings: 0, budgets: 0, budgetPeriods: 0 },
-            warnings: [],
-            errors: [parseError]
-        });
-        showToast("JSON Parse Error", "error");
-        return;
-    }
+    ImportEngine.importPayload(
+        text,
+        {
+            fileName:
+                window.__lastImportFileMeta?.fileName ||
+                "manual_text",
 
-    const incomingVersion = validateIncomingImportVersion(
-        parsed && parsed.meta && Object.prototype.hasOwnProperty.call(parsed.meta, "version")
-            ? parsed.meta.version
-            : null
-    );
+            updateProgress: data => {
 
-    if (!incomingVersion.supported) {
-        setImportStage("version-validation-failed", {
-            version: incomingVersion.display
-        });
-
-        const normalizationResult = normalizeImportPayload(parsed, { skipMigration: true });
-        const diagnostics = buildImportDiagnostics(normalizationResult.normalized);
-        const found = {
-            expenses: diagnostics.expensesCount,
-            savings: diagnostics.savingsCount,
-            budgets: diagnostics.budgetsCount,
-            budgetPeriods: diagnostics.budgetPeriodsCount
-        };
-
-        renderImportValidationReport({
-            version: "unknown",
-            found,
-            imported: { expenses: 0, savings: 0, budgets: 0, budgetPeriods: 0 },
-            warnings: normalizationResult.report.warnings || [],
-            normalization: normalizationResult.report,
-            errors: [`Unsupported Version: ${incomingVersion.display}`]
-        });
-
-        showToast("Import Validation Failed", "error");
-        return;
-    }
-
-    setImportStage("normalization");
-    const normalizationResult = normalizeImportPayload(parsed);
-    const normalizedParsed = normalizationResult.normalized;
-    window.__lastImportNormalizationReport = normalizationResult.report;
-
-    setImportStage("schema-validation");
-    const diagnostics = buildImportDiagnostics(normalizedParsed);
-    console.info("Import parse diagnostics", diagnostics);
-
-    const validation = validateImportPayload(normalizedParsed);
-    const found = {
-        expenses: diagnostics.expensesCount,
-        savings: diagnostics.savingsCount,
-        budgets: diagnostics.budgetsCount,
-        budgetPeriods: diagnostics.budgetPeriodsCount
-    };
-
-    if (validation.errors.length) {
-        setImportStage("schema-validation-failed", { errors: validation.errors });
-        renderImportValidationReport({
-            version: validation.version,
-            found,
-            imported: { expenses: 0, savings: 0, budgets: 0, budgetPeriods: 0 },
-            warnings: validation.warnings.concat(normalizationResult.report.warnings || []),
-            normalization: normalizationResult.report,
-            errors: validation.errors
-        });
-        showToast("Import Validation Failed", "error");
-        return;
-    }
-
-    const data = validation.normalized;
-
-    try {
-        setImportStage("import-mapping");
-        if (Array.isArray(data.expenses)) saveExpenses(data.expenses);
-        if (Array.isArray(data.budgets)) saveBudgets(data.budgets);
-        if (Array.isArray(data.savings)) saveSavings(data.savings);
-        if (Array.isArray(data.orders)) localStorage.setItem("orders", JSON.stringify(data.orders));
-        if (Array.isArray(data.categories)) localStorage.setItem("categories", JSON.stringify(data.categories));
-        if (Array.isArray(data.persons)) localStorage.setItem("persons", JSON.stringify(data.persons));
-        if (Array.isArray(data.budgetPeriods)) localStorage.setItem("bp", JSON.stringify(data.budgetPeriods));
-        if (data.quotations && typeof data.quotations === "object") {
-            localStorage.setItem("quotationData", JSON.stringify(data.quotations.quotationData || null));
-            localStorage.setItem("quotationItems", JSON.stringify(Array.isArray(data.quotations.quotationItems) ? data.quotations.quotationItems : []));
-            localStorage.setItem("quotationCharges", JSON.stringify(Array.isArray(data.quotations.quotationCharges) ? data.quotations.quotationCharges : []));
-            localStorage.setItem("quotationRegistry", JSON.stringify(Array.isArray(data.quotations.quotationRegistry) ? data.quotations.quotationRegistry : []));
-            localStorage.setItem("quotationMeta", JSON.stringify(data.quotations.quotationMeta || null));
-            localStorage.setItem("activeQuotationId", JSON.stringify(data.quotations.activeQuotationId || null));
-            localStorage.setItem("documentRelations", JSON.stringify(Array.isArray(data.quotations.documentRelations) ? data.quotations.documentRelations : []));
-            localStorage.setItem("noSeriesConfig", JSON.stringify(data.quotations.noSeriesConfig || null));
-        }
-
-        if (data.settings) {
-            if (data.settings.currencyCode) localStorage.setItem("currencyCode", data.settings.currencyCode);
-            if (data.settings.appearanceMode) setAppearanceMode(data.settings.appearanceMode);
-
-            if (data.settings.accentColor) {
-                changeTheme(data.settings.accentColor);
-            } else if (data.settings.theme) {
-                changeTheme(data.settings.theme);
-            }
-
-            if (Object.prototype.hasOwnProperty.call(data.settings, "autoBackupEnabled") || data.settings.autoBackupFrequency || data.settings.autoBackupTarget) {
-                saveAutoBackupSettings({
-                    enabled: !!data.settings.autoBackupEnabled,
-                    frequency: data.settings.autoBackupFrequency || "weekly",
-                    target: data.settings.autoBackupTarget || "local_download"
-                });
-            } else if (Object.prototype.hasOwnProperty.call(data.settings, "autoBackup") || data.settings.backupFrequency) {
-                saveAutoBackupSettings({
-                    enabled: !!data.settings.autoBackup,
-                    frequency: data.settings.backupFrequency || "weekly",
-                    target: "local_download"
-                });
-            }
-
-        }
-
-        runIntegrityRepairSilently();
-    setImportStage("ledger-rebuild");
-        loadTheme();
-        syncThemeSelectors();
-        refreshSettingsPanels();
-
-        loadHistory();
-        loadBudgetOptions();
-        loadDashboard();
-        loadGraph();
-        updateBudgetEfficiency();
-        if (typeof renderBudgetEntries === "function") renderBudgetEntries();
-        if (typeof renderIncomeList === "function") renderIncomeList();
-        if (typeof loadSavings === "function") loadSavings();
-
-        renderImportValidationReport({
-            version: validation.version,
-            found,
-            imported: {
-                expenses: Array.isArray(data.expenses) ? data.expenses.length : 0,
-                savings: Array.isArray(data.savings) ? data.savings.length : 0,
-                budgets: Array.isArray(data.budgets) ? data.budgets.length : 0,
-                budgetPeriods: Array.isArray(data.budgetPeriods) ? data.budgetPeriods.length : 0
+                if (
+                    data &&
+                    typeof data.progress === "number"
+                ) {
+                    console.info(
+                        "Import progress",
+                        data.progress
+                    );
+                }
             },
-            warnings: validation.warnings.concat(normalizationResult.report.warnings || []),
-            normalization: normalizationResult.report,
-            errors: []
+
+            info: (
+                message,
+                details = {}
+            ) => {
+
+                console.info(
+                    message,
+                    details
+                );
+            },
+
+            warning: (
+                message,
+                details = {}
+            ) => {
+
+                console.warn(
+                    message,
+                    details
+                );
+            },
+
+            error: (
+                message,
+                details = {}
+            ) => {
+
+                console.error(
+                    message,
+                    details
+                );
+            }
+        }
+    )
+        .then(result => {
+
+            /*
+             * -------------------------------------------------
+             * LEDGER / UI REBUILD
+             * -------------------------------------------------
+             *
+             * These remain in script.js because they are UI
+             * responsibilities, not Import Engine responsibilities.
+             */
+
+            setImportStage("ledger-rebuild");
+
+            loadTheme();
+            syncThemeSelectors();
+            refreshSettingsPanels();
+
+            loadHistory();
+            loadBudgetOptions();
+            loadDashboard();
+            loadGraph();
+
+            if (
+                typeof renderBudgetEntries ===
+                "function"
+            ) {
+                renderBudgetEntries();
+            }
+
+            if (
+                typeof renderIncomeList ===
+                "function"
+            ) {
+                renderIncomeList();
+            }
+
+            if (
+                typeof loadSavings ===
+                "function"
+            ) {
+                loadSavings();
+            }
+
+
+            /*
+             * -------------------------------------------------
+             * IMPORT VALIDATION REPORT
+             * -------------------------------------------------
+             */
+
+            renderImportValidationReport({
+
+                version:
+                    result.version,
+
+                found:
+                    result.found || {},
+
+                imported:
+                    result.imported || {
+                        expenses: 0,
+                        savings: 0,
+                        budgets: 0,
+                        budgetPeriods: 0
+                    },
+
+                warnings:
+                    Array.isArray(result.warnings)
+                        ? result.warnings
+                        : [],
+
+                normalization:
+                    result.normalization || {},
+
+                errors:
+                    Array.isArray(result.errors)
+                        ? result.errors
+                        : []
+            });
+
+
+            /*
+             * -------------------------------------------------
+             * SUCCESS
+             * -------------------------------------------------
+             */
+
+            showToast("Import successful ✅");
+            setImportStage("completed");
+
+            if (Array.isArray(data.__expectedAssertions) && data.__expectedAssertions.length) {
+                let results = runTestAssertions(data.__expectedAssertions);
+                renderTestAssertionReport(results);
+                return; // keep the report visible instead of closing the modal
+            }
+
+
+            /*
+             * Clear the manual import field.
+             */
+
+            if (importText) {
+                importText.value = "";
+            }
+
+            closeImportModal();
+        })
+        .catch(err => {
+
+            /*
+             * -------------------------------------------------
+             * IMPORT FAILURE
+             * -------------------------------------------------
+             */
+
+            console.error(
+                "Import Engine failed.",
+                err
+            );
+
+            const errorMessage =
+                err &&
+                    err.message
+                    ? err.message
+                    : "unknown";
+
+
+            setImportStage(
+                "import-mapping-failed",
+                {
+                    error: errorMessage
+                }
+            );
+
+
+            renderImportValidationReport({
+
+                version:
+                    "unknown",
+
+                found: {
+                    expenses: 0,
+                    savings: 0,
+                    budgets: 0,
+                    budgetPeriods: 0
+                },
+
+                imported: {
+                    expenses: 0,
+                    savings: 0,
+                    budgets: 0,
+                    budgetPeriods: 0
+                },
+
+                warnings: [],
+
+                normalization: {},
+
+                errors: [
+                    errorMessage
+                ]
+            });
+
+
+            showToast(
+                "Import Validation Failed",
+                "error"
+            );
         });
-
-        showToast("Import successful ✅");
-        setImportStage("completed");
-
-        const importText = document.getElementById("importText");
-        if (importText) importText.value = "";
-        closeImportModal();
-    } catch (err) {
-        console.error(err);
-        setImportStage("import-mapping-failed", { error: err && err.message ? err.message : "unknown" });
-        renderImportValidationReport({
-            version: validation.version,
-            found,
-            imported: { expenses: 0, savings: 0, budgets: 0, budgetPeriods: 0 },
-            warnings: validation.warnings.concat(normalizationResult.report.warnings || []),
-            normalization: normalizationResult.report,
-            errors: ["Import Validation Failed: invalid transactions or data mapping"]
-        });
-        showToast("Import Validation Failed", "error");
-    }
-}
-
-if (typeof window !== "undefined") {
-    window.importData = importData;
-    window.exportDataAsJSON = exportDataAsJSON;
-    window.decodeImportTextCandidates = decodeImportTextCandidates;
-    window.chooseImportDecodedText = chooseImportDecodedText;
-    window.getImportByteSignature = getImportByteSignature;
 }
 // Fixes old data structure to new system
 function runMigration() {
@@ -7509,6 +9227,81 @@ function hasActiveExpenseQueryState() {
     return Boolean(searchText || hasFilters || hasSort);
 }
 
+function computeBudgetEfficiencyMetrics(referenceDate = new Date()) {
+    const budgets = Array.isArray(getBudgets()) ? getBudgets() : [];
+    const expenses = Array.isArray(getExpenses()) ? getExpenses() : [];
+    const activeBudgets = filterBudgetsByActivePeriod(budgets);
+    const activeBudgetIds = activeBudgets.map(b => b && b.budgetId).filter(Boolean);
+    const filteredExpenses = filterByActivePeriod(expenses);
+
+    const totalBudget = activeBudgets.reduce((sum, b) => sum + Number(b.totalAllocated || 0), 0);
+    const monthSpent = Math.max(0, getNetSpentForBudgetSet(activeBudgetIds, filteredExpenses));
+    const monthlyLimit = totalBudget;
+    const monthlyRemaining = Math.max(0, monthlyLimit - monthSpent);
+
+    const daysInPeriod = (() => {
+        const period = getActiveBudgetPeriod();
+        if (!period || !period.start) return 1;
+        const start = new Date(period.start);
+        const end = period.end ? new Date(period.end) : new Date(referenceDate);
+        start.setHours(0, 0, 0, 0);
+        end.setHours(0, 0, 0, 0);
+        const diff = Math.round((end - start) / (1000 * 60 * 60 * 24));
+        return Math.max(1, diff + 1);
+    })();
+
+    const dailyLimit = monthlyLimit > 0 ? monthlyLimit / daysInPeriod : 0;
+    const todayStart = new Date(referenceDate);
+    todayStart.setHours(0, 0, 0, 0);
+    const todayEnd = new Date(referenceDate);
+    todayEnd.setHours(23, 59, 59, 999);
+    const todayEntries = filteredExpenses.filter(entry => {
+        const d = new Date(entry.date);
+        return d >= todayStart && d <= todayEnd;
+    });
+    const todaySpent = Math.max(0, getNetSpentForBudgetSet(activeBudgetIds, todayEntries));
+    const dailyRemaining = Math.max(0, dailyLimit - todaySpent);
+
+    const weeklyLimit = monthlyLimit > 0 ? monthlyLimit / 4 : 0;
+    const weekStart = new Date(referenceDate);
+    weekStart.setDate(referenceDate.getDate() - referenceDate.getDay());
+    weekStart.setHours(0, 0, 0, 0);
+    const weekEnd = new Date(weekStart);
+    weekEnd.setDate(weekStart.getDate() + 6);
+    weekEnd.setHours(23, 59, 59, 999);
+    const weekEntries = filteredExpenses.filter(entry => {
+        const d = new Date(entry.date);
+        return d >= weekStart && d <= weekEnd;
+    });
+    const weekSpent = Math.max(0, getNetSpentForBudgetSet(activeBudgetIds, weekEntries));
+    const weeklyRemaining = Math.max(0, weeklyLimit - weekSpent);
+
+    return {
+        dailyLimit,
+        todaySpent,
+        dailyRemaining,
+        weeklyLimit,
+        weekSpent,
+        weeklyRemaining,
+        monthlyLimit,
+        monthSpent,
+        monthlyRemaining
+    };
+}
+
+function updateBudgetEfficiency() {
+    const metrics = computeBudgetEfficiencyMetrics(new Date());
+
+    const setText = (id, value) => {
+        const el = document.getElementById(id);
+        if (el) el.innerText = formatCurrency(value);
+    };
+
+    setText("savedToday", metrics.dailyRemaining);
+    setText("savedWeek", metrics.weeklyRemaining);
+    setText("savedPeriod", metrics.monthlyRemaining);
+}
+
 function applyActiveExpenseQuery(rows) {
     let list = Array.isArray(rows) ? rows : [];
     if (!window.SearchService || typeof window.SearchService.applyModuleSearch !== "function") {
@@ -7516,6 +9309,37 @@ function applyActiveExpenseQuery(rows) {
     }
     let queryResult = window.SearchService.applyModuleSearch("expenses", list);
     return Array.isArray(queryResult.results) ? queryResult.results : list;
+}
+
+function getExportRows(moduleName, rows) {
+    let list = Array.isArray(rows) ? rows : [];
+    if (!window.SearchService || typeof window.SearchService.applyModuleSearch !== "function") {
+        return list;
+    }
+    let queryResult = window.SearchService.applyModuleSearch(moduleName, list);
+    return Array.isArray(queryResult.results) ? queryResult.results : list;
+}
+
+function getExportFilterLabel(moduleName) {
+    if (!window.SearchService || typeof window.SearchService.getState !== "function") {
+        return "All";
+    }
+    const state = window.SearchService.getState(moduleName);
+    const filters = Array.isArray(state.filters) ? state.filters : [];
+    const sort = Array.isArray(state.sort) ? state.sort : [];
+    const searchText = state.search && state.search.text ? String(state.search.text).trim() : "";
+    const parts = [];
+    if (searchText) {
+        parts.push(`Search: "${searchText}"`);
+    }
+    if (filters.length) {
+        parts.push(`Filters: ${filters.length}`);
+    }
+    if (sort.length) {
+        const first = sort[0];
+        parts.push(`Sort: ${String(first.field || "-")} ${String(first.direction || "desc")}`);
+    }
+    return parts.length ? parts.join(" | ") : "All";
 }
 
 function updateFilteredViewActiveIndicator() {
@@ -7707,16 +9531,16 @@ function renderBudgetEntries() {
         return;
     }
 
-    // 🔥 GROUP BY SOURCE + PERIOD
+    // ⚠️ FIX (Issue 02): GROUP BY PERIOD ONLY — sourceId must not split
+    // a single Budget Wallet's card into multiple cards.
     let map = {};
 
     budgets.forEach(b => {
 
-        let key = b.sourceId + "_" + (b.periodKey || b.monthKey || "no_period");
+        let key = b.periodKey || b.monthKey || "no_period";
 
         if (!map[key]) {
             map[key] = {
-                sourceId: b.sourceId,
                 periodKey: b.periodKey,
                 monthKey: b.monthKey || null,
                 totalAllocated: 0,
@@ -7750,13 +9574,11 @@ function renderBudgetEntries() {
 
     list.forEach(g => {
 
-        // 🔥 Use periodKey/monthKey-aware matching
+        // ⚠️ FIX (Issue 02): match by period only, not sourceId.
         let relatedBudgets = budgets
             .filter(b =>
-                b.sourceId === g.sourceId && (
-                    (g.periodKey && b.periodKey === g.periodKey) ||
-                    (!g.periodKey && b.monthKey === g.monthKey)
-                )
+                (g.periodKey && b.periodKey === g.periodKey) ||
+                (!g.periodKey && b.monthKey === g.monthKey)
             );
 
         let relatedBudgetIds = relatedBudgets.map(b => b.budgetId);
@@ -7768,8 +9590,7 @@ function renderBudgetEntries() {
 
         let remaining = g.totalAllocated - used;
 
-        let source = savings.find(s => String(s.id) === String(g.sourceId));
-        let name = source ? (source.note || source.entity) : "Budget";
+        let name = "Budget";
 
         let transactionCount = expenses.filter(e => {
             if (Array.isArray(e.allocationTrail) && e.allocationTrail.length) {
@@ -7816,6 +9637,7 @@ function renderBudgetEntries() {
 
             <div class="entry-actions">
                 <button type="button" class="entry-action-btn" data-action="view">View Transactions</button>
+                <button type="button" class="entry-action-btn" data-action="close"${remaining <= 0 ? " disabled" : ""}>Close & Transfer Back</button>
                 <button type="button" class="entry-action-btn is-muted" disabled>Edit</button>
                 <button type="button" class="entry-action-btn is-muted" disabled>Delete</button>
             </div>
@@ -7831,6 +9653,14 @@ function renderBudgetEntries() {
             });
         }
 
+        let closeBtn = div.querySelector('[data-action="close"]');
+        if (closeBtn) {
+            closeBtn.addEventListener("click", (event) => {
+                event.stopPropagation();
+                quickCloseBudgetTransferBack(g, relatedBudgetIds);
+            });
+        }
+
         container.appendChild(div);
     });
 }
@@ -7840,7 +9670,35 @@ function toggleBudgetEntryDetails(id) {
     if (!details) return;
     details.style.display = details.style.display === "none" ? "block" : "none";
 }
-
+// Normalizes a Savings funding transaction (Move to Budget, or a
+// resolved Unassigned Top-Up) into the same shape the expense-based
+// history rows use, so both render through the same existing template.
+function normalizeFundingEntryForBudgetHistory(s) {
+    return {
+        id: s.id,
+        type: s.type,
+        purpose: s.note || "",
+        category: null,
+        date: s.date,
+        createdAt: s.createdAt || s.date,
+        // Flip sign: this is an INFLOW to the wallet, even though it's
+        // an outflow from Savings.
+        amount: Math.abs(Number(s.amount) || 0),
+        paymentType: s.paymentType,
+        entity: s.entity,
+        attachmentId: s.attachmentId || null,
+        attachmentStatus: s.attachmentStatus || "none",
+        linkedTransactionId: null,
+        resolutionType: null,
+        refundType: null,
+        // A wallet-specific running balance across a merged
+        // expense+funding timeline isn't computed here — these rows
+        // show "-" instead of the (unrelated) Savings ledger balance.
+        BalanceAfterTransaction: null,
+        runningBalance: null,
+        __source: "savings"
+    };
+}
 function openBudgetDetails(group) {
     let budgets = getBudgets();
     let expenses = getExpenses();
@@ -7849,17 +9707,16 @@ function openBudgetDetails(group) {
     let container = document.getElementById("budgetDetailsContainer");
     if (!container) return;
 
-    let source = savings.find(s => s.id === group.sourceId);
-    let name = source ? (source.note || source.entity) : "Budget";
+    let name = "Budget";
 
     let related = [];
 
+    // ⚠️ FIX (Issue 02): match by period only, not sourceId — a Budget
+    // Wallet can now be funded by multiple sources.
     let relatedBudgetIds = budgets
         .filter(b =>
-            b.sourceId === group.sourceId && (
-                (group.periodKey && b.periodKey === group.periodKey) ||
-                (!group.periodKey && b.monthKey === group.monthKey)
-            )
+            (group.periodKey && b.periodKey === group.periodKey) ||
+            (!group.periodKey && b.monthKey === group.monthKey)
         )
         .map(b => b.budgetId);
 
@@ -7869,6 +9726,17 @@ function openBudgetDetails(group) {
         }
         return relatedBudgetIds.includes(e.budgetId);
     });
+
+    // ⚠️ FIX: funding transactions (Move to Budget, resolved Top-Ups)
+    // live in Savings, not Expenses — they were never being shown here
+    // at all. Kept as a SEPARATE list from `related` on purpose: the
+    // Used/Credited math just below must stay expense-only.
+    let fundingEntries = savings
+        .filter(s => s && s.budgetWalletId && relatedBudgetIds.includes(s.budgetWalletId))
+        .map(normalizeFundingEntryForBudgetHistory);
+
+    let displayEntries = related.concat(fundingEntries)
+        .sort((a, b) => new Date(a.date || 0) - new Date(b.date || 0));
 
     let used = relatedBudgetIds.reduce((sum, budgetId) => {
         return sum + getNetSpentForBudget(budgetId, related);
@@ -7908,16 +9776,17 @@ function openBudgetDetails(group) {
 
     let entriesHtml = "";
 
-    if (!related.length) {
+    if (!displayEntries.length) {
         entriesHtml = "<p>No entries</p>";
     } else {
-        related.forEach(e => {
+        displayEntries.forEach(e => {
             let compactDate = new Date(e.date || Date.now()).toLocaleDateString("en-GB", {
                 day: "2-digit",
                 month: "short",
                 year: "numeric"
             });
-            let runningBalance = Number(e.BalanceAfterTransaction ?? e.runningBalance ?? 0);
+            let hasBalance = e.BalanceAfterTransaction != null || e.runningBalance != null;
+            let runningBalance = hasBalance ? Number(e.BalanceAfterTransaction ?? e.runningBalance ?? 0) : null;
             let snapshot = getExpenseResolutionSnapshot(e.linkedTransactionId || e.id, related);
             let attachmentText = e.attachmentId
                 ? `Linked (${e.attachmentStatus || "linked"})`
@@ -7936,7 +9805,7 @@ function openBudgetDetails(group) {
                         <span class="entry-label">Notes</span>
                         <span class="entry-value">${escapeHtml(e.purpose || "-")}</span>
                         <span class="entry-label">Running Balance</span>
-                        <span class="entry-value">${escapeHtml(formatCurrency(runningBalance))}</span>
+                        <span class="entry-value">${runningBalance == null ? "-" : escapeHtml(formatCurrency(runningBalance))}</span>
                     </div>
 
                     <div class="transaction-card-foot">
@@ -7962,7 +9831,7 @@ function openBudgetDetails(group) {
                         <div class="entry-attachment-actions">
                             <button class="entry-action-btn" type="button" onclick="viewAttachmentById('${escapeHtml(e.attachmentId)}')">View</button>
                             <button class="entry-action-btn" type="button" onclick="downloadAttachmentById('${escapeHtml(e.attachmentId)}')">Download</button>
-                            <button class="entry-action-btn is-danger" type="button" onclick="deleteTransactionAttachment('expense','${escapeHtml(e.id)}','${escapeHtml(e.attachmentId)}')">Delete</button>
+                                                        <button class="entry-action-btn is-danger" type="button" onclick="deleteTransactionAttachment('${e.__source === "savings" ? "savings" : "expense"}','${escapeHtml(e.id)}','${escapeHtml(e.attachmentId)}')">Delete</button>
                         </div>` : ""}
                     </div>
                 </div>
@@ -9628,10 +11497,12 @@ function buildExpenseFilterDescriptorsFromModal() {
 }
 
 function rerenderExpenseWithQueryState() {
-    let fallback = (window.currentFilteredExpenses && window.currentFilteredExpenses.length)
-        ? window.currentFilteredExpenses
-        : getExpenses();
-    loadHistory(fallback);
+    // Always re-run the search against the full canonical dataset so that
+    // SearchService state (filters/search/sort) is applied against all
+    // records. Using `currentFilteredExpenses` here caused incremental
+    // narrowing when filters changed, leading to exported PDFs or views
+    // missing matching records.
+    loadHistory(getExpenses());
 }
 
 function countExpenseFilterConditions(filters) {
@@ -10332,7 +12203,6 @@ function refreshFinancialViewsAfterPeriodUpdate() {
     if (typeof loadSavings === "function") loadSavings();
     if (typeof loadHistory === "function") loadHistory();
     if (typeof loadGraph === "function") loadGraph();
-    if (typeof updateBudgetEfficiency === "function") updateBudgetEfficiency();
 }
 
 function rebindPeriodReferencesAcrossData(oldPeriodKey, newPeriodKey, startKey) {
@@ -10552,7 +12422,16 @@ function generateHeadline() {
     let period = getActiveBudgetPeriod();
 
     let messages = [];
-
+    // ⚠️ Section 11: surface pending Unassigned Top-Ups persistently in
+    // the headline rotation instead of a one-time toast — parked/
+    // unresolved amounts can outlive their original period.
+    if (typeof getPendingUnassignedTopups === "function" && typeof getRemainingUnassignedAmount === "function") {
+        let pending = getPendingUnassignedTopups();
+        if (pending.length) {
+            let total = pending.reduce((sum, t) => sum + getRemainingUnassignedAmount(t), 0);
+            messages.push(`${pending.length} unassigned top-up(s) totaling ${formatCurrency(total)} — resolve in Budget → Apply Source.`);
+        }
+    }
     // =========================
     // 🚨 NO ACTIVE PERIOD
     // =========================
@@ -10768,7 +12647,6 @@ function handleExpenseSave(amount, selectedBudgetId = null, attachmentMeta = nul
     loadDashboard();
     loadHistory();
     loadGraph();
-    updateBudgetEfficiency();
     renderBudgetEntries();
     loadBudgetOptions();
 
@@ -10847,7 +12725,6 @@ function confirmSplit() {
     closeSplitModal();
 
     loadDashboard();
-    updateBudgetEfficiency();
     renderBudgetEntries();
     loadBudgetOptions();
     loadHistory();
@@ -10864,128 +12741,6 @@ function closeSplitModal() {
     pendingSplit = null;
 }
 
-function updateBudgetEfficiency() {
-    let metrics = computeBudgetEfficiencyMetrics();
-
-    // =========================
-    // 🎯 UI
-    // =========================
-    function setText(id, value) {
-
-        let el =
-            document.getElementById(id);
-
-        if (el) {
-            el.innerText = value;
-        }
-    }
-
-    setText(
-        "savedToday",
-        formatCurrency(metrics.dailyRemaining)
-    );
-
-    setText(
-        "savedWeek",
-        formatCurrency(metrics.weeklyRemaining)
-    );
-
-    setText(
-        "savedPeriod",
-        formatCurrency(metrics.periodRemaining)
-    );
-}
-
-function computeBudgetEfficiencyMetrics(referenceDate = new Date()) {
-    let expenses = filterByActivePeriod(getExpenses());
-    let budgets = filterBudgetsByActivePeriod(getBudgets());
-
-    function getNetSpentForRange(fromDate, toDate) {
-        let subset = expenses.filter(e => {
-            let d = new Date(e.date);
-            return d >= fromDate && d <= toDate;
-        });
-
-        return budgets.reduce((sum, b) => {
-            return sum + getNetSpentForBudget(b.budgetId, subset);
-        }, 0);
-    }
-
-    function getNormalizedPeriodRange() {
-        let active = getActiveBudgetPeriod();
-
-        if (active && active.start) {
-            let start = new Date(active.start);
-            let end = getBudgetPeriodEffectiveEndDate(active, referenceDate);
-            start.setHours(0, 0, 0, 0);
-            end.setHours(23, 59, 59, 999);
-            return { start, end };
-        }
-
-        let now = new Date(referenceDate);
-        let start = new Date(now.getFullYear(), now.getMonth(), 1);
-        let end = new Date(now.getFullYear(), now.getMonth() + 1, 0);
-        start.setHours(0, 0, 0, 0);
-        end.setHours(23, 59, 59, 999);
-        return { start, end };
-    }
-
-    let now = new Date(referenceDate);
-
-    let dayStart = new Date(now);
-    dayStart.setHours(0, 0, 0, 0);
-
-    let dayEnd = new Date(now);
-    dayEnd.setHours(23, 59, 59, 999);
-
-    let weekStart = new Date(now);
-    weekStart.setDate(now.getDate() - now.getDay());
-    weekStart.setHours(0, 0, 0, 0);
-
-    let weekEnd = new Date(weekStart);
-    weekEnd.setDate(weekStart.getDate() + 6);
-    weekEnd.setHours(23, 59, 59, 999);
-
-    let monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
-    let monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0);
-    monthStart.setHours(0, 0, 0, 0);
-    monthEnd.setHours(23, 59, 59, 999);
-
-    let periodRange = getNormalizedPeriodRange();
-    let totalBudget = budgets.reduce((s, b) => s + (b.totalAllocated || 0), 0);
-
-    let periodDays = Math.max(1, Math.floor((periodRange.end - periodRange.start) / (1000 * 60 * 60 * 24)) + 1);
-    let periodWeeks = Math.max(1, Math.ceil(periodDays / 7));
-
-    let periodMonths = Math.max(1,
-        (periodRange.end.getFullYear() - periodRange.start.getFullYear()) * 12 +
-        (periodRange.end.getMonth() - periodRange.start.getMonth()) + 1
-    );
-
-    let dailyLimit = totalBudget / periodDays;
-    let weeklyLimit = totalBudget / periodWeeks;
-    let monthlyLimit = totalBudget / periodMonths;
-
-    let todaySpent = getNetSpentForRange(dayStart, dayEnd);
-    let weekSpent = getNetSpentForRange(weekStart, weekEnd);
-    let monthSpent = getNetSpentForRange(monthStart, monthEnd);
-    let periodSpent = getNetSpentForRange(periodRange.start, periodRange.end);
-
-    return {
-        totalBudget,
-        dailyLimit,
-        weeklyLimit,
-        monthlyLimit,
-        todaySpent,
-        weekSpent,
-        monthSpent,
-        periodSpent,
-        dailyRemaining: dailyLimit - todaySpent,
-        weeklyRemaining: weeklyLimit - weekSpent,
-        monthlyRemaining: monthlyLimit - monthSpent,
-        periodRemaining: totalBudget - periodSpent
-    };
-}
 function normalizeDate(date) {
 
     let d = new Date(date);
@@ -11281,6 +13036,11 @@ function getFullAppData() {
         budgetPeriods:
             JSON.parse(
                 localStorage.getItem("bp")
+            ) || [],
+
+        unassignedTopups:
+            JSON.parse(
+                localStorage.getItem("unassignedTopups")
             ) || [],
 
         quotations: {
@@ -11768,4 +13528,107 @@ try {
     // ignore non-browser contexts
 }
 
+// =========================
+// 🧪 TEST ASSERTION RUNNER
+// =========================
+// Checks live app state against a set of expected values embedded in a
+// test JSON file. Every check reuses the SAME functions the real app
+// uses (getNetSpentForBudget, getSourceRemainingById, etc.) — never
+// reimplements the math — so a failing assertion means a real bug, not
+// a second, possibly-wrong copy of the calculation disagreeing.
+function runTestAssertions(assertions) {
+    if (!Array.isArray(assertions) || !assertions.length) return [];
+
+    let expenses = getExpenses();
+    let budgets = getBudgets();
+    let savings = getSavings();
+
+    function findWallet(a) {
+        if (a.budgetId) return budgets.find(b => String(b.budgetId) === String(a.budgetId));
+        if (a.periodKey) return budgets.find(b => b.periodKey === a.periodKey && b.isBudgetWallet === true);
+        return null;
+    }
+
+    return assertions.map(a => {
+        let actual;
+        let pass = false;
+
+        try {
+            switch (a.check) {
+                case "budgetWalletTotal": {
+                    let w = findWallet(a);
+                    actual = w ? Number(w.totalAllocated || 0) : null;
+                    break;
+                }
+                case "budgetWalletRemaining": {
+                    let w = findWallet(a);
+                    actual = w ? Number(w.totalAllocated || 0) - getNetSpentForBudget(w.budgetId, expenses) : null;
+                    break;
+                }
+                case "budgetRealSpent": {
+                    let w = findWallet(a);
+                    actual = w ? getRealSpentForBudget(w.budgetId, expenses) : null;
+                    break;
+                }
+                case "budgetAdjustmentTotal": {
+                    let w = findWallet(a);
+                    actual = w ? getNetAdjustmentForBudget(w.budgetId, expenses) : null;
+                    break;
+                }
+                case "walletCountForPeriod": {
+                    actual = budgets.filter(b => b.periodKey === a.periodKey && b.isBudgetWallet === true).length;
+                    break;
+                }
+                case "sourceRemaining": {
+                    actual = getSourceRemainingById(a.sourceId, savings);
+                    break;
+                }
+                case "sourceStatus": {
+                    let s = savings.find(x => String(x.id) === String(a.sourceId));
+                    actual = s ? (s.status || "active") : null;
+                    break;
+                }
+                case "unassignedTopupCount": {
+                    actual = getPendingUnassignedTopups().length;
+                    break;
+                }
+                case "unassignedTopupTotal": {
+                    actual = getPendingUnassignedTopups().reduce((sum, t) => sum + getRemainingUnassignedAmount(t), 0);
+                    break;
+                }
+                default:
+                    actual = undefined;
+            }
+        } catch (err) {
+            actual = `error: ${err.message}`;
+        }
+
+        pass = typeof actual === "number" && typeof a.expected === "number"
+            ? Math.abs(actual - a.expected) < 0.01
+            : actual === a.expected;
+
+        return {
+            description: a.description || a.check,
+            expected: a.expected,
+            actual,
+            pass
+        };
+    });
+}
+
+function renderTestAssertionReport(results) {
+    if (!results.length) return;
+
+    let passCount = results.filter(r => r.pass).length;
+    let lines = results.map(r =>
+        `${r.pass ? "✅" : "❌"} ${r.description} — expected ${r.expected}, got ${r.actual}`
+    );
+
+    let report = document.getElementById("importValidationReport");
+    if (report) {
+        report.textContent = `TEST RESULTS: ${passCount}/${results.length} passed\n\n` + lines.join("\n");
+    }
+
+    showToast(`Test results: ${passCount}/${results.length} passed`, passCount === results.length ? "success" : "warning");
+}
 ///Pushing refund to savings and logging refund in expenses to MoneyTracker.    

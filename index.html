@@ -11,6 +11,7 @@
 
   <!-- Styles -->
   <link rel="stylesheet" href="assets/styles/style.css">
+  <link rel="stylesheet" href="assets/styles/daily-budget-ledger.css">
 
   <!-- Libraries -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
@@ -109,13 +110,28 @@
       <div class="card">
         <h3>Add Expense</h3>
 
-        <label for="entryType">Entry Type</label>
-        <select id="entryType" onchange="handleEntryTypeUIChange()">
+        <div class="tab-bar" data-tab-group="entryTypeTabs">
+          <button type="button" class="tab-bar-btn is-active" data-tab-key="expense"
+            onclick="selectEntryType('expense')">Expense</button>
+          <button type="button" class="tab-bar-btn" data-tab-key="income"
+            onclick="selectEntryType('income')">Income</button>
+          <button type="button" class="tab-bar-btn" data-tab-key="transfer"
+            onclick="selectEntryType('transfer')">Transfer</button>
+          <button type="button" class="tab-bar-btn" data-tab-key="refund"
+            onclick="selectEntryType('refund')">Refund</button>
+          <button type="button" class="tab-bar-btn" data-tab-key="transfer_back"
+            onclick="selectEntryType('transfer_back')">Transfer Back</button>
+          <button type="button" class="tab-bar-btn" data-tab-key="adjustment"
+            onclick="selectEntryType('adjustment')">Adjustment</button>
+        </div>
+
+        <select id="entryType" class="hidden" onchange="handleEntryTypeUIChange()">
           <option value="expense">Expense</option>
           <option value="income">Income</option>
           <option value="transfer">Transfer</option>
           <option value="refund">Refund</option>
           <option value="transfer_back">Transfer Back</option>
+          <option value="adjustment">Adjustment</option>
         </select>
 
         <input type="number" id="amount" placeholder="Amount">
@@ -131,6 +147,15 @@
         <div id="budgetWrapper" class="form-group">
           <label for="budgetSelect">Budget</label>
           <select id="budgetSelect"></select>
+        </div>
+
+        <div id="adjustmentDirectionWrapper" class="form-group hidden">
+          <label for="adjustmentDirection">Adjustment Direction</label>
+          <select id="adjustmentDirection">
+            <option value="increase">Add To Budget (Increase Available)</option>
+            <option value="decrease">Deduct From Budget (Decrease Available)</option>
+          </select>
+          <small class="muted-note">Reason (Purpose) is mandatory for adjustments.</small>
         </div>
 
         <div id="linkedTransactionWrapper" class="form-group hidden">
@@ -185,7 +210,7 @@
 
         <!-- Attachment -->
         <label class="field-label">Attach Receipt (optional)</label>
-        <div class="inline-row"> 
+        <div class="inline-row">
           <input class="flex-input" id="expenseAttachment" type="file" accept="*/*" capture="environment" />
           <button type="button" id="expenseAttachmentRemove" class="link-btn hidden">Remove</button>
         </div>
@@ -199,75 +224,166 @@
     <!-- ================= HISTORY ================= -->
     <section id="history" class="screen">
       <div class="card">
-        <div class="history-shell">
-          <div class="history-headline">
-            <h3>History</h3>
-            <small>Track all movements with running balance clarity</small>
-          </div>
+        <div class="tab-bar" data-tab-group="historyTabs">
+          <button type="button" class="tab-bar-btn is-active" data-tab-key="history"
+            onclick="activateTab('historyTabs','history')">History</button>
+          <button type="button" class="tab-bar-btn" data-tab-key="dailyLedger"
+            onclick="activateTab('historyTabs','dailyLedger', onDailyLedgerTabOpened)">Daily Ledger</button>
+        </div>
 
-          <div class="history-toolbar premium-history-toolbar">
-            <div class="history-filter-wrap">
-              <input id="historySearchInput" type="text" placeholder="Search transactions..." oninput="onExpenseHistorySearchInput(this.value)">
+        <div class="tab-panel is-active" data-tab-group="historyTabs" data-tab-key="history">
+          <div class="history-shell">
+            <div class="history-headline">
+              <h3>History</h3>
+              <small>Track all movements with running balance clarity</small>
             </div>
 
-            <div class="history-tools action-bar action-bar-4">
-              <button id="expenseFilterActionBtn" class="secondary" type="button" onclick="openExpenseFilterModal()">Filter</button>
-              <button class="secondary" type="button" onclick="openExpenseSortModal()">Sort</button>
-              <button class="secondary" type="button" onclick="exportPDF()" title="Download PDF">Export</button>
-              <button class="secondary" type="button" onclick="sharePDF()" title="Share PDF">Share</button>
+            <div class="history-toolbar premium-history-toolbar">
+              <div class="history-filter-wrap">
+                <input id="historySearchInput" type="text" placeholder="Search transactions..."
+                  oninput="onExpenseHistorySearchInput(this.value)">
+              </div>
 
+              <div class="history-tools action-bar action-bar-4">
+                <button id="expenseFilterActionBtn" class="secondary" type="button"
+                  onclick="openExpenseFilterModal()">Filter</button>
+                <button class="secondary" type="button" onclick="openExpenseSortModal()">Sort</button>
+                <button class="secondary" type="button" onclick="exportPDF()" title="Download PDF">Export</button>
+                <button class="secondary" type="button" onclick="sharePDF()" title="Share PDF">Share</button>
+              </div>
             </div>
+
+            <div id="expenseQueryChips" class="query-chip-row"></div>
+
+            <div id="historyList" class="history-list-premium"></div>
+          </div>
+        </div>
+
+        <div class="tab-panel" data-tab-group="historyTabs" data-tab-key="dailyLedger">
+          <div class="section-title-row">
+            <h3>Daily Budget</h3>
+            <span id="ledgerEntryCount" class="ledger-pill">0 entries</span>
           </div>
 
-          <div id="expenseQueryChips" class="query-chip-row"></div>
+          <label for="dailyBudgetInput">Fixed Daily Budget</label>
+          <input id="dailyBudgetInput" type="number" min="0" step="1" placeholder="100" />
 
-          <div id="historyList" class="history-list-premium"></div>
+          <label for="weekStartDaySelect">Week Starts On</label>
+          <select id="weekStartDaySelect">
+            <option value="0">Sunday</option>
+            <option value="1">Monday</option>
+            <option value="2">Tuesday</option>
+            <option value="3">Wednesday</option>
+            <option value="4">Thursday</option>
+            <option value="5">Friday</option>
+            <option value="6">Saturday</option>
+          </select>
+
+          <button id="saveDailyBudget" class="primary" type="button">Save Budget</button>
+
+          <div class="section-title-row" style="margin-top: var(--space-md);">
+            <h3>Ledger View</h3>
+          </div>
+          <div class="ledger-table-container">
+            <table class="ledger-table">
+              <thead>
+                <tr>
+                  <th>Date (Day)</th>
+                  <th>Budget</th>
+                  <th>Spent</th>
+                  <th>Savings</th>
+                  <th>Deficit</th>
+                  <th>Running Balance</th>
+                </tr>
+              </thead>
+              <tbody id="ledgerEntries"></tbody>
+            </table>
+          </div>
         </div>
       </div>
     </section>
-
     <!-- ================= BUDGET ================= -->
     <section id="budget" class="screen">
       <div class="card">
-        <h3>Budget</h3>
+        <h3>Budget Wallet</h3>
 
-        <p>Current: <span id="currentBudget">0</span></p>
-
-        <select id="budgetType">
-          <option value="daily">Daily</option>
-          <option value="weekly">Weekly</option>
-          <option value="monthly" selected>Monthly</option>
-        </select>
-
-        <input type="month" id="budgetMonth">
-        <input type="number" id="budgetAmount" placeholder="Amount">
-
-        <p>Daily Limit: <span id="calculatedDaily">0</span></p>
-
-        <button type="button" class="primary" onclick="saveBudget()">Save</button>
-        <button type="button" class="secondary" onclick="window.location.href='pages/budgetperiod.html'">Manage Budget Periods</button>
-      </div>
-      <!-- ================= SMART INSIGHTS ================= -->
-      <div class="budget-insights">
-
-        <div class="insight-card success">
-          <small>Daily Remaining</small>
-          <h4 id="savedToday">₹0</h4>
+        <div class="tab-bar" data-tab-group="budgetWalletTabs">
+          <button type="button" class="tab-bar-btn is-active" data-tab-key="overview"
+            onclick="activateTab('budgetWalletTabs','overview', renderBudgetWalletOverview)">Overview</button>
+          <button type="button" class="tab-bar-btn" data-tab-key="topup"
+            onclick="activateTab('budgetWalletTabs','topup', prefillTopupForm)">Top-Up</button>
+          <button type="button" class="tab-bar-btn" data-tab-key="apply"
+            onclick="activateTab('budgetWalletTabs','apply', renderApplySourceTab)">Apply Source</button>
         </div>
 
-        <div class="insight-card info">
-          <small>Weekly Remaining</small>
-          <h4 id="savedWeek">₹0</h4>
+        <div class="tab-panel is-active" data-tab-group="budgetWalletTabs" data-tab-key="overview">
+          <p>Current: <span id="currentBudget">0</span></p>
+          <p>Daily Limit: <span id="calculatedDaily">0</span></p>
+
+          <div class="entry-summary-grid">
+            <div>
+              <small>Assigned</small>
+              <strong id="walletAssignedTotal">₹0</strong>
+            </div>
+            <div>
+              <small>Unassigned</small>
+              <strong id="walletUnassignedTotal">₹0</strong>
+            </div>
+            <div>
+              <small>Spent</small>
+              <strong id="walletSpentTotal">₹0</strong>
+            </div>
+            <div>
+              <small>Remaining</small>
+              <strong id="walletRemainingTotal">₹0</strong>
+            </div>
+            <div>
+              <small>Adjustments</small>
+              <strong id="walletAdjustmentTotal">₹0</strong>
+            </div>
+          </div>
+
+          <button type="button" class="secondary" onclick="window.location.href='pages/budgetperiod.html'">Manage Budget
+            Periods</button>
+
+          <div class="budget-insights">
+            <div class="insight-card success">
+              <small>Daily Remaining</small>
+              <h4 id="savedToday">₹0</h4>
+            </div>
+            <div class="insight-card info">
+              <small>Weekly Remaining</small>
+              <h4 id="savedWeek">₹0</h4>
+            </div>
+            <div class="insight-card premium">
+              <small>Monthly Remaining</small>
+              <h4 id="savedPeriod">₹0</h4>
+            </div>
+          </div>
         </div>
 
-        <div class="insight-card premium">
-          <small>Monthly Remaining</small>
-          <h4 id="savedPeriod">₹0</h4>
+        <div class="tab-panel" data-tab-group="budgetWalletTabs" data-tab-key="topup">
+          <p class="modal-sub">Add money to your Budget Wallet right now without picking a Savings source. Assign the
+            source later from the Apply Source tab.</p>
+
+          <label for="topupAmount">Amount</label>
+          <input type="number" id="topupAmount" placeholder="Amount">
+
+          <label for="topupNote">Note (optional)</label>
+          <input type="text" id="topupNote" placeholder="e.g. Cash used while out">
+
+          <label for="topupDate">Date</label>
+          <input type="date" id="topupDate">
+
+          <button type="button" class="primary" onclick="handleCreateUnassignedTopup()">Add Top-Up</button>
         </div>
 
+        <div class="tab-panel" data-tab-group="budgetWalletTabs" data-tab-key="apply">
+          <p class="modal-sub">Assign a real Savings source to your unassigned top-ups, fully or partly.</p>
+          <div id="pendingTopupsList"></div>
+        </div>
       </div>
     </section>
-
     <!-- ================= GRAPH ================= -->
     <section id="graph" class="screen">
       <div class="card">
@@ -311,98 +427,103 @@
     <!-- ================= SETTINGS ================= -->
     <section id="settings" class="screen">
       <div class="card">
-
         <h3>Settings</h3>
-        <h4>Currency</h4>
-        <select onchange="changeCurrency(this.value)">
-          <option value="INR">INR (₹)</option>
-          <option value="USD">USD ($)</option>
-          <option value="EUR">EUR (€)</option>
-          <option value="GBP">GBP (£)</option>
-        </select>
-        <!-- Theme -->
-        <h4>Appearance Mode</h4>
-        <select id="appearanceModeSelect" onchange="applyAppearanceSettings(this.value)">
-          <option value="metallic">Metallic</option>
-          <option value="matte">Matte</option>
-          <option value="glossy">Glossy</option>
-          <option value="chromium">Chromium</option>
-          <option value="glass">Glass</option>
-          <option value="paper">Paper</option>
-          <option value="neon">Neon</option>
-        </select>
 
-        <h4>Accent Color</h4>
-        <select id="accentColorSelect" onchange="handleTheme(this.value)">
-          <option value="purple">Purple</option>
-          <option value="blue">Blue</option>
-          <option value="emerald">Emerald</option>
-          <option value="orange">Orange</option>
-          <option value="red">Red</option>
-          <option value="custom">Custom</option>
-        </select>
-        <input type="text" id="hexInput" placeholder="Apply custom theme using hex code (e.g. #4caf50)">
-        <button class="secondary" onclick="applyHex()">Apply</button>
-
-        <input type="color" id="colorPicker" class="hidden" onchange="applyCustomColor(this.value)">
-
-        <!-- Category -->
-        <h4>Add Category</h4>
-        <input type="text" id="newCategory" placeholder="New category">
-        <button class="primary" onclick="addCategory()">Add</button>
-
-        <h4 class="clickable-header" onclick="toggleCategory()">
-          Your Categories <span id="catArrow">></span>
-        </h4>
-
-        <!-- Backup -->
-        <h4>Backup & Restore</h4>
-        <div class="btn-group">
-          <button class="primary" onclick="openBackupOptions()">📤 Backup</button>
-          <button class="secondary" onclick="openImportModal()">📥 Import Data</button>
-          <button class="secondary" onclick="openNoSeriesModal()">🔢 No Series</button>
-
-          <!-- <button class="secondary" onclick="runMigration()"> 🔄 Fix Old Data </button> -->
-          <button class="secondary" onclick="openConfirm()">🗑 Reset App</button>
+        <div class="tab-bar" data-tab-group="settingsTabs">
+          <button type="button" class="tab-bar-btn is-active" data-tab-key="general"
+            onclick="activateTab('settingsTabs','general')">General</button>
+          <button type="button" class="tab-bar-btn" data-tab-key="categories"
+            onclick="activateTab('settingsTabs','categories')">Categories</button>
+          <button type="button" class="tab-bar-btn" data-tab-key="backup"
+            onclick="activateTab('settingsTabs','backup', refreshSettingsPanels)">Backup & Data</button>
         </div>
 
-        <h4>Automatic Backup</h4>
-        <div class="form-group">
-          <label for="autoBackupEnabled">
-            <input id="autoBackupEnabled" type="checkbox" onchange="applyAutoBackupSettings()" class="inline-checkbox" />
-            Enable Auto Backup
-          </label>
-
-          <label for="autoBackupFrequency">Backup Frequency</label>
-          <select id="autoBackupFrequency" onchange="applyAutoBackupSettings()">
-            <option value="daily">Daily</option>
-            <option value="weekly">Weekly</option>
-            <option value="monthly">Monthly</option>
+        <div class="tab-panel is-active" data-tab-group="settingsTabs" data-tab-key="general">
+          <h4>Currency</h4>
+          <select onchange="changeCurrency(this.value)">
+            <option value="INR">INR (₹)</option>
+            <option value="USD">USD ($)</option>
+            <option value="EUR">EUR (€)</option>
+            <option value="GBP">GBP (£)</option>
           </select>
 
-          <label for="autoBackupTarget">Backup Target</label>
-          <select id="autoBackupTarget" onchange="applyAutoBackupSettings()">
-            <option value="local_download">Local File Download</option>
-            <option value="google_drive">Google Drive (future-ready)</option>
-            <option value="one_drive">OneDrive (future-ready)</option>
+          <h4>Appearance Mode</h4>
+          <select id="appearanceModeSelect" onchange="applyAppearanceSettings(this.value)">
+            <option value="metallic">Metallic</option>
+            <option value="matte">Matte</option>
+            <option value="glossy">Glossy</option>
+            <option value="chromium">Chromium</option>
+            <option value="glass">Glass</option>
+            <option value="paper">Paper</option>
+            <option value="neon">Neon</option>
           </select>
 
-          <small id="autoBackupLastRun" class="muted-note">Last Backup: Not available</small>
-          <small id="autoBackupNextRun" class="muted-note">Next Scheduled Backup: Not available</small>
-          <small id="autoBackupRetentionState" class="muted-note">Retention: Not available</small>
-          <small id="autoBackupRuntimeState" class="muted-note">Export runtime: checking capabilities...</small>
+          <h4>Accent Color</h4>
+          <select id="accentColorSelect" onchange="handleTheme(this.value)">
+            <option value="purple">Purple</option>
+            <option value="blue">Blue</option>
+            <option value="emerald">Emerald</option>
+            <option value="orange">Orange</option>
+            <option value="red">Red</option>
+            <option value="custom">Custom</option>
+          </select>
+          <input type="text" id="hexInput" placeholder="Apply custom theme using hex code (e.g. #4caf50)">
+          <button class="secondary" onclick="applyHex()">Apply</button>
 
-          <button class="secondary" type="button" onclick="runAutoBackupNow()">Run Backup Now</button>
+          <input type="color" id="colorPicker" class="hidden" onchange="applyCustomColor(this.value)">
         </div>
 
-        <!-- <h4>💸 Loans / Recoveries</h4>
-        <div id="loanSummary"></div>
+        <div class="tab-panel" data-tab-group="settingsTabs" data-tab-key="categories">
+          <h4>Add Category</h4>
+          <input type="text" id="newCategory" placeholder="New category">
+          <button class="primary" onclick="addCategory()">Add</button>
+
+          <h4 class="clickable-header" onclick="toggleCategory()">
+            Your Categories <span id="catArrow">></span>
+          </h4>
+        </div>
+
+        <div class="tab-panel" data-tab-group="settingsTabs" data-tab-key="backup">
+          <h4>Backup & Restore</h4>
+          <div class="btn-group">
+            <button class="primary" onclick="openBackupOptions()">📤 Backup</button>
+            <button class="secondary" onclick="openImportModal()">📥 Import Data</button>
+            <button class="secondary" onclick="openNoSeriesModal()">🔢 No Series</button>
+            <button class="secondary" onclick="openConfirm()">🗑 Reset App</button>
+          </div>
+
+          <h4>Automatic Backup</h4>
+          <div class="form-group">
+            <label for="autoBackupEnabled">
+              <input id="autoBackupEnabled" type="checkbox" onchange="applyAutoBackupSettings()"
+                class="inline-checkbox" />
+              Enable Auto Backup
+            </label>
+
+            <label for="autoBackupFrequency">Backup Frequency</label>
+            <select id="autoBackupFrequency" onchange="applyAutoBackupSettings()">
+              <option value="daily">Daily</option>
+              <option value="weekly">Weekly</option>
+              <option value="monthly">Monthly</option>
+            </select>
+
+            <label for="autoBackupTarget">Backup Target</label>
+            <select id="autoBackupTarget" onchange="applyAutoBackupSettings()">
+              <option value="local_download">Local File Download</option>
+              <option value="google_drive">Google Drive (future-ready)</option>
+              <option value="one_drive">OneDrive (future-ready)</option>
+            </select>
+
+            <small id="autoBackupLastRun" class="muted-note">Last Backup: Not available</small>
+            <small id="autoBackupNextRun" class="muted-note">Next Scheduled Backup: Not available</small>
+            <small id="autoBackupRetentionState" class="muted-note">Retention: Not available</small>
+            <small id="autoBackupRuntimeState" class="muted-note">Export runtime: checking capabilities...</small>
+
+            <button class="secondary" type="button" onclick="runAutoBackupNow()">Run Backup Now</button>
+          </div>
+        </div>
       </div>
-      <div class="app-signature">
-        Developed by <strong>Gopichaninme</strong>
-      </div> -->
     </section>
-
   </div>
 
   <!-- DATE MODAL -->
@@ -548,7 +669,7 @@
         <option value="asc">Ascending</option>
       </select>
 
-            <div class="modal-actions sort-modal-actions">
+      <div class="modal-actions sort-modal-actions">
         <button class="secondary" type="button" onclick="closeExpenseSortModal()">Close</button>
         <button class="secondary" type="button" onclick="clearExpenseSortModal()">Clear</button>
         <button class="primary" type="button" onclick="applyExpenseSortModal()">Apply</button>
@@ -556,13 +677,26 @@
     </div>
   </div>
 
-  <!-- SCRIPT -->
   <script src="assets/scripts/storage.js"></script>
   <script src="assets/scripts/documentWorkflow.js"></script>
   <script src="assets/scripts/queryEngine.js"></script>
   <script src="assets/scripts/searchService.js"></script>
   <script src="assets/scripts/filterBuilder.js"></script>
+
+  <!-- Job Queue -->
+  <script src="assets/scripts/jobStorage.js"></script>
+  <script src="assets/scripts/jobLogger.js"></script>
+  <script src="assets/scripts/jobQueue.js"></script>
+  <script src="assets/scripts/importEngine.js"></script>
+
+  <!-- Main Application -->
   <script src="assets/scripts/script.js"></script>
+
+  <!-- Job Runner -->
+  <script src="assets/scripts/jobRunner.js"></script>
+
+  <script src="assets/scripts/dailyBudgetLedger.js"></script>
+  <script src="assets/scripts/applyTheme.js"></script>
   <script>
     document.addEventListener("DOMContentLoaded", () => {
       showScreen('home');

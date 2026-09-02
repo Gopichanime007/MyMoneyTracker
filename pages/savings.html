@@ -141,6 +141,7 @@
           <option value="withdraw_budget">Move to Budget</option>
           <option value="transfer">Transfer</option>
           <option value="refund">Refund</option>
+          <option value="adjustment">Adjustment</option>
         </select>
 
         <!-- BASIC INFO -->
@@ -158,6 +159,13 @@
         <div id="sourceWrapper" class="hidden">
           <label>Source</label>
           <select id="sourceSelect"></select>
+        </div>
+        <div id="sAdjustmentDirectionWrapper" class="field-wrapper hidden">
+          <label class="field-label">Adjustment Direction</label>
+          <select id="sAdjustmentDirection">
+            <option value="increase">Increase (add to source)</option>
+            <option value="decrease">Decrease (subtract from source)</option>
+          </select>
         </div>
 
         <div id="sPersonWrapper" class="hidden form-offset-top">
@@ -213,7 +221,7 @@
 
         <!-- Attachment -->
         <label class="field-label">Attach Receipt (optional)</label>
-        <div class="inline-row"> 
+        <div class="inline-row">
           <input id="sAttachment" class="flex-input" type="file" accept="*/*" capture="environment" />
           <button type="button" id="sAttachmentRemove" class="link-btn hidden">Remove</button>
         </div>
@@ -293,7 +301,8 @@
         <div class="card-header">
           <h3>💰 Income Sources</h3>
         </div>
-
+        <div id="savingsSourceFilterBar" class="tab-bar"></div>
+        <div id="incomeList"></div>
         <!-- 🔹 Income List Container (Dynamic Content) -->
         <div id="incomeList">
           <!-- Income cards will be rendered here via JS -->
@@ -454,6 +463,7 @@
   <script src="../assets/scripts/filterBuilder.js"></script>
   <script src="../assets/scripts/script.js"></script>
   <script src="../assets/scripts/savings.js"></script>
+  <script src="../assets/scripts/applyTheme.js"></script>
 
   <script>
     function goBack() {

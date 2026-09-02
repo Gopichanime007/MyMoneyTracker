@@ -404,6 +404,143 @@ select:focus {
   position: relative;
 }
 
+/* =========================
+   📱 MOBILE FRIENDLY TRANSACTION DETAILS
+========================= */
+
+.audit-modal-content {
+  width: 100%;
+  max-width: 540px;
+  max-height: 92vh;
+  padding: 18px;
+  border-radius: 22px;
+}
+
+.audit-details-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.audit-summary-card {
+  background: linear-gradient(135deg, #4caf50, #66bb6a);
+  color: #fff;
+  border: none;
+  border-radius: 18px;
+  padding: 18px;
+}
+
+.audit-summary-pill {
+  background: rgba(255, 255, 255, .22);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.audit-summary-title {
+  font-size: 20px;
+  margin-top: 10px;
+  line-height: 1.4;
+}
+
+.audit-summary-meta {
+  margin-top: 6px;
+  color: rgba(255, 255, 255, .85);
+}
+
+.audit-details-card {
+  background: #fafafa;
+  border-radius: 18px;
+  padding: 0;
+  border: none;
+  overflow: hidden;
+}
+
+.audit-detail-row {
+  display: block;
+  padding: 14px 16px;
+  border-bottom: 1px solid #ececec;
+}
+
+.audit-detail-row:last-child {
+  border-bottom: none;
+}
+
+.audit-detail-label {
+  display: block;
+  font-size: 11px;
+  color: #888;
+  text-transform: uppercase;
+  letter-spacing: .08em;
+  margin-bottom: 6px;
+}
+
+.audit-detail-value {
+  display: block;
+  font-size: 15px;
+  font-weight: 600;
+  color: #222;
+  text-align: left;
+  line-height: 1.45;
+  word-break: break-word;
+}
+
+.audit-attachments {
+  margin-top: 12px;
+}
+
+.audit-attachment-card {
+  border-radius: 16px;
+  background: #f8f9fb;
+  border: none;
+  padding: 16px;
+}
+
+.audit-attachment-actions {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.audit-attachment-actions button {
+  width: 100%;
+  margin: 0;
+}
+
+.modal-actions {
+  margin-top: 18px;
+}
+
+.modal-actions button {
+  width: 100%;
+}
+
+@media(max-width:480px) {
+
+  .audit-modal-content {
+    width: 100%;
+    max-width: none;
+    height: 100%;
+    max-height: 100%;
+    border-radius: 22px 22px 0 0;
+    margin-top: auto;
+    padding: 16px;
+  }
+
+  .audit-summary-title {
+    font-size: 18px;
+  }
+
+  .audit-detail-value {
+    font-size: 14px;
+  }
+
+  .audit-attachment-actions {
+    grid-template-columns: 1fr;
+  }
+}
+
 /* HEADER */
 .modal-header {
   margin-bottom: 14px;
@@ -807,7 +944,7 @@ h4 {
 
 .dash-card {
   box-shadow:
-   0 8px 18px rgba(0, 0, 0, 0.15);
+    0 8px 18px rgba(0, 0, 0, 0.15);
 }
 
 /* =========================
@@ -1546,7 +1683,7 @@ button {
   gap: 8px;
 }
 
-.budget-period-head > div {
+.budget-period-head>div {
   min-width: 0;
 }
 
@@ -1589,7 +1726,7 @@ button {
   gap: 8px;
 }
 
-.budget-period-metrics > div {
+.budget-period-metrics>div {
   border-radius: 10px;
   padding: 8px;
   border: 1px solid color-mix(in srgb, var(--border), transparent 18%);
@@ -1696,7 +1833,7 @@ body {
 .modal-box,
 .budget-card,
 .audit-attachment-card,
-.budget-period-metrics > div {
+.budget-period-metrics>div {
   background: var(--surface);
 }
 
@@ -1905,7 +2042,7 @@ body {
   gap: 10px;
 }
 
-.entry-summary-grid > div {
+.entry-summary-grid>div {
   border: 1px solid color-mix(in srgb, var(--border), var(--accent-color) 14%);
   border-radius: 12px;
   padding: 10px;
@@ -1939,6 +2076,7 @@ body {
 }
 
 @media (max-width: 640px) {
+
   #budgetEntries,
   #incomeList {
     grid-template-columns: minmax(0, 1fr) !important;
@@ -1968,4 +2106,49 @@ body {
   .entry-summary-grid {
     grid-template-columns: minmax(0, 1fr);
   }
+}
+
+/* =========================
+   🗂️ TAB BAR COMPONENT (shared)
+========================= */
+.tab-bar {
+  display: flex;
+  gap: 6px;
+  padding: 4px;
+  background: var(--surface-alt, var(--bg));
+  border-radius: 14px;
+  border: 1px solid var(--border);
+  margin-bottom: var(--space-md);
+  overflow-x: auto;
+}
+
+.tab-bar-btn {
+  flex: 1;
+  white-space: nowrap;
+  padding: 10px 14px;
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  font-weight: 600;
+  font-size: 0.9rem;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: background 0.18s ease, color 0.18s ease;
+}
+
+.tab-bar-btn:hover {
+  color: var(--text);
+}
+
+.tab-bar-btn.is-active {
+  background: var(--theme);
+  color: #fff;
+}
+
+.tab-panel {
+  display: none;
+}
+
+.tab-panel.is-active {
+  display: block;
 }

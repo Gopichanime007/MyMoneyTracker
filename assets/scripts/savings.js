@@ -573,7 +573,7 @@ window.addEventListener("load", function () {
 // Toast helper: define only if not already present to avoid overriding global app toast
 if (typeof window.showToast !== 'function') {
     let activeToast = null;
-    window.showToast = function(message, type = "info") {
+    window.showToast = function (message, type = "info") {
         if (activeToast) activeToast.remove();
 
         let toast = document.createElement("div");
@@ -1005,7 +1005,7 @@ async function addSavings() {
         if (["consumed", "cancelled_with_charges", "written_off", "settled"].includes(resolutionType)) {
             let lossAmount = resolutionType === "cancelled_with_charges"
                 ? Math.max(0, pending - creditAmount)
-            : (resolutionType === "written_off" ? pending : 0);
+                : (resolutionType === "written_off" ? pending : 0);
 
             const resolutionEntry = createSavingsEntry({
                 type: "expense_resolution",
@@ -1068,6 +1068,36 @@ async function addSavings() {
         entry.attachmentError = attachmentMeta.error;
         data.push(entry);
     }
+    else if (type === "adjustment") {
+        const sourceId = String(sourceSelect?.value || "");
+        const direction = document.getElementById("sAdjustmentDirection")?.value || "increase";
+
+        if (!sourceId) {
+            showToast("Select source ❗", "warning");
+            return;
+        }
+
+        if (!note || !note.trim()) {
+            showToast("Reason is required for adjustment ❗", "warning");
+            return;
+        }
+
+        const signedAmount = direction === "decrease" ? -Math.abs(amount) : Math.abs(amount);
+
+        const entry = createSavingsEntry({
+            type: "adjustment",
+            amount: signedAmount,
+            sourceId,
+            entity,
+            payment,
+            note,
+            date
+        });
+        if (attachmentMeta.attachmentId) entry.attachmentId = attachmentMeta.attachmentId;
+        entry.attachmentStatus = attachmentMeta.status;
+        entry.attachmentError = attachmentMeta.error;
+        data.push(entry);
+    }
     else {
         showToast("Unsupported savings transaction type", "warning");
         return;
@@ -1084,7 +1114,6 @@ async function addSavings() {
     if (typeof loadGraph === "function") loadGraph();
     if (typeof renderBudgetEntries === "function") renderBudgetEntries();
     if (typeof loadBudgetOptions === "function") loadBudgetOptions();
-    if (typeof updateBudgetEfficiency === "function") updateBudgetEfficiency();
 
     showToast("Saved successfully ✅", "success");
     resetSavingsForm();
@@ -1142,38 +1171,38 @@ function createOrUpdateBudget(budgetId, entry, selectedBudgetId = null) {
 
     } else {
 
-            // 🔥 Create new budget (PERIOD FIRST)
-            // Ensure globally-unique budgetId while keeping legacy traceability
-            const uid = (typeof crypto !== "undefined" && crypto.randomUUID) ? crypto.randomUUID() : `${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
+        // 🔥 Create new budget (PERIOD FIRST)
+        // Ensure globally-unique budgetId while keeping legacy traceability
+        const uid = (typeof crypto !== "undefined" && crypto.randomUUID) ? crypto.randomUUID() : `${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
 
-            const generatedBudgetId = `budget_${periodKey || fallbackMonth}_${entry.sourceId || 'manual'}_${uid}`;
+        const generatedBudgetId = `budget_${periodKey || fallbackMonth}_${entry.sourceId || 'manual'}_${uid}`;
 
-            budgets.push({
-                id: Date.now(),
-                type: "budget",
+        budgets.push({
+            id: Date.now(),
+            type: "budget",
 
-                // store generated unique id
-                budgetId: generatedBudgetId,
+            // store generated unique id
+            budgetId: generatedBudgetId,
 
-                // preserve original id for migration/traceability if provided
-                legacyId: budgetId || null,
+            // preserve original id for migration/traceability if provided
+            legacyId: budgetId || null,
 
-                sourceId: entry.sourceId,
+            sourceId: entry.sourceId,
 
-                totalAllocated: Math.abs(entry.amount),
+            totalAllocated: Math.abs(entry.amount),
 
-                entity: entry.entity,
+            entity: entry.entity,
 
-                note: entry.note || "",
-                date: entry.date || new Date().toISOString(),
+            note: entry.note || "",
+            date: entry.date || new Date().toISOString(),
 
-                // 🔥 CORE CHANGE
-                periodKey: periodKey || null,
-                monthKey: periodKey ? null : fallbackMonth, // fallback only
+            // 🔥 CORE CHANGE
+            periodKey: periodKey || null,
+            monthKey: periodKey ? null : fallbackMonth, // fallback only
 
-                createdAt: new Date().toISOString(),
-                updatedAt: new Date().toISOString()
-            });
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString()
+        });
     }
 
     localStorage.setItem("budgets", JSON.stringify(budgets));
@@ -1208,17 +1237,15 @@ function upsertActiveBudgetWalletFromSavings(entry) {
 
     if (!periodKey) return null;
 
-    let wallet = budgets.find(b => b && b.periodKey === periodKey && b.isBudgetWallet === true && String(b.sourceId || "") === sourceId);
+    // ⚠️ FIX (Issue 02): A Budget Wallet's identity is the Budget Period
+    // ALONE. sourceId must never participate in this lookup — one Budget
+    // Period has exactly one Budget Wallet, no matter how many different
+    // Savings sources fund it over time.
+    let wallet = budgets.find(b => b && b.periodKey === periodKey && b.isBudgetWallet === true);
 
     if (!wallet) {
-        wallet = budgets.find(b => b && b.periodKey === periodKey && (String(b.entity || "").toLowerCase() === "budget wallet") && String(b.sourceId || "") === sourceId);
-    }
-
-    if (!wallet) {
-        wallet = budgets.find(b => b && b.periodKey === periodKey && b.isBudgetWallet === true && String(b.sourceId || "") === "savings_wallet");
-        if (wallet) {
-            wallet.sourceId = sourceId;
-        }
+        // Legacy-data fallback: older rows may lack the isBudgetWallet flag.
+        wallet = budgets.find(b => b && b.periodKey === periodKey && (String(b.entity || "").toLowerCase() === "budget wallet"));
     }
 
     if (!wallet) {
@@ -1229,8 +1256,8 @@ function upsertActiveBudgetWalletFromSavings(entry) {
         wallet = {
             id: Date.now(),
             type: "budget",
-            budgetId: `budget_wallet_${periodKey}_${sourceId}_${uid}`,
-            sourceId: sourceId,
+            budgetId: `budget_wallet_${periodKey}_${uid}`,
+            sourceId: null,
             totalAllocated: 0,
             entity: "Budget Wallet",
             note: "Auto Budget Wallet",
@@ -1249,6 +1276,7 @@ function upsertActiveBudgetWalletFromSavings(entry) {
     localStorage.setItem("budgets", JSON.stringify(budgets));
     return wallet;
 }
+
 // =========================
 // 🗓️ FORMAT HELPERS
 // =========================
@@ -1426,8 +1454,8 @@ function renderSavingsHistory(data) {
     if (!container) return;
 
     let sourceData = applySavingsSearch(data);
-        renderSavingsQueryChips();
-        updateSavingsSortIndicator();
+    renderSavingsQueryChips();
+    updateSavingsSortIndicator();
 
     container.innerHTML = "";
 
@@ -1514,48 +1542,6 @@ function renderSavingsHistory(data) {
         container.appendChild(div);
     });
 }
-// =========================
-// 🔗 SOURCES
-// =========================
-function isSavingsSourceSeed(entry) {
-    if (!entry) return false;
-    return entry.type === "income" || entry.type === "deposit";
-}
-
-function buildSavingsSourceLedger(entries) {
-    let data = Array.isArray(entries) ? entries : [];
-
-    let sources = data.filter(isSavingsSourceSeed);
-
-    return sources.map(s => {
-        let sid = String(s.id);
-
-        let incoming = data
-            .filter(t => String(t.id) !== sid && String(t.sourceId) === sid && Number(t.amount || 0) > 0)
-            .reduce((sum, t) => sum + Number(t.amount || 0), 0);
-
-        let outgoing = data
-            .filter(t => String(t.id) !== sid && String(t.sourceId) === sid && Number(t.amount || 0) < 0)
-            .reduce((sum, t) => sum + Math.abs(Number(t.amount || 0)), 0);
-
-        let base = Math.max(0, Number(s.amount || 0));
-        let remaining = base + incoming - outgoing;
-
-        return {
-            source: s,
-            incoming,
-            outgoing,
-            remaining
-        };
-    });
-}
-
-function getSourceRemainingById(sourceId, entries) {
-    let scoped = getSavings() || [];
-    let ledger = buildSavingsSourceLedger(entries || scoped);
-    let row = ledger.find(x => String(x.source.id) === String(sourceId));
-    return row ? Number(row.remaining || 0) : 0;
-}
 
 // Returns all source-seed entries (used as available sources)
 function getAvailableSources() {
@@ -1565,7 +1551,8 @@ function getAvailableSources() {
 
 function loadSourceOptions({
     showAll = true,
-    includeUsed = true
+    includeUsed = true,
+    includeArchived = false
 } = {}) {
 
     let select = document.getElementById("sourceSelect");
@@ -1591,6 +1578,7 @@ function loadSourceOptions({
         let remaining = Number(item.remaining || 0);
 
         if (!includeUsed && remaining <= 0) return;
+        if (!includeArchived && s.status === "archived") return;
 
         let option = document.createElement("option");
         option.value = s.id;
@@ -1599,6 +1587,10 @@ function loadSourceOptions({
         let status = remaining <= 0
             ? "Used"
             : `₹${remaining} left`;
+
+        if (s.status === "archived") {
+            status += s.archiveReason === "depleted" ? " • Archived (Depleted)" : " • Archived";
+        }
 
         option.textContent = `${s.note || "Savings Source"} — ${status}`;
 
@@ -2337,24 +2329,41 @@ function renderSourceDetails(sourceId) {
     `;
 }
 
-// Renders all income entries and allows navigation to detailed view
+let savingsSourceFilter = "active";
+
+function setSavingsSourceFilter(filter) {
+    savingsSourceFilter = filter;
+    renderIncomeList();
+}
+
 function renderIncomeList() {
 
     let data = getSavings() || [];
-
-    // 🔥 GLOBAL SOURCES
     let scoped = [...data];
+    let allSources = scoped.filter(isSavingsSourceSeed);
 
-    // all source seeds from all periods
-    let sources = scoped.filter(isSavingsSourceSeed);
+    let sources = allSources.filter(s => {
+        if (savingsSourceFilter === "all") return true;
+        if (savingsSourceFilter === "archived") return s.status === "archived";
+        return s.status !== "archived";
+    });
 
     let container = document.getElementById("incomeList");
     if (!container) return;
 
+    let filterBar = document.getElementById("savingsSourceFilterBar");
+    if (filterBar) {
+        filterBar.innerHTML = ["active", "archived", "all"].map(key => {
+            let label = key === "active" ? "Active" : (key === "archived" ? "Archived" : "All");
+            let activeClass = savingsSourceFilter === key ? "is-active" : "";
+            return `<button type="button" class="tab-bar-btn ${activeClass}" onclick="setSavingsSourceFilter('${key}')">${label}</button>`;
+        }).join("");
+    }
+
     container.innerHTML = "";
 
     if (!sources.length) {
-        container.innerHTML = `<p class="empty-state">No savings sources yet</p>`;
+        container.innerHTML = `<p class="empty-state">No savings sources ${savingsSourceFilter === "all" ? "yet" : "in this view"}</p>`;
         return;
     }
 
@@ -2382,11 +2391,11 @@ function renderIncomeList() {
 
         let name = i.note || `${monthYear} Source`;
 
-        let statusText = remaining <= 0
-            ? "Exhausted"
-            : "Active";
-
-        let statusClass = remaining <= 0 ? "is-exhausted" : "is-active";
+        let isArchived = i.status === "archived";
+        let statusText = isArchived
+            ? (i.archiveReason === "depleted" ? "Archived (Depleted)" : "Archived")
+            : (remaining <= 0 ? "Exhausted" : "Active");
+        let statusClass = isArchived ? "is-exhausted" : (remaining <= 0 ? "is-exhausted" : "is-active");
 
         let txCount = scoped.filter(t => String(t.sourceId) === String(i.id)).length;
         let createdDate = new Date(i.createdAt || i.date || Date.now()).toLocaleDateString("en-GB", {
@@ -2430,16 +2439,17 @@ function renderIncomeList() {
             <div class="entry-actions">
                 <button type="button" class="entry-action-btn" data-action="view">View Transactions</button>
                 <button type="button" class="entry-action-btn is-muted" disabled>Edit</button>
+                ${isArchived
+                ? `<button type="button" class="entry-action-btn" data-action="unarchive">Unarchive</button>`
+                : `<button type="button" class="entry-action-btn" data-action="archive">Archive</button>`
+            }
                 <button type="button" class="entry-action-btn is-danger" data-action="delete">Delete</button>
             </div>
         `;
 
-        // 🔥 CLEAN CLICK FLOW (NO RACE CONDITION)
         let viewDetails = () => {
             let id = String(i.id);
-
             showSavingsScreen("details");
-
             requestAnimationFrame(() => {
                 renderSourceDetails(id);
             });
@@ -2452,6 +2462,32 @@ function renderIncomeList() {
             viewBtn.addEventListener("click", (event) => {
                 event.stopPropagation();
                 viewDetails();
+            });
+        }
+
+        let archiveBtn = div.querySelector('[data-action="archive"]');
+        if (archiveBtn) {
+            archiveBtn.addEventListener("click", (event) => {
+                event.stopPropagation();
+                archiveSourceManually(i.id);
+                loadSavings();
+                renderIncomeList();
+                showToast("Source archived 🗄", "success");
+            });
+        }
+
+        let unarchiveBtn = div.querySelector('[data-action="unarchive"]');
+        if (unarchiveBtn) {
+            unarchiveBtn.addEventListener("click", (event) => {
+                event.stopPropagation();
+                let result = unarchiveSource(i.id);
+                if (!result.ok) {
+                    showToast(result.error, "warning");
+                    return;
+                }
+                loadSavings();
+                renderIncomeList();
+                showToast("Source reactivated ✅", "success");
             });
         }
 
@@ -2482,9 +2518,10 @@ function handleSavingsTypeChange() {
     let refund = document.getElementById("refundWrapper");
     let person = document.getElementById("sPersonWrapper");
     let personHelp = document.getElementById("sPersonHelp");
+    let adjustmentDirection = document.getElementById("sAdjustmentDirectionWrapper");
 
     // reset
-    [source, refund, person]
+    [source, refund, person, adjustmentDirection]
         .filter(Boolean)
         .forEach(el => { el.style.display = "none"; });
 
@@ -2502,6 +2539,14 @@ function handleSavingsTypeChange() {
         return;
     }
 
+    if (type === "adjustment") {
+        if (source) source.style.display = "block";
+        if (adjustmentDirection) adjustmentDirection.style.display = "block";
+        // Archived (including Depleted) sources must stay pickable here —
+        // this is the only way a Depleted source becomes Active again.
+        loadSourceOptions({ includeUsed: true, includeArchived: true });
+        return;
+    }
     if (type === "refund") {
         if (refund) refund.style.display = "block";
         if (person) person.style.display = "block";
@@ -2705,7 +2750,7 @@ function exportSavingsPDF() {
     }
     const doc = new jsPDF();
 
-    let data = getSavings();
+    let data = applySavingsSearch(getSavings());
 
     if (!data.length) {
         showToast("No data to export", "warning");
@@ -2829,7 +2874,7 @@ function exportSavingsPDF() {
     // 💾 SAVE
     // =========================
     doc.save("savings-report.pdf");
-        saveSavings(data);
+    saveSavings(data);
     showToast("Savings report downloaded 📄", "success");
 }
 // Converts HEX color to RGB (used for dynamic theming if needed)
@@ -2858,7 +2903,29 @@ async function deleteSavings(id) {
     if (!entry) return;
 
     let rootIds = [String(id)];
-    if (typeof validateTransactionDependencies === "function") {
+
+    // ⚠️ Archive System: a SOURCE with dependents gets archived instead
+    // of destructively deleted — preserves funding history that's
+    // already been spent against, rather than erasing it.
+    if (isSavingsSourceSeed(entry)) {
+        let safePlan = (typeof validateTransactionDependencies === "function")
+            ? validateTransactionDependencies("savings", rootIds, false)
+            : { blocked: false };
+
+        if (safePlan.blocked) {
+            let proceed = await window.AppDialog.confirm(
+                `This source has related records (${safePlan.summary}) and can't be deleted.\n\n` +
+                `Archive it instead? It stops appearing as an active source, but all its history stays intact.`
+            );
+            if (!proceed) return;
+
+            archiveSourceManually(entry.id);
+            loadSavings();
+            if (typeof renderIncomeList === "function") renderIncomeList();
+            showToast("Source archived 🗄", "success");
+            return;
+        }
+    } else if (typeof validateTransactionDependencies === "function") {
         let safePlan = validateTransactionDependencies("savings", rootIds, false);
         if (safePlan.blocked) {
             let proceed = await window.AppDialog.confirm(
@@ -2881,14 +2948,13 @@ async function deleteSavings(id) {
         }
     }
 
-    // 🔥 remove by ID (not index)
+    // No dependents — clean hard delete, exactly as before.
     const deletedId = String(id);
     data = data.filter(e => String(e.id) != deletedId);
 
     saveSavings(data);
 
-    // 🔥 adjust budget
-    if (entry.type === "budget_allocation") {
+    if (entry.budgetWalletId) {
         adjustBudgetAfterDelete(entry);
     }
 
@@ -2896,27 +2962,18 @@ async function deleteSavings(id) {
 
     showToast("Deleted successfully 🗑", "success");
 }
+// ⚠️ FIX: match by budgetWalletId — the real, precise link — instead of
+// entity+period guesswork. Also now covers every funding entry type
+// (normal Move-to-Budget AND resolved Unassigned Top-Ups), not just one.
 function adjustBudgetAfterDelete(entry) {
+    if (!entry || !entry.budgetWalletId) return;
 
     let budgets = JSON.parse(localStorage.getItem("budgets")) || [];
-
-    let periodKey = entry.periodKey;
-    let fallbackMonth = entry.monthKey;
-
-    let budget = budgets.find(b =>
-        b.entity === entry.entity &&
-        (
-            (periodKey && b.periodKey === periodKey) ||
-            (!periodKey && b.monthKey === fallbackMonth)
-        )
-    );
+    let budget = budgets.find(b => b && String(b.budgetId || b.id || "") === String(entry.budgetWalletId));
 
     if (budget) {
-        budget.totalAllocated -= Math.abs(entry.amount);
-
-        if (budget.totalAllocated < 0) {
-            budget.totalAllocated = 0;
-        }
+        budget.totalAllocated = Math.max(0, Number(budget.totalAllocated || 0) - Math.abs(Number(entry.amount) || 0));
+        budget.updatedAt = new Date().toISOString();
     }
 
     localStorage.setItem("budgets", JSON.stringify(budgets));

@@ -1,0 +1,903 @@
+function normalizeImportRawText(rawText) {
+    if (typeof rawText !== "string") return "";
+    return rawText
+        .replace(/^\uFEFF/, "")
+        .replace(/\u0000/g, "")
+        .trim();
+}
+
+function getImportTextSignature(text) {
+    const raw = String(text || "");
+    let hash = 0;
+    for (let i = 0; i < raw.length; i += 1) {
+        hash = (hash * 31 + raw.charCodeAt(i)) >>> 0;
+    }
+    return {
+        length: raw.length,
+        hash32: hash.toString(16).padStart(8, "0")
+    };
+}
+
+function getImportByteSignature(input) {
+    let bytes;
+    if (input instanceof Uint8Array) {
+        bytes = input;
+    } else if (input instanceof ArrayBuffer) {
+        bytes = new Uint8Array(input);
+    } else {
+        bytes = new Uint8Array(0);
+    }
+
+    let hash = 0;
+    for (let i = 0; i < bytes.length; i += 1) {
+        hash = (hash * 31 + bytes[i]) >>> 0;
+    }
+
+    return {
+        length: bytes.length,
+        hash32: hash.toString(16).padStart(8, "0")
+    };
+}
+
+function getImportCharCodes(text, from, to) {
+    const raw = String(text || "");
+    const start = Math.max(0, Number(from) || 0);
+    const end = Math.min(raw.length, Number(to) || 0);
+    let out = [];
+    for (let i = start; i < end; i += 1) {
+        out.push({ index: i, code: raw.charCodeAt(i) });
+    }
+    return out;
+}
+
+function decodeImportTextCandidates(input) {
+    const bytes = input instanceof Uint8Array
+        ? input
+        : (input instanceof ArrayBuffer ? new Uint8Array(input) : new Uint8Array(0));
+
+    const candidates = [];
+    const seen = new Set();
+
+    function pushCandidate(encoding, decodedText) {
+        const text = typeof decodedText === "string" ? decodedText : "";
+        const signature = getImportTextSignature(text);
+        const key = `${signature.length}:${signature.hash32}`;
+        if (seen.has(key)) return;
+        seen.add(key);
+        candidates.push({ encoding, text, signature });
+    }
+
+    if (typeof TextDecoder !== "undefined") {
+        ["utf-8", "utf-16le", "utf-16be"].forEach((encoding) => {
+            try {
+                const decoder = new TextDecoder(encoding, { fatal: false });
+                pushCandidate(encoding, decoder.decode(bytes));
+            } catch (_err) {
+                // Ignore unsupported decoders on older engines.
+            }
+        });
+    }
+
+    if (!candidates.length && typeof bytes.length === "number") {
+        // Last-resort decode for runtimes without TextDecoder.
+        let fallback = "";
+        for (let i = 0; i < bytes.length; i += 1) {
+            fallback += String.fromCharCode(bytes[i]);
+        }
+        pushCandidate("byte-charcode-fallback", fallback);
+    }
+
+    return candidates;
+}
+
+function chooseImportDecodedText(input) {
+    const candidates = decodeImportTextCandidates(input);
+    const attempts = [];
+
+    let selected = null;
+    for (let i = 0; i < candidates.length; i += 1) {
+        const candidate = candidates[i];
+        const normalizedText = normalizeImportRawText(candidate.text);
+        const normalizedSignature = getImportTextSignature(normalizedText);
+        let parseable = false;
+
+        try {
+            JSON.parse(normalizedText);
+            parseable = true;
+        } catch (_err) {
+            parseable = false;
+        }
+
+        attempts.push({
+            encoding: candidate.encoding,
+            rawLength: candidate.signature.length,
+            rawHash32: candidate.signature.hash32,
+            normalizedLength: normalizedSignature.length,
+            normalizedHash32: normalizedSignature.hash32,
+            parseable
+        });
+
+        if (!selected || (parseable && !selected.parseable)) {
+            selected = {
+                encoding: candidate.encoding,
+                rawText: candidate.text,
+                normalizedText,
+                rawSignature: candidate.signature,
+                normalizedSignature,
+                parseable
+            };
+            if (parseable) break;
+        }
+    }
+
+    if (!selected) {
+        selected = {
+            encoding: "none",
+            rawText: "",
+            normalizedText: "",
+            rawSignature: getImportTextSignature(""),
+            normalizedSignature: getImportTextSignature(""),
+            parseable: false
+        };
+    }
+
+    return {
+        selected,
+        attempts
+    };
+}
+
+function setImportStage(stage, payload) {
+    window.__lastImportStage = {
+        stage,
+        payload: payload || null,
+        at: new Date().toISOString()
+    };
+}
+
+function getJsonParseErrorMessage(err) {
+    const message = (err && err.message) ? String(err.message) : "Unknown parse error";
+    return `JSON Parse Error: ${message}`;
+}
+
+function getJsonParseErrorPosition(err) {
+    const message = (err && err.message) ? String(err.message) : "";
+    const m = message.match(/position\s+(\d+)/i);
+    if (!m) return null;
+    const n = Number(m[1]);
+    return Number.isFinite(n) ? n : null;
+}
+
+function isValidImportId(value) {
+    return typeof value === "string" || typeof value === "number";
+}
+
+function isValidNullableImportId(value) {
+    return value === null || typeof value === "undefined" || isValidImportId(value);
+}
+
+function renderImportValidationReport(report) {
+    const found = report.found || {};
+    const imported = report.imported || {};
+    const warnings = Array.isArray(report.warnings) ? report.warnings : [];
+    const errors = Array.isArray(report.errors) ? report.errors : [];
+    const version = report.version || "unknown";
+    const norm = report.normalization || {};
+
+    const lines = [
+        `Version: ${version}`,
+        `Records Found | Expenses: ${Number(found.expenses || 0)} | Savings: ${Number(found.savings || 0)} | Budgets: ${Number(found.budgets || 0)} | Budget Periods: ${Number(found.budgetPeriods || 0)}`,
+        `Records Imported | Expenses: ${Number(imported.expenses || 0)} | Savings: ${Number(imported.savings || 0)} | Budgets: ${Number(imported.budgets || 0)} | Budget Periods: ${Number(imported.budgetPeriods || 0)}`,
+        `Unknown Fields Removed: ${Number(norm.unknownFieldsRemoved || 0)}`,
+        `Missing Fields Recovered: ${Number(norm.missingFieldsRecovered || 0)}`,
+        `Warnings: ${warnings.length}`,
+        `Errors: ${errors.length}`
+    ];
+
+    if (warnings.length) lines.push(`Warning Details: ${warnings.join("; ")}`);
+    if (errors.length) lines.push(`Error Details: ${errors.join("; ")}`);
+
+    const host = document.getElementById("importValidationReport");
+    if (host) host.textContent = lines.join("\n");
+
+    window.__lastImportValidationReport = report;
+    console.info("Import Validation Report", report);
+}
+
+function buildImportDiagnostics(parsed) {
+    return {
+        typeofImportedData: typeof parsed,
+        keys: (parsed && typeof parsed === "object") ? Object.keys(parsed) : [],
+        meta: parsed ? parsed.meta : undefined,
+        settings: parsed ? parsed.settings : undefined,
+        expensesCount: Array.isArray(parsed && parsed.expenses) ? parsed.expenses.length : 0,
+        savingsCount: Array.isArray(parsed && parsed.savings) ? parsed.savings.length : 0,
+        budgetsCount: Array.isArray(parsed && parsed.budgets) ? parsed.budgets.length : 0,
+        budgetPeriodsCount: Array.isArray(parsed && parsed.budgetPeriods) ? parsed.budgetPeriods.length : 0
+    };
+}
+
+const SCHEMA_VERSION_MAIN = "1.0.0";
+const SCHEMA_VERSION_DEVELOPMENT = "2.0.0";
+
+const SCHEMA_DEFAULTS = {
+    expenses: [],
+    budgets: [],
+    savings: [],
+    budgetPeriods: [],
+    categories: ["Food", "Travel", "Bills", "Entertainment", "Loan", "Recovery", "Others"],
+    persons: [],
+    settings: {
+        theme: "",
+        currencyCode: "INR",
+        autoBackupEnabled: false,
+        autoBackupFrequency: "weekly",
+        autoBackupTarget: "local_download"
+    },
+    orders: [],
+    quotations: {
+        quotationData: null,
+        quotationItems: [],
+        quotationCharges: [],
+        quotationRegistry: [],
+        quotationMeta: null,
+        activeQuotationId: null,
+        documentRelations: [],
+        noSeriesConfig: null
+    }
+};
+
+const SCHEMA_FIELD_MAPPINGS = {
+    expenses: {
+        personId: "linkedPersonId",
+        linkedPersonId: "personId",
+        budgetId: "linkedBudgetId",
+        linkedBudgetId: "budgetId"
+    },
+    savings: {
+        personId: "linkedPersonId",
+        linkedPersonId: "personId"
+    },
+    budgets: {
+        id: "budgetId",
+        budgetId: "id"
+    }
+};
+
+function normalizeSchemaVersionTag(value) {
+    if (typeof value !== "string" || !value.trim()) return SCHEMA_VERSION_MAIN;
+    const v = value.trim().toLowerCase();
+    if (v === "v1") return SCHEMA_VERSION_MAIN;
+    if (v === "v2" || v === "v3") return SCHEMA_VERSION_DEVELOPMENT;
+    return value.trim();
+}
+
+function validateIncomingImportVersion(rawVersion) {
+    const value = typeof rawVersion === "string" ? rawVersion.trim() : "";
+    const lowered = value.toLowerCase();
+
+    if (!value) {
+        return {
+            supported: false,
+            normalized: "unknown",
+            display: "unknown"
+        };
+    }
+
+    const supportedIncoming = new Set([
+        "v1",
+        "v2",
+        "v3",
+        "1.0.0",
+        "2.0.0"
+    ]);
+
+    if (!supportedIncoming.has(lowered)) {
+        return {
+            supported: false,
+            normalized: lowered,
+            display: value
+        };
+    }
+
+    const normalized = lowered === "v1"
+        ? SCHEMA_VERSION_MAIN
+        : SCHEMA_VERSION_DEVELOPMENT;
+
+    return {
+        supported: true,
+        normalized,
+        display: value
+    };
+}
+
+function normalizeSchemaDirection(direction) {
+    if (direction === "toMain" || direction === "main") return "toMain";
+    return "toDevelopment";
+}
+
+function shallowCloneObject(value, fallback) {
+    if (!value || typeof value !== "object" || Array.isArray(value)) return Object.assign({}, fallback || {});
+    return Object.assign({}, value);
+}
+
+function migrateRecordAliases(row, mapping) {
+    if (!row || typeof row !== "object" || Array.isArray(row) || !mapping) return row;
+    const next = Object.assign({}, row);
+    Object.keys(mapping).forEach((from) => {
+        const to = mapping[from];
+        if (Object.prototype.hasOwnProperty.call(next, from) && !Object.prototype.hasOwnProperty.call(next, to)) {
+            next[to] = next[from];
+        }
+    });
+    return next;
+}
+
+function migrateCollectionRows(rows, mapping) {
+    if (!Array.isArray(rows)) return [];
+    return rows
+        .filter((x) => x && typeof x === "object" && !Array.isArray(x))
+        .map((x) => migrateRecordAliases(x, mapping));
+}
+
+function migrateExpenses(rows) {
+    return migrateCollectionRows(rows, SCHEMA_FIELD_MAPPINGS.expenses);
+}
+
+function migrateSavings(rows) {
+    return migrateCollectionRows(rows, SCHEMA_FIELD_MAPPINGS.savings);
+}
+
+function migrateBudgets(rows) {
+    return migrateCollectionRows(rows, SCHEMA_FIELD_MAPPINGS.budgets).map((row) => {
+        if (row.totalAllocated == null && row.amount != null) {
+            row.totalAllocated = Number(row.amount) || 0;
+        }
+        return row;
+    });
+}
+
+function migrateSettings(settings) {
+    const next = shallowCloneObject(settings, SCHEMA_DEFAULTS.settings);
+
+    if (!Object.prototype.hasOwnProperty.call(next, "accentColor") && typeof next.theme === "string") {
+        next.accentColor = next.theme;
+    }
+
+    if (!Object.prototype.hasOwnProperty.call(next, "autoBackupEnabled") && Object.prototype.hasOwnProperty.call(next, "autoBackup")) {
+        next.autoBackupEnabled = !!next.autoBackup;
+    }
+
+    if (!Object.prototype.hasOwnProperty.call(next, "autoBackupFrequency") && typeof next.backupFrequency === "string") {
+        next.autoBackupFrequency = next.backupFrequency;
+    }
+
+    if (!Object.prototype.hasOwnProperty.call(next, "autoBackupTarget")) {
+        next.autoBackupTarget = SCHEMA_DEFAULTS.settings.autoBackupTarget;
+    }
+
+    Object.keys(SCHEMA_DEFAULTS.settings).forEach((key) => {
+        if (!Object.prototype.hasOwnProperty.call(next, key)) {
+            next[key] = SCHEMA_DEFAULTS.settings[key];
+        }
+    });
+
+    return next;
+}
+
+function migrateQuotations(quotations) {
+    const next = shallowCloneObject(quotations, SCHEMA_DEFAULTS.quotations);
+    if (!Array.isArray(next.quotationItems)) next.quotationItems = [];
+    if (!Array.isArray(next.quotationCharges)) next.quotationCharges = [];
+    if (!Array.isArray(next.quotationRegistry)) next.quotationRegistry = [];
+    if (!Array.isArray(next.documentRelations)) next.documentRelations = [];
+    if (!Object.prototype.hasOwnProperty.call(next, "quotationData")) next.quotationData = null;
+    if (!Object.prototype.hasOwnProperty.call(next, "quotationMeta")) next.quotationMeta = null;
+    if (!Object.prototype.hasOwnProperty.call(next, "activeQuotationId")) next.activeQuotationId = null;
+    if (!Object.prototype.hasOwnProperty.call(next, "noSeriesConfig")) next.noSeriesConfig = null;
+    return next;
+}
+
+function migrateDataVersion(payload, options = {}) {
+    const direction = normalizeSchemaDirection(options.direction);
+    const source = payload && typeof payload === "object" && !Array.isArray(payload) ? payload : {};
+
+    const normalized = {
+        expenses: migrateExpenses(source.expenses),
+        budgets: migrateBudgets(source.budgets),
+        savings: migrateSavings(source.savings || source.savingsTransactions),
+        budgetPeriods: Array.isArray(source.budgetPeriods) ? source.budgetPeriods.slice() : [],
+        unassignedTopups: Array.isArray(source.unassignedTopups) ? source.unassignedTopups.slice() : [],
+        categories: Array.isArray(source.categories) ? source.categories.slice() : SCHEMA_DEFAULTS.categories.slice(),
+        persons: Array.isArray(source.persons) ? source.persons.slice() : [],
+        settings: migrateSettings(source.settings),
+        orders: Array.isArray(source.orders) ? source.orders.slice() : [],
+        quotations: migrateQuotations(source.quotations || {
+            quotationData: source.quotationData,
+            quotationItems: source.quotationItems,
+            quotationCharges: source.quotationCharges
+        }),
+        meta: shallowCloneObject(source.meta, {})
+    };
+
+    if (!normalized.meta.exportedAt) {
+        normalized.meta.exportedAt = new Date().toISOString();
+    }
+
+    normalized.meta.version = direction === "toMain"
+        ? SCHEMA_VERSION_MAIN
+        : SCHEMA_VERSION_DEVELOPMENT;
+
+    return {
+        data: normalized,
+        direction,
+        sourceVersion: normalizeSchemaVersionTag(source.meta && source.meta.version)
+    };
+}
+
+function applySchemaMigrationsToLocalStorage() {
+    try {
+        const migrated = migrateDataVersion({
+            expenses: JSON.parse(localStorage.getItem("expenses") || "[]"),
+            budgets: JSON.parse(localStorage.getItem("budgets") || "[]"),
+            savings: JSON.parse(localStorage.getItem("savingsTransactions") || "[]"),
+            budgetPeriods: JSON.parse(localStorage.getItem("bp") || "[]"),
+            unassignedTopups: JSON.parse(localStorage.getItem("unassignedTopups") || "[]"),
+            categories: JSON.parse(localStorage.getItem("categories") || "[]"),
+            persons: JSON.parse(localStorage.getItem("persons") || "[]"),
+            settings: {
+                theme: localStorage.getItem("theme") || "",
+                appearanceMode: localStorage.getItem("appearanceMode") || "metallic",
+                accentColor: localStorage.getItem("accentColor") || localStorage.getItem("theme") || "",
+                currencyCode: localStorage.getItem("currencyCode") || "INR",
+                autoBackupEnabled: !!(typeof getAutoBackupSettings === "function" && getAutoBackupSettings().enabled),
+                autoBackupFrequency: (typeof getAutoBackupSettings === "function" && getAutoBackupSettings().frequency) || "weekly",
+                autoBackupTarget: (typeof getAutoBackupSettings === "function" && getAutoBackupSettings().target) || "local_download"
+            },
+            orders: JSON.parse(localStorage.getItem("orders") || "[]"),
+            quotations: {
+                quotationData: JSON.parse(localStorage.getItem("quotationData") || "null"),
+                quotationItems: JSON.parse(localStorage.getItem("quotationItems") || "[]"),
+                quotationCharges: JSON.parse(localStorage.getItem("quotationCharges") || "[]"),
+                quotationRegistry: JSON.parse(localStorage.getItem("quotationRegistry") || "[]"),
+                quotationMeta: JSON.parse(localStorage.getItem("quotationMeta") || "null"),
+                activeQuotationId: JSON.parse(localStorage.getItem("activeQuotationId") || "null"),
+                documentRelations: JSON.parse(localStorage.getItem("documentRelations") || "[]"),
+                noSeriesConfig: JSON.parse(localStorage.getItem("noSeriesConfig") || "null")
+            },
+            meta: { version: localStorage.getItem("dataVersion") || SCHEMA_VERSION_MAIN }
+        }, { direction: "toDevelopment" }).data;
+
+        localStorage.setItem("expenses", JSON.stringify(migrated.expenses));
+        localStorage.setItem("budgets", JSON.stringify(migrated.budgets));
+        localStorage.setItem("savingsTransactions", JSON.stringify(migrated.savings));
+        localStorage.setItem("bp", JSON.stringify(migrated.budgetPeriods));
+        localStorage.setItem("unassignedTopups", JSON.stringify(migrated.unassignedTopups || []));
+        localStorage.setItem("categories", JSON.stringify(migrated.categories));
+        localStorage.setItem("persons", JSON.stringify(migrated.persons));
+        localStorage.setItem("orders", JSON.stringify(migrated.orders));
+        localStorage.setItem("quotationData", JSON.stringify(migrated.quotations.quotationData));
+        localStorage.setItem("quotationItems", JSON.stringify(migrated.quotations.quotationItems));
+        localStorage.setItem("quotationCharges", JSON.stringify(migrated.quotations.quotationCharges));
+        localStorage.setItem("quotationRegistry", JSON.stringify(migrated.quotations.quotationRegistry));
+        localStorage.setItem("quotationMeta", JSON.stringify(migrated.quotations.quotationMeta));
+        localStorage.setItem("activeQuotationId", JSON.stringify(migrated.quotations.activeQuotationId));
+        localStorage.setItem("documentRelations", JSON.stringify(migrated.quotations.documentRelations));
+        localStorage.setItem("noSeriesConfig", JSON.stringify(migrated.quotations.noSeriesConfig));
+        localStorage.setItem("dataVersion", migrated.meta.version);
+    } catch (err) {
+        console.warn("Schema migration startup step failed", err);
+    }
+}
+
+if (typeof window !== "undefined") {
+    window.migrateDataVersion = migrateDataVersion;
+    window.migrateExpenses = migrateExpenses;
+    window.migrateSavings = migrateSavings;
+    window.migrateBudgets = migrateBudgets;
+    window.migrateSettings = migrateSettings;
+    window.applySchemaMigrationsToLocalStorage = applySchemaMigrationsToLocalStorage;
+}
+
+const IMPORT_DEFAULT_CATEGORIES = [
+    "Food",
+    "Travel",
+    "Bills",
+    "Entertainment",
+    "Loan",
+    "Recovery",
+    "Others"
+];
+
+const IMPORT_DEFAULT_SETTINGS = {
+    theme: "",
+    currencyCode: "INR"
+};
+
+function normalizeImportPayload(parsed, options = {}) {
+    const report = {
+        fieldsRemoved: [],
+        fieldsAdded: [],
+        defaultsApplied: [],
+        warnings: [],
+        unknownFieldsRemoved: 0,
+        missingFieldsRecovered: 0
+    };
+
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+        return { normalized: parsed, report };
+    }
+
+    const rootAllowed = new Set([
+        "expenses",
+        "budgets",
+        "savings",
+        "budgetPeriods",
+        "categories",
+        "persons",
+        "settings",
+        "meta",
+        "orders",
+        "quotations"
+    ]);
+
+    const expenseAllowed = new Set([
+        "id", "type", "amount", "category", "purpose", "note", "budgetId", "paymentType", "entity", "date", "monthKey", "createdAt", "updatedAt",
+        "splitId", "splitIndex", "isSplit", "linkedTransactionId", "resolutionType", "resolvedAmount", "lossAmount", "refundType",
+        "allocationTrail", "transferBackTrail", "linkedSourceSavingsId", "linkedSourceSavingsIds", "sourceId", "person",
+        "attachmentId", "attachmentStatus", "attachmentError", "BalanceBeforeTransaction", "BalanceAfterTransaction", "runningBalance",
+        "periodKey", "destinationType", "destination", "targetBudgetId", "budgetWalletId", "autoGenerated", "autoRecovered"
+    ]);
+
+    const savingsAllowed = new Set([
+        "id", "type", "amount", "sourceId", "entity", "paymentType", "person", "note", "purpose", "date", "monthKey", "periodKey",
+        "createdAt", "updatedAt", "attachmentId", "attachmentStatus", "attachmentError", "linkedTransactionId", "linkedSourceSavingsId",
+        "resolutionType", "resolvedAmount", "lossAmount", "refundType", "targetBudgetId", "budgetWalletId", "autoGenerated", "autoRecovered",
+        "BalanceBeforeTransaction", "BalanceAfterTransaction", "runningBalance", "destinationType", "destination"
+    ]);
+
+    const budgetAllowed = new Set([
+        "id", "type", "budgetId", "legacyId", "sourceId", "totalAllocated", "entity", "note", "date", "periodKey", "monthKey", "isBudgetWallet", "createdAt", "updatedAt"
+    ]);
+
+    const periodAllowed = new Set([
+        "id", "start", "end", "periodKey", "status", "extraDays", "createdAt", "updatedAt"
+    ]);
+
+    const settingsAllowed = new Set([
+        "theme", "appearanceMode", "accentColor", "currencyCode", "autoBackupEnabled", "autoBackup", "autoBackupFrequency", "backupFrequency", "autoBackupTarget"
+    ]);
+
+    const metaAllowed = new Set(["exportedAt", "version"]);
+
+    function stripUnknown(obj, allowed, pathPrefix) {
+        if (!obj || typeof obj !== "object" || Array.isArray(obj)) return obj;
+        const out = {};
+        Object.keys(obj).forEach((key) => {
+            if (!allowed.has(key)) {
+                report.fieldsRemoved.push(`${pathPrefix}.${key}`);
+                report.unknownFieldsRemoved += 1;
+                return;
+            }
+            const value = obj[key];
+            if (typeof value !== "undefined") out[key] = value;
+        });
+        return out;
+    }
+
+    let normalized = {};
+
+    Object.keys(parsed).forEach((key) => {
+        if (!rootAllowed.has(key)) {
+            report.fieldsRemoved.push(`root.${key}`);
+            report.unknownFieldsRemoved += 1;
+            return;
+        }
+        normalized[key] = parsed[key];
+    });
+
+    if (!Array.isArray(normalized.expenses)) {
+        normalized.expenses = [];
+        report.fieldsAdded.push("expenses");
+        report.defaultsApplied.push("expenses=[]");
+        report.missingFieldsRecovered += 1;
+    }
+
+    if (!Array.isArray(normalized.savings)) {
+        normalized.savings = [];
+        report.fieldsAdded.push("savings");
+        report.defaultsApplied.push("savings=[]");
+        report.missingFieldsRecovered += 1;
+    }
+
+    if (!Array.isArray(normalized.budgets)) {
+        normalized.budgets = [];
+        report.fieldsAdded.push("budgets");
+        report.defaultsApplied.push("budgets=[]");
+        report.missingFieldsRecovered += 1;
+    }
+
+    if (!Array.isArray(normalized.budgetPeriods)) {
+        normalized.budgetPeriods = [];
+        report.fieldsAdded.push("budgetPeriods");
+        report.defaultsApplied.push("budgetPeriods=[]");
+        report.missingFieldsRecovered += 1;
+    }
+
+    if (!Array.isArray(normalized.categories)) {
+        normalized.categories = IMPORT_DEFAULT_CATEGORIES.slice();
+        report.fieldsAdded.push("categories");
+        report.defaultsApplied.push("categories=default");
+        report.missingFieldsRecovered += 1;
+    }
+
+    if (!Array.isArray(normalized.persons)) {
+        normalized.persons = [];
+        report.fieldsAdded.push("persons");
+        report.defaultsApplied.push("persons=[]");
+        report.missingFieldsRecovered += 1;
+    }
+
+    if (!Array.isArray(normalized.orders)) {
+        normalized.orders = [];
+        report.fieldsAdded.push("orders");
+        report.defaultsApplied.push("orders=[]");
+        report.missingFieldsRecovered += 1;
+    }
+
+    if (!normalized.quotations || typeof normalized.quotations !== "object" || Array.isArray(normalized.quotations)) {
+        normalized.quotations = {
+            quotationData: null,
+            quotationItems: [],
+            quotationCharges: [],
+            quotationRegistry: [],
+            quotationMeta: null,
+            activeQuotationId: null,
+            documentRelations: [],
+            noSeriesConfig: null
+        };
+        report.fieldsAdded.push("quotations");
+        report.defaultsApplied.push("quotations=default");
+        report.missingFieldsRecovered += 1;
+    }
+
+    if (!Array.isArray(normalized.quotations.quotationItems)) {
+        normalized.quotations.quotationItems = [];
+        report.fieldsAdded.push("quotations.quotationItems");
+        report.defaultsApplied.push("quotations.quotationItems=[]");
+        report.missingFieldsRecovered += 1;
+    }
+
+    if (!Array.isArray(normalized.quotations.quotationCharges)) {
+        normalized.quotations.quotationCharges = [];
+        report.fieldsAdded.push("quotations.quotationCharges");
+        report.defaultsApplied.push("quotations.quotationCharges=[]");
+        report.missingFieldsRecovered += 1;
+    }
+
+    if (!Array.isArray(normalized.quotations.quotationRegistry)) {
+        normalized.quotations.quotationRegistry = [];
+        report.fieldsAdded.push("quotations.quotationRegistry");
+        report.defaultsApplied.push("quotations.quotationRegistry=[]");
+        report.missingFieldsRecovered += 1;
+    }
+
+    if (!Array.isArray(normalized.quotations.documentRelations)) {
+        normalized.quotations.documentRelations = [];
+        report.fieldsAdded.push("quotations.documentRelations");
+        report.defaultsApplied.push("quotations.documentRelations=[]");
+        report.missingFieldsRecovered += 1;
+    }
+
+    if (!Object.prototype.hasOwnProperty.call(normalized.quotations, "quotationMeta")) {
+        normalized.quotations.quotationMeta = null;
+        report.fieldsAdded.push("quotations.quotationMeta");
+        report.defaultsApplied.push("quotations.quotationMeta=null");
+        report.missingFieldsRecovered += 1;
+    }
+
+    if (!Object.prototype.hasOwnProperty.call(normalized.quotations, "activeQuotationId")) {
+        normalized.quotations.activeQuotationId = null;
+        report.fieldsAdded.push("quotations.activeQuotationId");
+        report.defaultsApplied.push("quotations.activeQuotationId=null");
+        report.missingFieldsRecovered += 1;
+    }
+
+    if (!Object.prototype.hasOwnProperty.call(normalized.quotations, "noSeriesConfig")) {
+        normalized.quotations.noSeriesConfig = null;
+        report.fieldsAdded.push("quotations.noSeriesConfig");
+        report.defaultsApplied.push("quotations.noSeriesConfig=null");
+        report.missingFieldsRecovered += 1;
+    }
+
+    if (!normalized.settings || typeof normalized.settings !== "object" || Array.isArray(normalized.settings)) {
+        normalized.settings = Object.assign({}, IMPORT_DEFAULT_SETTINGS);
+        report.fieldsAdded.push("settings");
+        report.defaultsApplied.push("settings=default");
+        report.missingFieldsRecovered += 1;
+    } else {
+        normalized.settings = stripUnknown(normalized.settings, settingsAllowed, "settings");
+        Object.keys(IMPORT_DEFAULT_SETTINGS).forEach((key) => {
+            if (!Object.prototype.hasOwnProperty.call(normalized.settings, key)) {
+                normalized.settings[key] = IMPORT_DEFAULT_SETTINGS[key];
+                report.fieldsAdded.push(`settings.${key}`);
+                report.defaultsApplied.push(`settings.${key}=${IMPORT_DEFAULT_SETTINGS[key]}`);
+                report.missingFieldsRecovered += 1;
+            }
+        });
+    }
+
+    if (!normalized.meta || typeof normalized.meta !== "object" || Array.isArray(normalized.meta)) {
+        normalized.meta = { version: "v1" };
+        report.fieldsAdded.push("meta");
+        report.defaultsApplied.push("meta.version=v1");
+        report.missingFieldsRecovered += 1;
+    } else {
+        normalized.meta = stripUnknown(normalized.meta, metaAllowed, "meta");
+        if (!Object.prototype.hasOwnProperty.call(normalized.meta, "version")) {
+            normalized.meta.version = "v1";
+            report.fieldsAdded.push("meta.version");
+            report.defaultsApplied.push("meta.version=v1");
+            report.missingFieldsRecovered += 1;
+        }
+    }
+
+    normalized.expenses = normalized.expenses
+        .filter((row) => row && typeof row === "object" && !Array.isArray(row))
+        .map((row, index) => stripUnknown(row, expenseAllowed, `expenses[${index}]`));
+
+    normalized.savings = normalized.savings
+        .filter((row) => row && typeof row === "object" && !Array.isArray(row))
+        .map((row, index) => stripUnknown(row, savingsAllowed, `savings[${index}]`));
+
+    normalized.budgets = normalized.budgets
+        .filter((row) => row && typeof row === "object" && !Array.isArray(row))
+        .map((row, index) => stripUnknown(row, budgetAllowed, `budgets[${index}]`));
+
+    normalized.budgetPeriods = normalized.budgetPeriods
+        .filter((row) => row && typeof row === "object" && !Array.isArray(row))
+        .map((row, index) => stripUnknown(row, periodAllowed, `budgetPeriods[${index}]`));
+
+    normalized.categories = normalized.categories
+        .filter((x) => typeof x === "string")
+        .map((x) => x.trim())
+        .filter(Boolean);
+
+    if (!normalized.categories.length) {
+        normalized.categories = IMPORT_DEFAULT_CATEGORIES.slice();
+        report.defaultsApplied.push("categories=default(fallback)");
+        report.missingFieldsRecovered += 1;
+    }
+
+    normalized.persons = normalized.persons
+        .filter((x) => typeof x === "string")
+        .map((x) => x.trim())
+        .filter(Boolean);
+
+    console.info("Import normalization keys", {
+        rootBefore: Object.keys(parsed || {}),
+        rootAfter: Object.keys(normalized || {}),
+        expenseBefore: Array.isArray(parsed?.expenses) && parsed.expenses[0] && typeof parsed.expenses[0] === "object" ? Object.keys(parsed.expenses[0]) : [],
+        expenseAfter: Array.isArray(normalized.expenses) && normalized.expenses[0] && typeof normalized.expenses[0] === "object" ? Object.keys(normalized.expenses[0]) : [],
+        savingsBefore: Array.isArray(parsed?.savings) && parsed.savings[0] && typeof parsed.savings[0] === "object" ? Object.keys(parsed.savings[0]) : [],
+        savingsAfter: Array.isArray(normalized.savings) && normalized.savings[0] && typeof normalized.savings[0] === "object" ? Object.keys(normalized.savings[0]) : []
+    });
+
+    report.warnings = [
+        `Unknown Fields Removed: ${report.unknownFieldsRemoved}`,
+        `Missing Fields Recovered: ${report.missingFieldsRecovered}`
+    ];
+
+    const skipMigration = !!options.skipMigration;
+
+    if (!skipMigration) {
+        const migrated = migrateDataVersion(normalized, { direction: "toDevelopment" });
+        normalized = migrated.data;
+
+        if (migrated.sourceVersion !== SCHEMA_VERSION_DEVELOPMENT) {
+            report.warnings.push(`Schema migration applied from ${migrated.sourceVersion} to ${SCHEMA_VERSION_DEVELOPMENT}`);
+        }
+    }
+
+    return { normalized, report };
+}
+
+function validateImportPayload(parsed) {
+    const errors = [];
+    const warnings = [];
+
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+        errors.push("Missing Fields: top-level object is required");
+        return { errors, warnings, normalized: null, version: "unknown" };
+    }
+
+    const normalized = Object.assign({}, parsed);
+    normalized.meta = (normalized.meta && typeof normalized.meta === "object" && !Array.isArray(normalized.meta)) ? normalized.meta : {};
+
+    const rawVersion = normalizeSchemaVersionTag(normalized.meta.version);
+    const supported = [SCHEMA_VERSION_MAIN, SCHEMA_VERSION_DEVELOPMENT];
+    if (!supported.includes(rawVersion)) {
+        errors.push(`Unsupported Version: ${normalized.meta.version}`);
+    }
+
+    const topArrays = ["expenses", "savings", "budgets", "budgetPeriods", "orders", "categories", "persons"];
+    topArrays.forEach((key) => {
+        if (!Object.prototype.hasOwnProperty.call(normalized, key)) {
+            normalized[key] = [];
+            warnings.push(`Missing Fields: ${key}`);
+            return;
+        }
+
+        if (!Array.isArray(normalized[key])) {
+            if (key === "budgetPeriods") {
+                errors.push("Invalid Budget Periods: budgetPeriods must be an array");
+            } else if (key === "expenses" || key === "savings" || key === "budgets") {
+                errors.push(`Missing Fields: ${key} must be an array`);
+            } else {
+                errors.push(`Invalid Transactions: ${key} must be an array`);
+            }
+        }
+    });
+
+    if (!Object.prototype.hasOwnProperty.call(normalized, "settings") || normalized.settings === null || typeof normalized.settings === "undefined") {
+        normalized.settings = {};
+        warnings.push("Missing Fields: settings");
+    } else if (typeof normalized.settings !== "object" || Array.isArray(normalized.settings)) {
+        errors.push("Invalid Settings Structure: settings must be an object");
+    }
+
+    if (!Object.prototype.hasOwnProperty.call(normalized, "quotations") || normalized.quotations === null || typeof normalized.quotations === "undefined") {
+        normalized.quotations = {
+            quotationData: null,
+            quotationItems: [],
+            quotationCharges: [],
+            quotationRegistry: [],
+            quotationMeta: null,
+            activeQuotationId: null,
+            documentRelations: [],
+            noSeriesConfig: null
+        };
+        warnings.push("Missing Fields: quotations");
+    } else if (typeof normalized.quotations !== "object" || Array.isArray(normalized.quotations)) {
+        errors.push("Invalid Quotations Structure: quotations must be an object");
+    }
+
+    const settings = normalized.settings || {};
+    ["theme", "appearanceMode", "accentColor", "currencyCode"].forEach((key) => {
+        if (Object.prototype.hasOwnProperty.call(settings, key) && typeof settings[key] !== "string") {
+            errors.push(`Invalid Settings Structure: ${key} must be a string`);
+        }
+    });
+
+    ["autoBackupEnabled", "autoBackup"].forEach((key) => {
+        if (Object.prototype.hasOwnProperty.call(settings, key) && typeof settings[key] !== "boolean") {
+            errors.push(`Invalid Settings Structure: ${key} must be a boolean`);
+        }
+    });
+
+    ["autoBackupFrequency", "backupFrequency", "autoBackupTarget"].forEach((key) => {
+        if (Object.prototype.hasOwnProperty.call(settings, key) && typeof settings[key] !== "string") {
+            errors.push(`Invalid Settings Structure: ${key} must be a string`);
+        }
+    });
+
+    function validateTransactions(rows, label) {
+        if (!Array.isArray(rows)) return;
+
+        rows.forEach((row, index) => {
+            if (!row || typeof row !== "object" || Array.isArray(row)) {
+                errors.push(`Invalid Transactions: ${label}[${index}] must be an object`);
+                return;
+            }
+
+            if (!isValidImportId(row.id)) {
+                errors.push(`Invalid IDs: ${label}[${index}].id`);
+            }
+
+            ["person", "sourceId", "linkedTransactionId"].forEach((field) => {
+                if (Object.prototype.hasOwnProperty.call(row, field) && !isValidNullableImportId(row[field])) {
+                    errors.push(`Invalid IDs: ${label}[${index}].${field}`);
+                }
+            });
+        });
+    }

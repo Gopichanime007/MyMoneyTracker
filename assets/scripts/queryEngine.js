@@ -206,9 +206,108 @@
     }
 
     function toComparableDate(value) {
-        var parsed = new Date(value);
-        var time = parsed.getTime();
-        return Number.isFinite(time) ? time : null;
+        if (value === null || value === undefined) {
+            return null;
+        }
+
+        if (value instanceof Date) {
+            var dateValue = value.getTime();
+            return Number.isFinite(dateValue) ? dateValue : null;
+        }
+
+        if (typeof value === 'number' && Number.isFinite(value)) {
+            return value;
+        }
+
+        if (typeof value === 'string') {
+            var trimmed = value.trim();
+            if (!trimmed) {
+                return null;
+            }
+
+            var numeric = Number(trimmed);
+            if (Number.isFinite(numeric)) {
+                return numeric;
+            }
+
+            var parsed = new Date(trimmed);
+            var time = parsed.getTime();
+            if (Number.isFinite(time)) {
+                return time;
+            }
+
+            var simple = Date.parse(trimmed);
+            return Number.isFinite(simple) ? simple : null;
+        }
+
+        var parsedValue = new Date(value);
+        var parsedTime = parsedValue.getTime();
+        return Number.isFinite(parsedTime) ? parsedTime : null;
+    }
+
+    function normalizeComparableValue(value) {
+        var comparable = toComparableDate(value);
+        if (comparable === null) {
+            return null;
+        }
+
+        if (typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value.trim())) {
+            return new Date(value + 'T00:00:00').getTime();
+        }
+
+        return comparable;
+    }
+
+    function coerceComparableValue(value) {
+        if (value === null || value === undefined) {
+            return null;
+        }
+
+        if (typeof value === 'string') {
+            var trimmed = value.trim();
+            if (!trimmed) {
+                return null;
+            }
+            var simpleDateMatch = /^\d{4}-\d{2}-\d{2}$/.test(trimmed);
+            if (simpleDateMatch) {
+                return new Date(trimmed + 'T00:00:00').getTime();
+            }
+        }
+
+        return normalizeComparableValue(value);
+    }
+
+    function coerceComparableDateKey(value) {
+        if (value === null || value === undefined) {
+            return null;
+        }
+
+        if (typeof value === 'string') {
+            var trimmed = value.trim();
+            if (!trimmed) {
+                return null;
+            }
+            if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
+                return trimmed;
+            }
+            var parsed = new Date(trimmed);
+            if (Number.isFinite(parsed.getTime())) {
+                return parsed.toISOString().slice(0, 10);
+            }
+            return null;
+        }
+
+        if (value instanceof Date) {
+            var dateValue = value.getTime();
+            return Number.isFinite(dateValue) ? new Date(dateValue).toISOString().slice(0, 10) : null;
+        }
+
+        if (typeof value === 'number' && Number.isFinite(value)) {
+            return new Date(value).toISOString().slice(0, 10);
+        }
+
+        var fallback = new Date(value);
+        return Number.isFinite(fallback.getTime()) ? fallback.toISOString().slice(0, 10) : null;
     }
 
     function evaluatePeriodValue(value, periodDef) {
@@ -287,23 +386,53 @@
 
         var value = row[descriptor.field];
         var target = descriptor.value;
+        var comparableValue = coerceComparableValue(value);
+        var comparableTarget = coerceComparableValue(target);
 
         if (descriptor.op === 'eq') {
+            var dateKeyValue = coerceComparableDateKey(value);
+            var dateKeyTarget = coerceComparableDateKey(target);
+            if (dateKeyValue !== null && dateKeyTarget !== null) {
+                return dateKeyValue === dateKeyTarget;
+            }
+            if (comparableValue !== null && comparableTarget !== null) {
+                return comparableValue === comparableTarget;
+            }
             return value === target;
         }
         if (descriptor.op === 'neq') {
+            var neqDateKeyValue = coerceComparableDateKey(value);
+            var neqDateKeyTarget = coerceComparableDateKey(target);
+            if (neqDateKeyValue !== null && neqDateKeyTarget !== null) {
+                return neqDateKeyValue !== neqDateKeyTarget;
+            }
+            if (comparableValue !== null && comparableTarget !== null) {
+                return comparableValue !== comparableTarget;
+            }
             return value !== target;
         }
         if (descriptor.op === 'gt') {
+            if (comparableValue !== null && comparableTarget !== null) {
+                return comparableValue > comparableTarget;
+            }
             return value > target;
         }
         if (descriptor.op === 'gte') {
+            if (comparableValue !== null && comparableTarget !== null) {
+                return comparableValue >= comparableTarget;
+            }
             return value >= target;
         }
         if (descriptor.op === 'lt') {
+            if (comparableValue !== null && comparableTarget !== null) {
+                return comparableValue < comparableTarget;
+            }
             return value < target;
         }
         if (descriptor.op === 'lte') {
+            if (comparableValue !== null && comparableTarget !== null) {
+                return comparableValue <= comparableTarget;
+            }
             return value <= target;
         }
         if (descriptor.op === 'contains') {
@@ -323,11 +452,19 @@
         if (descriptor.op === 'between') {
             var min = descriptor.from !== undefined ? descriptor.from : target;
             var max = descriptor.to !== undefined ? descriptor.to : target;
-            if (min !== undefined && value < min) {
+            var lowerBound = coerceComparableValue(min);
+            var upperBound = coerceComparableValue(max);
+            if (lowerBound !== null && comparableValue !== null && comparableValue < lowerBound) {
                 return false;
             }
-            if (max !== undefined && value > max) {
+            if (upperBound !== null && comparableValue !== null && comparableValue > upperBound) {
                 return false;
+            }
+            if (lowerBound === null && upperBound === null) {
+                return true;
+            }
+            if (comparableValue === null) {
+                return value >= min && value <= max;
             }
             return true;
         }
