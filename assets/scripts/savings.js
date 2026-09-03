@@ -131,7 +131,7 @@ async function addSavings() {
             showToast("Select person ❗", "warning");
             return;
         }
-            showToast(`Insufficient source balance (₹${remaining} available)`, "warning");
+            showToast(`Insufficient source balance (${formatSavingsAmount(remaining)} available)`, "warning");
             return;
         }
 
@@ -177,7 +177,7 @@ async function addSavings() {
 
         let pending = Math.max(0, Math.abs(Number(original.amount || 0)) - alreadyRefunded);
         if (Math.abs(amount) > pending) {
-            showToast(`Only ₹${pending} refundable for this transaction`, "warning");
+            showToast(`Only ${formatSavingsAmount(pending)} refundable for this transaction`, "warning");
             return;
         }
 
@@ -205,7 +205,7 @@ async function addSavings() {
 
         let remaining = getSourceRemainingById(sourceId, data);
         if (Math.abs(amount) > remaining) {
-            showToast(`Insufficient source balance (₹${remaining} available)`, "warning");
+            showToast(`Insufficient source balance (${formatSavingsAmount(remaining)} available)`, "warning");
             return;
         }
 
@@ -809,7 +809,7 @@ function handleSavingsRefundResolutionChange() {
         amountEl.placeholder = "Amount";
     }
 
-    infoEl.textContent = `Original: ₹${snapshot.originalAmount.toFixed(2)} | Refunded: ₹${snapshot.refunded.toFixed(2)} | Remaining Refundable: ₹${snapshot.remainingRefundable.toFixed(2)} | Loss: ₹${snapshot.loss.toFixed(2)} | Status: ${formatSavingsResolutionStatus(snapshot.status)}`;
+    infoEl.textContent = `Original: ${formatSavingsAmount(snapshot.originalAmount)} | Refunded: ${formatSavingsAmount(snapshot.refunded)} | Remaining Refundable: ${formatSavingsAmount(snapshot.remainingRefundable)} | Loss: ${formatSavingsAmount(snapshot.loss)} | Status: ${formatSavingsResolutionStatus(snapshot.status)}`;
     refreshSavingsRefundGuidance();
 }
 
@@ -895,7 +895,7 @@ async function addSavings() {
 
         let remaining = getSourceRemainingById(sourceId, data);
         if (Math.abs(amount) > remaining) {
-            showToast(`Insufficient source balance (₹${remaining} available)`, "warning");
+            showToast(`Insufficient source balance (${formatSavingsAmount(remaining)} available)`, "warning");
             return;
         }
 
@@ -974,7 +974,7 @@ async function addSavings() {
         }
 
         if (creditAmount > pending) {
-            showToast(`Only ₹${pending} refundable for this transaction`, "warning");
+            showToast(`Only ${formatSavingsAmount(pending)} refundable for this transaction`, "warning");
             return;
         }
 
@@ -1034,7 +1034,7 @@ async function addSavings() {
 
         let remaining = getSourceRemainingById(sourceId, data);
         if (Math.abs(amount) > remaining) {
-            showToast(`Insufficient source balance (₹${remaining} available)`, "warning");
+            showToast(`Insufficient source balance (${formatSavingsAmount(remaining)} available)`, "warning");
             return;
         }
 
@@ -1323,20 +1323,47 @@ function isSavingsDepositBucket(entry) {
     return normalizeSavingsAggregationType(entry.type) === "deposit";
 }
 
+function isValidSavingsDashboardEntry(entry) {
+    if (!entry || typeof entry !== "object") return false;
+    if (entry.isArchived === true || entry.archived === true || String(entry.status || "").toLowerCase() === "archived") return false;
+    let amount = Number(entry.amount);
+    return Number.isFinite(amount) && amount !== 0 && !Number.isNaN(new Date(entry.date || entry.createdAt).getTime());
+}
+
 function getPeriodEntriesForSavingsDashboard(allRows, activePeriod, periodKey) {
-    if (!Array.isArray(allRows)) return [];
-    return allRows;
+    let rows = (Array.isArray(allRows) ? allRows : []).filter(isValidSavingsDashboardEntry);
+    if (activePeriod && activePeriod.start) {
+        let start = new Date(activePeriod.start);
+        let end = activePeriod.end ? new Date(activePeriod.end) : new Date();
+        start.setHours(0, 0, 0, 0);
+        end.setHours(23, 59, 59, 999);
+        return rows.filter(entry => {
+            if (periodKey && entry.periodKey === periodKey) return true;
+            let date = new Date(entry.date || entry.createdAt);
+            return date >= start && date <= end;
+        });
+    }
+
+    let now = new Date();
+    return rows.filter(entry => {
+        let date = new Date(entry.date || entry.createdAt);
+        return date.getFullYear() === now.getFullYear() && date.getMonth() === now.getMonth();
+    });
 }
 
 // Calculates totals and updates savings dashboard UI
 function loadSavings() {
-    let scoped = (typeof getScopedSavings === "function") ? getScopedSavings() : (getSavings() || []);
-    let allRows = (typeof getSavings === "function") ? (getSavings() || []) : scoped;
-    let periodRows = getPeriodEntriesForSavingsDashboard(allRows, null, null);
+    let storedRows = (typeof getSavings === "function") ? (getSavings() || []) : [];
+    let allRows = storedRows.filter(isValidSavingsDashboardEntry);
+    let scoped = allRows;
+    let now = new Date();
+    let activePeriod = typeof getActiveBudgetPeriod === "function" ? getActiveBudgetPeriod() : null;
+    let periodKey = typeof resolveActivePeriodKeyForSavings === "function" ? resolveActivePeriodKeyForSavings() : null;
+    let periodRows = getPeriodEntriesForSavingsDashboard(allRows, activePeriod, periodKey);
 
     let daily = getDailyBudget();
     let dailyEl = document.getElementById("dailyBudget");
-    if (dailyEl) dailyEl.innerText = "₹ " + Number(daily || 0).toFixed(2);
+    if (dailyEl) dailyEl.innerText = formatSavingsAmount(daily);
 
     let totalBalance = allRows.reduce((sum, t) => sum + Number(t && t.amount || 0), 0);
     let totalDeposits = allRows.filter(isSavingsDepositBucket).reduce((sum, t) => sum + Math.abs(Number(t.amount || 0)), 0);
@@ -1357,10 +1384,12 @@ function loadSavings() {
         .filter(t => t && t.type === "refund")
         .reduce((mx, t) => Math.max(mx, Math.abs(Number(t.amount || 0))), 0);
 
-    let periodLabel = "Independent Savings";
-    let periodStart = "-";
-    let periodEnd = "-";
-    let daysRemaining = "-";
+    let periodLabel = activePeriod ? (periodKey || "Active Period") : "Current Month";
+    let periodStart = activePeriod && activePeriod.start ? new Date(activePeriod.start).toLocaleDateString("en-IN") : new Date(now.getFullYear(), now.getMonth(), 1).toLocaleDateString("en-IN");
+    let periodEnd = activePeriod && activePeriod.end ? new Date(activePeriod.end).toLocaleDateString("en-IN") : new Date(now.getFullYear(), now.getMonth() + 1, 0).toLocaleDateString("en-IN");
+    let daysRemaining = activePeriod && activePeriod.end
+        ? Math.max(0, Math.ceil((new Date(activePeriod.end).setHours(23, 59, 59, 999) - Date.now()) / 86400000))
+        : Math.max(0, new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate() - now.getDate());
 
     setTextById("savingsBalance", formatSavingsAmount(totalBalance));
     setTextById("totalDeposits", formatSavingsAmount(totalDeposits));
@@ -1453,7 +1482,7 @@ function renderSavingsHistory(data) {
     let container = document.getElementById("savingsHistory");
     if (!container) return;
 
-    let sourceData = applySavingsSearch(data);
+    let sourceData = applySavingsSearch((Array.isArray(data) ? data : []).filter(isValidSavingsDashboardEntry));
     renderSavingsQueryChips();
     updateSavingsSortIndicator();
 
@@ -1586,7 +1615,7 @@ function loadSourceOptions({
 
         let status = remaining <= 0
             ? "Used"
-            : `₹${remaining} left`;
+            : `${formatSavingsAmount(remaining)} left`;
 
         if (s.status === "archived") {
             status += s.archiveReason === "depleted" ? " • Archived (Depleted)" : " • Archived";
@@ -2093,11 +2122,7 @@ function loadSavingsGraph(data) {
         return;
     }
 
-    let d = data;
-
-    if (!d) {
-        d = getSavings() || [];
-    }
+    let d = (Array.isArray(data) ? data : (getSavings() || [])).filter(isValidSavingsDashboardEntry);
 
     let income = 0;
     let expense = 0;
@@ -2341,6 +2366,9 @@ function renderIncomeList() {
     let data = getSavings() || [];
     let scoped = [...data];
     let allSources = scoped.filter(isSavingsSourceSeed);
+    let activeCount = allSources.filter(s => s.status !== "archived").length;
+    let archivedSources = allSources.filter(s => s.status === "archived");
+    let depletedCount = archivedSources.filter(s => s.archiveReason === "depleted").length;
 
     let sources = allSources.filter(s => {
         if (savingsSourceFilter === "all") return true;
@@ -2353,6 +2381,7 @@ function renderIncomeList() {
 
     let filterBar = document.getElementById("savingsSourceFilterBar");
     if (filterBar) {
+        filterBar.classList.add("is-prominent");
         filterBar.innerHTML = ["active", "archived", "all"].map(key => {
             let label = key === "active" ? "Active" : (key === "archived" ? "Archived" : "All");
             let activeClass = savingsSourceFilter === key ? "is-active" : "";
@@ -2361,6 +2390,12 @@ function renderIncomeList() {
     }
 
     container.innerHTML = "";
+    let summary = document.getElementById("sourceSummary");
+    if (!summary) {
+        container.insertAdjacentHTML("beforebegin", '<p id="sourceSummary" class="source-summary"></p>');
+        summary = document.getElementById("sourceSummary");
+    }
+    if (summary) summary.textContent = `${activeCount} active · ${archivedSources.length} archived (${depletedCount} depleted)`;
 
     if (!sources.length) {
         container.innerHTML = `<p class="empty-state">No savings sources ${savingsSourceFilter === "all" ? "yet" : "in this view"}</p>`;
@@ -2858,17 +2893,17 @@ function exportSavingsPDF() {
     doc.setFont("helvetica", "bold");
 
     doc.setTextColor(0, 150, 0);
-    doc.text(`Total Income: Rs. ${totalIncome.toLocaleString("en-IN")}`, 14, y);
+    doc.text(`Total Income: ${formatSavingsAmount(totalIncome)}`, 14, y);
 
     y += 7;
 
     doc.setTextColor(200, 0, 0);
-    doc.text(`Total Outgoing: Rs. ${totalExpense.toLocaleString("en-IN")}`, 14, y);
+    doc.text(`Total Outgoing: ${formatSavingsAmount(totalExpense)}`, 14, y);
 
     y += 7;
 
     doc.setTextColor(0);
-    doc.text(`Net Balance: Rs. ${(totalIncome - totalExpense).toLocaleString("en-IN")}`, 14, y);
+    doc.text(`Net Balance: ${formatSavingsAmount(totalIncome - totalExpense)}`, 14, y);
 
     // =========================
     // 💾 SAVE
@@ -3341,7 +3376,7 @@ function loadRefundCandidates() {
 
         let opt = document.createElement("option");
         opt.value = `sav:${t.id}`;
-        opt.textContent = `Transfer • ${t.note || t.destination || "-"} • ₹${pending.toFixed(2)} pending • ${formatSavingsResolutionStatus(snapshot.status)}`;
+        opt.textContent = `Transfer • ${t.note || t.destination || "-"} • ${formatSavingsAmount(pending)} pending • ${formatSavingsResolutionStatus(snapshot.status)}`;
         select.appendChild(opt);
     });
 
@@ -3373,7 +3408,7 @@ function loadRecoveryExpenseOptions() {
 
             let opt = document.createElement("option");
             opt.value = String(e.id);
-            opt.textContent = `${e.category || "Expense"} • ${e.purpose || "-"} • ₹${pending} recoverable`;
+            opt.textContent = `${e.category || "Expense"} • ${e.purpose || "-"} • ${formatSavingsAmount(pending)} recoverable`;
             select.appendChild(opt);
         });
 }

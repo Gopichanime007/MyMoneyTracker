@@ -1,5 +1,6 @@
 const isSavingsPage = (typeof window !== 'undefined' && window.location && typeof window.location.pathname === 'string' && window.location.pathname.includes("savings")) || false;
 let currentFilteredExpenses = [];
+let expenseArchiveFilter = "active";
 let expenseBudgetSelectionState = {
     userSelectedBudget: false,
     lastSuggestedBudgetId: ""
@@ -141,9 +142,79 @@ function getExpenses() {
         return [];
     }
 }
+
+function isArchivedExpense(entry) {
+    if (!entry || typeof entry !== "object") return false;
+    return entry.isArchived === true || entry.archived === true ||
+        String(entry.status || "").toLowerCase() === "archived" ||
+        String(entry.archiveStatus || "").toLowerCase() === "archived";
+}
+
+function isValidActiveExpense(entry) {
+    if (!entry || typeof entry !== "object" || isArchivedExpense(entry)) return false;
+    const amount = Number(entry.amount);
+    return Number.isFinite(amount) && amount !== 0 && !Number.isNaN(new Date(entry.date || entry.createdAt).getTime());
+}
+
+function getActiveExpenseEntries(entries = getExpenses()) {
+    return (Array.isArray(entries) ? entries : []).filter(isValidActiveExpense);
+}
+
+function getExpenseArchiveEntries(entries = getExpenses(), filter = expenseArchiveFilter) {
+    let list = Array.isArray(entries) ? entries : [];
+    if (filter === "archived") return list.filter(isArchivedExpense);
+    if (filter === "all") return list.filter(entry => isValidActiveExpense(entry) || isArchivedExpense(entry));
+    return getActiveExpenseEntries(list);
+}
+
+function setExpenseArchiveFilter(filter) {
+    expenseArchiveFilter = ["active", "archived", "all"].includes(filter) ? filter : "active";
+    loadHistory(getExpenses());
+}
+
+function archiveExpense(id) {
+    const expenses = getExpenses();
+    const target = expenses.find(entry => String(entry && entry.id) === String(id));
+    if (!target) return false;
+    target.isArchived = true;
+    target.status = "archived";
+    target.archivedAt = new Date().toISOString();
+    saveExpenses(expenses);
+    return true;
+}
+
+function unarchiveExpense(id) {
+    const expenses = getExpenses();
+    const target = expenses.find(entry => String(entry && entry.id) === String(id));
+    if (!target) return false;
+    delete target.isArchived;
+    delete target.archived;
+    delete target.archiveStatus;
+    if (String(target.status || "").toLowerCase() === "archived") target.status = "active";
+    target.archivedAt = null;
+    saveExpenses(expenses);
+    return true;
+}
+
+function archiveExpenseUI(id) {
+    if (!archiveExpense(id)) return;
+    loadHistory();
+    loadDashboard();
+    loadGraph();
+    showToast("Expense archived");
+}
+
+function unarchiveExpenseUI(id) {
+    if (!unarchiveExpense(id)) return;
+    loadHistory();
+    loadDashboard();
+    loadGraph();
+    showToast("Expense restored");
+}
+
 function calculateSpentForPeriod(start, end) {
 
-    let expenses = JSON.parse(localStorage.getItem("expenses")) || [];
+    let expenses = getActiveExpenseEntries();
 
     function parseRangeBoundary(value, isEnd) {
         if (!value) return null;
@@ -1876,7 +1947,7 @@ function getBudgetBalance(budgetId) {
 // Returns net spent amount for a budget (expenses minus recoveries),
 // correctly handling `allocationTrail` entries when present.
 function getNetSpentForBudget(budgetId, expensesList) {
-    let expenses = Array.isArray(expensesList) ? expensesList : getExpenses();
+    let expenses = getActiveExpenseEntries(Array.isArray(expensesList) ? expensesList : getExpenses());
 
     let net = 0;
 
@@ -1918,7 +1989,7 @@ function getNetSpentForBudget(budgetId, expensesList) {
 // on purpose: Remaining-balance math everywhere else in the app already
 // correctly factors adjustments in, and shouldn't be disturbed.
 function getRealSpentForBudget(budgetId, expensesList) {
-    let expenses = Array.isArray(expensesList) ? expensesList : getExpenses();
+    let expenses = getActiveExpenseEntries(Array.isArray(expensesList) ? expensesList : getExpenses());
     let net = 0;
 
     for (let e of expenses) {
@@ -1952,7 +2023,7 @@ function getRealSpentForBudget(budgetId, expensesList) {
 // Net Adjustment total for a Budget Wallet, signed — negative means
 // corrected downward, positive means corrected upward.
 function getNetAdjustmentForBudget(budgetId, expensesList) {
-    let expenses = Array.isArray(expensesList) ? expensesList : getExpenses();
+    let expenses = getActiveExpenseEntries(Array.isArray(expensesList) ? expensesList : getExpenses());
     let net = 0;
 
     for (let e of expenses) {
@@ -2207,7 +2278,7 @@ if (!window.AppDialog) {
 function loadHistory(list = getExpenses()) {
 
     try {
-        let sourceList = Array.isArray(list) ? list : [];
+        let sourceList = getExpenseArchiveEntries(list);
         let queryResult = (window.SearchService && typeof window.SearchService.applyModuleSearch === "function")
             ? window.SearchService.applyModuleSearch("expenses", sourceList)
             : { results: sourceList };
@@ -2221,6 +2292,21 @@ function loadHistory(list = getExpenses()) {
 
         let container = document.getElementById("historyList");
         if (!container) return;
+
+        let archiveBar = document.getElementById("expenseArchiveFilterBar");
+        if (archiveBar) {
+            archiveBar.innerHTML = ["active", "archived", "all"].map(key => {
+                let label = key[0].toUpperCase() + key.slice(1);
+                return `<button type="button" class="tab-bar-btn ${expenseArchiveFilter === key ? "is-active" : ""}" onclick="setExpenseArchiveFilter('${key}')">${label}</button>`;
+            }).join("");
+        }
+        let archiveSummary = document.getElementById("expenseArchiveSummary");
+        if (archiveSummary) {
+            let allEntries = Array.isArray(list) ? list : [];
+            let archivedCount = allEntries.filter(isArchivedExpense).length;
+            let activeCount = allEntries.filter(isValidActiveExpense).length;
+            archiveSummary.textContent = `${activeCount} active · ${archivedCount} archived`;
+        }
 
         container.innerHTML = "";
 
@@ -2264,6 +2350,7 @@ function loadHistory(list = getExpenses()) {
                 <div class="transaction-card-foot">
                     <div class="history-amount ${amountClass}">${escapeHtml(amount)}</div>
                     <div class="history-actions">
+                        <button class="entry-action-btn" onclick="event.stopPropagation(); ${isArchivedExpense(e) ? `unarchiveExpenseUI('${e.id}')` : `archiveExpenseUI('${e.id}')`}" title="${isArchivedExpense(e) ? "Unarchive" : "Archive"}">${isArchivedExpense(e) ? "Unarchive" : "Archive"}</button>
                         <button class="delete-btn" onclick="event.stopPropagation(); deleteExpenseUI('${e.id}')" title="Delete">
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                 <path d="M3 6h18"></path>
@@ -4123,9 +4210,11 @@ function generatePdfReport(opts = {}) {
     const { jsPDF } = window.jspdf || {};
     const doc = jsPDF ? new jsPDF() : null;
 
-    const dataSource = (Array.isArray(data) && data.length)
+    const dataSource = Array.isArray(data)
         ? data
-        : getExportRows("expenses", (typeof getExpenses === 'function' ? getExpenses() : []));
+        : getExportRows("expenses", getActiveExpenseEntries(
+            typeof getExpenses === 'function' ? getExpenses() : []
+        ));
 
     const budgetIdsFromData = new Set();
     dataSource.forEach((entry) => {
@@ -4140,9 +4229,6 @@ function generatePdfReport(opts = {}) {
     });
 
     let budgets = getBudgets().filter(b => budgetIdsFromData.has(String(b && b.budgetId)));
-    if (!budgets.length) {
-        budgets = getBudgets();
-    }
     const budgetIds = budgets
         .map(b => b && b.budgetId)
         .filter(Boolean);
@@ -4674,7 +4760,9 @@ try { window.generatePdfReport = generatePdfReport; } catch (e) { /* ignore */ }
 
 // New PDF wrapper (calls modular PDF generator when available)
 function downloadPDF() {
-    const dataSource = getExportRows("expenses", getExpenses());
+    const dataSource = Array.isArray(currentFilteredExpenses)
+        ? currentFilteredExpenses.slice()
+        : [];
     if (typeof window.generatePdfReport === 'function') {
         window.generatePdfReport({ data: dataSource });
         return;
@@ -6644,10 +6732,12 @@ function loadBudgetOptions(options = null) {
 function getSelectableBudgetEntries(budgets) {
     let list = Array.isArray(budgets) ? budgets : [];
 
-    return list.filter(b => {
-        if (!b || typeof b !== "object") return false;
-        return !!String(b.budgetId || "").trim();
-    });
+    return list.filter(isValidBudgetEntry);
+}
+
+function isValidBudgetEntry(budget) {
+    if (!budget || typeof budget !== "object") return false;
+    return !!String(budget.budgetId || "").trim() && Number.isFinite(Number(budget.totalAllocated)) && Number(budget.totalAllocated) > 0;
 }
 
 function parseDateToDayStart(value) {
@@ -6867,6 +6957,25 @@ function applyCustomColor(color) {
     changeTheme(color);
     let picker = document.getElementById("colorPicker");
     if (picker) picker.style.display = "none";
+}
+
+function updateProgressBar() {
+    let budgets = getBudgets();
+    let filteredBudgets = filterBudgetsByActivePeriod(budgets);
+    let filteredExpenses = filterByActivePeriod(getExpenses());
+
+    let totalBudget = filteredBudgets.reduce(
+        (sum, budget) => sum + (Number(budget.totalAllocated) || 0),
+        0
+    );
+    let budgetIds = filteredBudgets.map(budget => budget && budget.budgetId).filter(Boolean);
+    let totalSpent = getNetSpentForBudgetSet(budgetIds, filteredExpenses);
+    let percent = totalBudget > 0 ? Math.min((totalSpent / totalBudget) * 100, 100) : 0;
+
+    let fill = document.getElementById("progressFill");
+    let text = document.getElementById("progressText");
+    if (fill) fill.style.width = `${percent}%`;
+    if (text) text.innerText = `${percent.toFixed(1)}% used`;
 }
 
 // Opens category modal
@@ -8575,7 +8684,7 @@ function applyImportData(data) {
 
     return imported;
 }
-function importData() {
+function obsoleteImportData() {
     setImportStage("validation-input");
 
     const importText = document.getElementById("importText");
@@ -8711,7 +8820,7 @@ function importData() {
      * same import logic.
      */
 
-    ImportEngine.importPayload(
+    obsoleteImportExecutor.importPayload(
         text,
         {
             fileName:
@@ -8935,6 +9044,236 @@ function importData() {
             );
         });
 }
+
+function legacyImportData() {
+    setImportStage("validation-input");
+    const importText = document.getElementById("importText");
+    const rawText = importText?.value || "";
+    const decodedText = typeof chooseImportDecodedText === "function"
+        ? chooseImportDecodedText(rawText).selected.normalizedText
+        : rawText;
+    const text = normalizeImportRawText(decodedText);
+
+    if (!text) {
+        showToast("Paste data");
+        return;
+    }
+
+    let parsed;
+    try {
+        setImportStage("json-parse");
+        parsed = JSON.parse(text);
+    } catch (err) {
+        const parseError = getJsonParseErrorMessage(err);
+        renderImportValidationReport({
+            version: "unknown",
+            found: { expenses: 0, savings: 0, budgets: 0, budgetPeriods: 0 },
+            imported: { expenses: 0, savings: 0, budgets: 0, budgetPeriods: 0 },
+            warnings: [],
+            errors: [parseError]
+        });
+        showToast("JSON Parse Error", "error");
+        return;
+    }
+
+    const incomingVersion = validateIncomingImportVersion(
+        parsed && parsed.meta && Object.prototype.hasOwnProperty.call(parsed.meta, "version")
+            ? parsed.meta.version
+            : null
+    );
+
+    if (!incomingVersion.supported) {
+        const normalizationResult = normalizeImportPayload(parsed, { skipMigration: true });
+        const diagnostics = buildImportDiagnostics(normalizationResult.normalized);
+        renderImportValidationReport({
+            version: "unknown",
+            found: {
+                expenses: diagnostics.expensesCount,
+                savings: diagnostics.savingsCount,
+                budgets: diagnostics.budgetsCount,
+                budgetPeriods: diagnostics.budgetPeriodsCount
+            },
+            imported: { expenses: 0, savings: 0, budgets: 0, budgetPeriods: 0 },
+            warnings: normalizationResult.report.warnings || [],
+            normalization: normalizationResult.report,
+            errors: [`Unsupported Version: ${incomingVersion.display}`]
+        });
+        showToast("Import Validation Failed", "error");
+        return;
+    }
+
+    setImportStage("normalization");
+    const normalizationResult = normalizeImportPayload(parsed);
+    const normalizedParsed = normalizationResult.normalized;
+    setImportStage("schema-validation");
+    const diagnostics = buildImportDiagnostics(normalizedParsed);
+    const validation = validateImportPayload(normalizedParsed);
+    const found = {
+        expenses: diagnostics.expensesCount,
+        savings: diagnostics.savingsCount,
+        budgets: diagnostics.budgetsCount,
+        budgetPeriods: diagnostics.budgetPeriodsCount
+    };
+
+    if (validation.errors.length) {
+        renderImportValidationReport({
+            version: validation.version,
+            found,
+            imported: { expenses: 0, savings: 0, budgets: 0, budgetPeriods: 0 },
+            warnings: validation.warnings.concat(normalizationResult.report.warnings || []),
+            normalization: normalizationResult.report,
+            errors: validation.errors
+        });
+        showToast("Import Validation Failed", "error");
+        return;
+    }
+
+    const data = validation.normalized;
+
+    try {
+        setImportStage("import-mapping");
+        if (Array.isArray(data.expenses)) saveExpenses(data.expenses);
+        if (Array.isArray(data.budgets)) saveBudgets(data.budgets);
+        if (Array.isArray(data.savings)) saveSavings(data.savings);
+        if (Array.isArray(data.orders)) localStorage.setItem("orders", JSON.stringify(data.orders));
+        if (Array.isArray(data.categories)) localStorage.setItem("categories", JSON.stringify(data.categories));
+        if (Array.isArray(data.persons)) localStorage.setItem("persons", JSON.stringify(data.persons));
+        if (Array.isArray(data.budgetPeriods)) localStorage.setItem("bp", JSON.stringify(data.budgetPeriods));
+        if (Array.isArray(data.unassignedTopups)) localStorage.setItem("unassignedTopups", JSON.stringify(data.unassignedTopups));
+
+        if (data.quotations && typeof data.quotations === "object") {
+            localStorage.setItem("quotationData", JSON.stringify(data.quotations.quotationData || null));
+            localStorage.setItem("quotationItems", JSON.stringify(Array.isArray(data.quotations.quotationItems) ? data.quotations.quotationItems : []));
+            localStorage.setItem("quotationCharges", JSON.stringify(Array.isArray(data.quotations.quotationCharges) ? data.quotations.quotationCharges : []));
+            localStorage.setItem("quotationRegistry", JSON.stringify(Array.isArray(data.quotations.quotationRegistry) ? data.quotations.quotationRegistry : []));
+            localStorage.setItem("quotationMeta", JSON.stringify(data.quotations.quotationMeta || null));
+            localStorage.setItem("activeQuotationId", JSON.stringify(data.quotations.activeQuotationId || null));
+            localStorage.setItem("documentRelations", JSON.stringify(Array.isArray(data.quotations.documentRelations) ? data.quotations.documentRelations : []));
+            localStorage.setItem("noSeriesConfig", JSON.stringify(data.quotations.noSeriesConfig || null));
+        }
+
+        if (data.settings) {
+            if (data.settings.currencyCode) localStorage.setItem("currencyCode", data.settings.currencyCode);
+            if (data.settings.appearanceMode && typeof setAppearanceMode === "function") setAppearanceMode(data.settings.appearanceMode);
+            if (data.settings.accentColor && typeof changeTheme === "function") changeTheme(data.settings.accentColor);
+            else if (data.settings.theme && typeof changeTheme === "function") changeTheme(data.settings.theme);
+            if (typeof saveAutoBackupSettings === "function" &&
+                (Object.prototype.hasOwnProperty.call(data.settings, "autoBackupEnabled") || data.settings.autoBackupFrequency || data.settings.autoBackupTarget)) {
+                saveAutoBackupSettings({
+                    enabled: !!data.settings.autoBackupEnabled,
+                    frequency: data.settings.autoBackupFrequency || "weekly",
+                    target: data.settings.autoBackupTarget || "local_download"
+                });
+            } else if (typeof saveAutoBackupSettings === "function" &&
+                (Object.prototype.hasOwnProperty.call(data.settings, "autoBackup") || data.settings.backupFrequency)) {
+                saveAutoBackupSettings({
+                    enabled: !!data.settings.autoBackup,
+                    frequency: data.settings.backupFrequency || "weekly",
+                    target: "local_download"
+                });
+            }
+        }
+
+        runIntegrityRepairSilently();
+        setImportStage("ledger-rebuild");
+        if (typeof loadTheme === "function") loadTheme();
+        if (typeof syncThemeSelectors === "function") syncThemeSelectors();
+        if (typeof refreshSettingsPanels === "function") refreshSettingsPanels();
+        if (typeof loadHistory === "function") loadHistory();
+        if (typeof loadBudgetOptions === "function") loadBudgetOptions();
+        if (typeof loadDashboard === "function") loadDashboard();
+        if (typeof loadGraph === "function") loadGraph();
+        if (typeof renderBudgetEntries === "function") renderBudgetEntries();
+        if (typeof renderIncomeList === "function") renderIncomeList();
+        if (typeof loadSavings === "function") loadSavings();
+
+        renderImportValidationReport({
+            version: validation.version,
+            found,
+            imported: {
+                expenses: Array.isArray(data.expenses) ? data.expenses.length : 0,
+                savings: Array.isArray(data.savings) ? data.savings.length : 0,
+                budgets: Array.isArray(data.budgets) ? data.budgets.length : 0,
+                budgetPeriods: Array.isArray(data.budgetPeriods) ? data.budgetPeriods.length : 0
+            },
+            warnings: validation.warnings.concat(normalizationResult.report.warnings || []),
+            normalization: normalizationResult.report,
+            errors: []
+        });
+
+        showToast("Import successful ✅");
+        setImportStage("completed");
+        if (Array.isArray(data.__expectedAssertions) && data.__expectedAssertions.length && typeof runTestAssertions === "function") {
+            const results = runTestAssertions(data.__expectedAssertions);
+            if (typeof renderTestAssertionReport === "function") renderTestAssertionReport(results);
+            return;
+        }
+        if (importText) importText.value = "";
+        if (typeof closeImportModal === "function") closeImportModal();
+    } catch (err) {
+        console.error(err);
+        renderImportValidationReport({
+            version: validation.version,
+            found,
+            imported: { expenses: 0, savings: 0, budgets: 0, budgetPeriods: 0 },
+            warnings: validation.warnings.concat(normalizationResult.report.warnings || []),
+            normalization: normalizationResult.report,
+            errors: ["Import Validation Failed: invalid transactions or data mapping"]
+        });
+        showToast("Import Validation Failed", "error");
+    }
+}
+function importData() {
+    setImportStage("validation-input");
+
+    const importText = document.getElementById("importText");
+    const source = importText?.value || window.__pendingImportText || "";
+
+    if (!source) {
+        showToast("Paste or choose a file");
+        return;
+    }
+
+    ImportEngine.importPayload(source, {
+        fileName: window.__lastImportFileMeta?.fileName || "manual_text",
+        updateProgress: data => setImportStage("import-progress", data),
+        info: (message, details = {}) => console.info(message, details),
+        warning: (message, details = {}) => console.warn(message, details),
+        error: (message, details = {}) => console.error(message, details)
+    }).then(result => {
+        setImportStage("ledger-rebuild");
+        loadTheme();
+        syncThemeSelectors();
+        refreshSettingsPanels();
+        loadHistory();
+        loadBudgetOptions();
+        loadDashboard();
+        loadGraph();
+        if (typeof renderBudgetEntries === "function") renderBudgetEntries();
+        if (typeof renderIncomeList === "function") renderIncomeList();
+        if (typeof loadSavings === "function") loadSavings();
+
+        renderImportValidationReport(result);
+        showToast("Import successful");
+        setImportStage("completed");
+        if (importText) importText.value = "";
+        window.__pendingImportText = null;
+        window.__pendingImportFile = null;
+        closeImportModal();
+    }).catch(err => {
+        console.error("Import Engine failed.", err);
+        renderImportValidationReport({
+            version: "unknown",
+            found: {},
+            imported: {},
+            warnings: [],
+            normalization: {},
+            errors: [err?.message || "Import failed"]
+        });
+        showToast("Import Validation Failed", "error");
+    });
+}
+
 // Fixes old data structure to new system
 function runMigration() {
     let budgets = getBudgets();
@@ -9517,8 +9856,8 @@ function loadBudgetScreen() {
 function renderBudgetEntries() {
 
     let budgetsAll = JSON.parse(localStorage.getItem("budgets")) || [];
-    let budgets = budgetsAll;
-    let expenses = getExpenses();
+    let budgets = budgetsAll.filter(isValidBudgetEntry);
+    let expenses = getActiveExpenseEntries();
     let savings = JSON.parse(localStorage.getItem("savingsTransactions")) || [];
 
     let container = document.getElementById("budgetEntries");
@@ -9701,7 +10040,7 @@ function normalizeFundingEntryForBudgetHistory(s) {
 }
 function openBudgetDetails(group) {
     let budgets = getBudgets();
-    let expenses = getExpenses();
+    let expenses = getActiveExpenseEntries();
     let savings = JSON.parse(localStorage.getItem("savingsTransactions")) || [];
 
     let container = document.getElementById("budgetDetailsContainer");
@@ -10154,9 +10493,46 @@ function getDailyLimit() {
 // }
 
 let chart;
+function getConfiguredDailyBudget() {
+    try {
+        const config = JSON.parse(localStorage.getItem("dailyBudgetLedgerConfig") || "null");
+        const value = Number(config && config.dailyBudget);
+        return Number.isFinite(value) && value >= 0 ? value : 0;
+    } catch (_err) {
+        return 0;
+    }
+}
+
+function buildDailyBudgetExpenseGraphRows(expenses, type, customRange = null) {
+    const scoped = filterDataByType(type, getActiveExpenseEntries(expenses), customRange);
+    const totals = new Map();
+    scoped.forEach(entry => {
+        const date = new Date(entry.date || entry.createdAt);
+        if (Number.isNaN(date.getTime())) return;
+        const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+        if (Number(entry.amount) < 0) {
+            totals.set(key, (totals.get(key) || 0) + Math.abs(Number(entry.amount)));
+        }
+    });
+
+    const dailyBudget = getConfiguredDailyBudget();
+    return [...totals.keys()].sort().map(key => {
+        const expense = totals.get(key) || 0;
+        return {
+            key,
+            label: new Date(`${key}T12:00:00`).toLocaleDateString("en-IN", { day: "2-digit", month: "short" }),
+            exp: expense,
+            inc: 0,
+            budget: dailyBudget,
+            remaining: Math.max(dailyBudget - expense, 0),
+            deficit: Math.max(expense - dailyBudget, 0)
+        };
+    });
+}
+
 function loadGraph(type = "day", data = null, customRange = null) {
-    const expenses = applyActiveExpenseQuery(data || getExpenses());
-    const dataset = groupData(expenses, type, null, customRange);
+    const expenses = applyActiveExpenseQuery(getActiveExpenseEntries(data || getExpenses()));
+    const dataset = buildDailyBudgetExpenseGraphRows(expenses, type, customRange);
     const filtered = filterDataByType(type, expenses, customRange);
 
     updateGraphSummary(type, dataset, filtered, customRange);
@@ -10292,10 +10668,8 @@ function prepareChartData(dataset) {
     return {
         labels: dataset.map(d => d.label),
         expense: dataset.map(d => d.exp),
-        income: dataset.map(d => d.inc),
-
-        // 🔥 keep total (for tooltip only)
-        total: dataset.map(d => d.inc - d.exp)
+        remaining: dataset.map(d => d.remaining),
+        deficit: dataset.map(d => d.deficit)
     };
 }
 function createDatasets(data, dataset) {
@@ -10323,39 +10697,6 @@ function createDatasets(data, dataset) {
 
     const themeTokens = getChartThemeTokens();
 
-    function getFixedDailyBudget() {
-
-        let budgets = getBudgets();
-
-        // 🔥 periodKey based filtering
-        let activeBudgets = filterBudgetsByActivePeriod(budgets);
-
-        let total = activeBudgets.reduce((sum, b) => sum + (b.totalAllocated || 0), 0);
-
-        // 🔥 get period days
-        let period = getActiveBudgetPeriod();
-
-        let totalDays = 30;
-
-        if (period) {
-
-            let s = new Date(period.start);
-            let e = period.end ? new Date(period.end) : new Date();
-
-            totalDays = Math.max(
-                1,
-                Math.floor((e - s) / (1000 * 60 * 60 * 24)) + 1
-            );
-
-            // ✅ ADD EXTRA DAYS
-            totalDays += (period.extraDays || 0);
-        }
-
-        return Math.floor(total / totalDays);
-    }
-
-    const budgetData = dataset.map(d => d.budget || 0);
-
     return [
         {
             label: "Expense",
@@ -10363,19 +10704,9 @@ function createDatasets(data, dataset) {
             backgroundColor: themeTokens.expense
         },
         {
-            label: "Income",
-            data: data.income,
+            label: "Remaining Budget",
+            data: data.remaining,
             backgroundColor: themeTokens.income
-        },
-        // ❌ REMOVED TOTAL LINE
-        {
-            label: "Budget",
-            data: budgetData,
-            type: "line",
-            borderColor: themeTokens.budgetLine,
-            pointBackgroundColor: themeTokens.budgetLine,
-            pointBorderColor: themeTokens.budgetLine,
-            borderDash: [5, 5]
         }
     ];
 }
@@ -10425,18 +10756,15 @@ function getChartOptions(type, expenses, dataset, customRange) {
                         let point = dataset[index] || {};
 
                         let expense = point.exp || 0;
-                        let income = point.inc || 0;
                         let budget = point.budget || 0;
-                        let total = income - expense;
-
-                        let netColor = total >= 0 ? "" : "";
+                        let remaining = point.remaining || 0;
+                        let deficit = point.deficit || 0;
 
                         return [
                             `Expense  : ${formatCurrency(expense)}`,
-                            `Income   : ${formatCurrency(income)}`,
+                            `Remaining: ${formatCurrency(remaining)}`,
                             `Budget   : ${formatCurrency(budget)}`,
-                            `-----------------------`,
-                            `Net      : ${netColor} ${formatCurrency(total)}`
+                            ...(deficit > 0 ? [`Over Budget: ${formatCurrency(deficit)}`] : [])
                         ];
                     }
                 }
@@ -11248,7 +11576,6 @@ function handleFileImport(event) {
             decodeAttempts: decodeResult.attempts
         };
 
-        // Requested stage diagnostics after FileReader load.
         console.log(file.name);
         console.log(Number(file.size || 0));
         console.log(text.length);
@@ -11261,14 +11588,6 @@ function handleFileImport(event) {
             fileSize: Number(file.size || 0)
         };
 
-        console.info("Import file diagnostics", {
-            fileName: file.name,
-            fileSize: Number(file.size || 0),
-            typeofContent: typeof normalizedText,
-            contentLength: normalizedText.length,
-            normalization: window.__lastImportNormalizationMeta
-        });
-
         setImportStage("file-read", {
             fileName: file.name,
             fileSize: Number(file.size || 0),
@@ -11276,126 +11595,12 @@ function handleFileImport(event) {
         });
 
         let importText = document.getElementById("importText");
-        if (importText) {
-            importText.value = normalizedText;
-        }
+        window.__pendingImportText = normalizedText;
+        if (importText) importText.value = normalizedText;
     };
 
     reader.readAsArrayBuffer(file);
 }
-
-
-function openConfirm() {
-    document.getElementById("confirmModal").style.display = "flex";
-}
-
-function closeConfirm() {
-    document.getElementById("confirmModal").style.display = "none";
-}
-
-function confirmReset() {
-    localStorage.clear();
-    location.reload();
-}
-
-function setColorByCode(hex) {
-    let picker = document.getElementById("colorPicker");
-
-    if (!hex.startsWith("#")) {
-        hex = "#" + hex;
-    }
-
-    picker.value = hex;
-
-    // Apply to your app
-    applyCustomColor(hex);
-}
-function applyHex() {
-    let hex = document.getElementById("hexInput").value;
-
-    if (!hex) return;
-
-    if (!hex.startsWith("#")) {
-        hex = "#" + hex;
-    }
-
-    document.getElementById("colorPicker").value = hex;
-    applyCustomColor(hex);
-}
-
-function updateProgressBar() {
-
-    let budgets = getBudgets();
-    let expenses = getExpenses();
-
-    let filteredBudgets = filterBudgetsByActivePeriod(budgets);
-
-    let totalBudget = filteredBudgets
-        .reduce((sum, b) => sum + (b.totalAllocated || 0), 0);
-
-    let filtered = filterByActivePeriod(expenses);
-
-    let totalSpent = filteredBudgets.reduce((sum, b) => {
-        return sum + getNetSpentForBudget(b.budgetId, filtered);
-    }, 0);
-
-    totalSpent = Math.max(0, totalSpent);
-
-    let percent = totalBudget
-        ? (totalSpent / totalBudget) * 100
-        : 0;
-
-    percent = Math.min(percent, 100);
-
-    let fill = document.getElementById("progressFill");
-    let text = document.getElementById("progressText");
-
-    if (fill) fill.style.width = percent + "%";
-    if (text) text.innerText = `${percent.toFixed(1)}% used`;
-}
-// =====================================
-// Author: Gopichanime
-// Created: 2026
-// Description: Money Tracker Core Logic
-// =====================================
-/*
-   ____   ___  ____  ___ ____ _   _    _    _   _ ___ __  __ _____ 
-  / ___| / _ \|  _ \|_ _/ ___| | | |  / \  | \ | |_ _|  \/  | ____|
- | |  _ | | | | |_) || | |   | |_| | / _ \ |  \| || || |\/| |  _|  
- | |_| || |_| |  __/ | | |___|  _  |/ ___ \| |\  || || |  | | |___ 
-  \____| \___/|_|   |___\____|_| |_/_/   \_\_| \_|___|_|  |_|_____|
- 
-   Signed by: GOPICHANIME 🐉
-*/
-
-function injectGlobalFooter() {
-    if (document.getElementById("appSignatureFooter")) return;
-
-    const year = new Date().getFullYear(); // ✅ dynamic year
-
-    const footer = document.createElement("div");
-    footer.id = "appSignatureFooter";
-    footer.className = "app-signature";
-
-    footer.innerHTML = `
-        <div class="app-signature-title">Developed by <strong>Gopichaninme</strong></div>
-        <small class="app-signature-meta">© ${year} All rights reserved</small>
-    `;
-
-    document.querySelector(".app")?.appendChild(footer);
-}
-
-
-// // =========================
-// // 🎨 TOAST (fallback)
-// // =========================
-// function toast(msg) {
-//     const div = document.createElement("div");
-//     div.innerText = msg;
-//     div.style = `
-//         position:fixed;
-//         bottom:20px;
-//         left:50%;
 //         transform:translateX(-50%);
 //         background:#333;
 //         color:#fff;
@@ -11503,6 +11708,7 @@ function rerenderExpenseWithQueryState() {
     // narrowing when filters changed, leading to exported PDFs or views
     // missing matching records.
     loadHistory(getExpenses());
+    loadGraph("month", getExpenses());
 }
 
 function countExpenseFilterConditions(filters) {
@@ -12371,6 +12577,8 @@ function isWithinBudgetPeriod(dateStr) {
 
 function filterByActivePeriod(expenses) {
 
+    expenses = getActiveExpenseEntries(expenses);
+
     let period =
         getActiveBudgetPeriod();
 
@@ -12400,6 +12608,7 @@ function filterByActivePeriod(expenses) {
     });
 }
 function filterBudgetsByActivePeriod(budgets) {
+    budgets = (Array.isArray(budgets) ? budgets : []).filter(isValidBudgetEntry);
     let periodKey = typeof getActivePeriodKey === "function"
         ? getActivePeriodKey()
         : null;
@@ -12409,7 +12618,6 @@ function filterBudgetsByActivePeriod(budgets) {
         return budgets.filter(b => b.periodKey === periodKey);
     }
 
-    // Fallback → month
     let now = new Date();
 
     let currentMonth = [now.getFullYear(), String(now.getMonth() + 1).padStart(2, "0")].join("-");
@@ -12668,7 +12876,7 @@ function openSplitModal(split) {
             <p>This expense will be allocated as:</p>
             <ul>
                 ${split.map(s => `
-                    <li>₹${s.amount} from ${s.budget.entity || "Budget"}</li>
+                    <li>${formatCurrency(s.amount)} from ${s.budget.entity || "Budget"}</li>
                 `).join("")}
             </ul>
         `;

@@ -12,12 +12,13 @@
   <!-- Styles -->
   <link rel="stylesheet" href="assets/styles/style.css">
   <link rel="stylesheet" href="assets/styles/daily-budget-ledger.css">
+  <link rel="stylesheet" href="assets/styles/theme-consistency.css">
 
   <!-- Libraries -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 </head>
 
@@ -255,6 +256,9 @@
 
             <div id="expenseQueryChips" class="query-chip-row"></div>
 
+            <div id="expenseArchiveFilterBar" class="tab-bar" aria-label="Expense archive view"></div>
+            <p id="expenseArchiveSummary" class="source-summary" aria-live="polite"></p>
+
             <div id="historyList" class="history-list-premium"></div>
           </div>
         </div>
@@ -265,24 +269,23 @@
             <span id="ledgerEntryCount" class="ledger-pill">0 entries</span>
           </div>
 
-          <label for="dailyBudgetInput">Fixed Daily Budget</label>
-          <input id="dailyBudgetInput" type="number" min="0" step="1" placeholder="100" />
-
-          <label for="weekStartDaySelect">Week Starts On</label>
-          <select id="weekStartDaySelect">
-            <option value="0">Sunday</option>
-            <option value="1">Monday</option>
-            <option value="2">Tuesday</option>
-            <option value="3">Wednesday</option>
-            <option value="4">Thursday</option>
-            <option value="5">Friday</option>
-            <option value="6">Saturday</option>
-          </select>
-
-          <button id="saveDailyBudget" class="primary" type="button">Save Budget</button>
-
           <div class="section-title-row" style="margin-top: var(--space-md);">
             <h3>Ledger View</h3>
+            <div class="ledger-tools">
+              <button id="dailyLedgerFilterButton" class="secondary" type="button">Filter</button>
+              <details class="secondary-accordion ledger-download-menu">
+                <summary>Download</summary>
+                <div class="ledger-download-options">
+                  <button id="downloadDailyLedgerPdf" class="secondary" type="button">PDF</button>
+                  <button id="downloadDailyLedgerExcel" class="secondary" type="button">Excel</button>
+                </div>
+              </details>
+              <label class="sr-only" for="dailyLedgerSort">Sort ledger</label>
+              <select id="dailyLedgerSort" aria-label="Sort ledger">
+                <option value="desc">Newest first</option>
+                <option value="asc">Oldest first</option>
+              </select>
+            </div>
           </div>
           <div class="ledger-table-container">
             <table class="ledger-table">
@@ -302,6 +305,12 @@
         </div>
       </div>
     </section>
+    <div id="dailyLedgerFilterModal" class="modal hidden" onclick="closeLedgerFilterModal()">
+      <div class="modal-content" onclick="event.stopPropagation()">
+        <h3>Daily Ledger Filter</h3>
+        <div id="dailyLedgerFilterBuilderRoot"></div>
+      </div>
+    </div>
     <!-- ================= BUDGET ================= -->
     <section id="budget" class="screen">
       <div class="card">
@@ -314,6 +323,8 @@
             onclick="activateTab('budgetWalletTabs','topup', prefillTopupForm)">Top-Up</button>
           <button type="button" class="tab-bar-btn" data-tab-key="apply"
             onclick="activateTab('budgetWalletTabs','apply', renderApplySourceTab)">Apply Source</button>
+          <button type="button" class="tab-bar-btn" data-tab-key="dailyBudget"
+            onclick="activateTab('budgetWalletTabs','dailyBudget', renderDailyBudgetLedger)">Daily Budget</button>
         </div>
 
         <div class="tab-panel is-active" data-tab-group="budgetWalletTabs" data-tab-key="overview">
@@ -323,23 +334,23 @@
           <div class="entry-summary-grid">
             <div>
               <small>Assigned</small>
-              <strong id="walletAssignedTotal">₹0</strong>
+              <strong id="walletAssignedTotal">0</strong>
             </div>
             <div>
               <small>Unassigned</small>
-              <strong id="walletUnassignedTotal">₹0</strong>
+              <strong id="walletUnassignedTotal">0</strong>
             </div>
             <div>
               <small>Spent</small>
-              <strong id="walletSpentTotal">₹0</strong>
+              <strong id="walletSpentTotal">0</strong>
             </div>
             <div>
               <small>Remaining</small>
-              <strong id="walletRemainingTotal">₹0</strong>
+              <strong id="walletRemainingTotal">0</strong>
             </div>
             <div>
               <small>Adjustments</small>
-              <strong id="walletAdjustmentTotal">₹0</strong>
+              <strong id="walletAdjustmentTotal">0</strong>
             </div>
           </div>
 
@@ -349,16 +360,40 @@
           <div class="budget-insights">
             <div class="insight-card success">
               <small>Daily Remaining</small>
-              <h4 id="savedToday">₹0</h4>
+              <h4 id="savedToday">0</h4>
             </div>
             <div class="insight-card info">
               <small>Weekly Remaining</small>
-              <h4 id="savedWeek">₹0</h4>
+              <h4 id="savedWeek">0</h4>
             </div>
             <div class="insight-card premium">
               <small>Monthly Remaining</small>
-              <h4 id="savedPeriod">₹0</h4>
+              <h4 id="savedPeriod">0</h4>
             </div>
+          </div>
+        </div>
+
+        <div class="tab-panel" data-tab-group="budgetWalletTabs" data-tab-key="dailyBudget">
+          <div class="ledger-settings-panel">
+            <div class="section-title-row">
+              <h3>Daily Budget Settings</h3>
+              <span class="muted-note">Applies to every ledger day</span>
+            </div>
+            <div class="ledger-budget-control">
+              <label for="dailyBudgetInput">Fixed Daily Budget</label>
+              <input id="dailyBudgetInput" type="number" min="0" step="1" placeholder="100" />
+              <button id="saveDailyBudget" class="primary" type="button">Save Budget</button>
+            </div>
+            <label for="weekStartDaySelect">Week Starts On</label>
+            <select id="weekStartDaySelect">
+              <option value="0">Sunday</option>
+              <option value="1">Monday</option>
+              <option value="2">Tuesday</option>
+              <option value="3">Wednesday</option>
+              <option value="4">Thursday</option>
+              <option value="5">Friday</option>
+              <option value="6">Saturday</option>
+            </select>
           </div>
         </div>
 
@@ -683,17 +718,9 @@
   <script src="assets/scripts/searchService.js"></script>
   <script src="assets/scripts/filterBuilder.js"></script>
 
-  <!-- Job Queue -->
-  <script src="assets/scripts/jobStorage.js"></script>
-  <script src="assets/scripts/jobLogger.js"></script>
-  <script src="assets/scripts/jobQueue.js"></script>
-  <script src="assets/scripts/importEngine.js"></script>
-
   <!-- Main Application -->
   <script src="assets/scripts/script.js"></script>
-
-  <!-- Job Runner -->
-  <script src="assets/scripts/jobRunner.js"></script>
+  <script src="assets/scripts/importEngine.js"></script>
 
   <script src="assets/scripts/dailyBudgetLedger.js"></script>
   <script src="assets/scripts/applyTheme.js"></script>

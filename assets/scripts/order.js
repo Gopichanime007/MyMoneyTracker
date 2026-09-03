@@ -537,7 +537,7 @@ function renderOrder() {
           const mode = String(charge.mode || "fixed");
           const direction = getOrderChargeDirection(charge);
           const value = Number(charge.value || 0);
-          const modeLabel = mode === "percent" ? "%" : (typeof getCurrency === "function" ? getCurrency() : "₹");
+          const modeLabel = mode === "percent" ? "%" : (typeof getCurrency === "function" ? getCurrency() : (typeof currencySymbols !== "undefined" && typeof getCurrencyCode === "function" ? (currencySymbols[getCurrencyCode()] || getCurrencyCode()) : "INR"));
           const amount = Number(getOrderChargeAmount(charge, Number(hydrated.subtotal || 0), items) || 0);
           const amountLabel = direction === "deduct" ? `-${formatCurrency(amount)}` : `+${formatCurrency(amount)}`;
           return `
@@ -1061,6 +1061,74 @@ async function completePurchase() {
   renderOrder();
 }
 
+function createOrderFinancialEntries(order, details) {
+  const items = Array.isArray(order && order.items) ? order.items : [];
+  const subtotal = Number(order && order.subtotal || 0);
+  const total = Number(order && order.total || 0);
+  const expenses = [];
+  const savings = [];
+
+  const addEntry = (amount, item, purpose, type = "expense") => {
+    const value = Number(amount || 0);
+    if (!value) return;
+
+    const expense = {
+      id: createOrderId(),
+      amount: type === "refund" ? value : -value,
+      type,
+      category: item && item.category ? item.category : "Orders",
+      purpose,
+      sourceId: details.sourceId,
+      budgetId: details.sourceType === "budget" ? details.sourceId : null,
+      sourceName: details.sourceName,
+      sourceType: details.sourceType,
+      paymentType: details.paymentType,
+      date: details.date,
+      linkedOrderId: order.id,
+      orderItemId: item && item.id ? item.id : null
+    };
+    expenses.push(expense);
+
+    if (details.sourceType === "savings") {
+      savings.push({
+        id: createOrderId(),
+        type,
+        amount: type === "refund" ? value : -value,
+        note: item && item.name ? item.name : details.sourceName,
+        purpose,
+        sourceId: details.sourceId,
+        paymentType: details.paymentType,
+        date: details.date,
+        linkedOrderId: order.id,
+        orderItemId: item && item.id ? item.id : null
+      });
+    }
+  };
+
+  const validItems = items.filter(item => Number(item && item.total || 0) > 0);
+  if (validItems.length) {
+    validItems.forEach(item => {
+      const itemTotal = Number(item.total || 0);
+      const quantity = Number(item.qty || 0);
+      const quantityLabel = quantity > 1 ? ` (x${quantity})` : "";
+      addEntry(itemTotal, item, `${item.name || "Order Item"}${quantityLabel}`);
+    });
+
+    // Keep delivery, GST, discounts, and other order-level adjustments traceable
+    // without changing the item prices or double-counting the order total.
+    const orderAdjustment = Number((total - subtotal).toFixed(2));
+    if (orderAdjustment > 0) {
+      addEntry(orderAdjustment, null, "Order Charges");
+    } else if (orderAdjustment < 0) {
+      addEntry(Math.abs(orderAdjustment), null, "Order Discount", "refund");
+    }
+  } else {
+    addEntry(Math.abs(total), null, "Order Purchase");
+  }
+
+  return { expenses, savings };
+}
+
 async function advanceOrderStatus(nextStatus) {
   const order = ensureActiveOrder();
   if (!order) {
@@ -1118,42 +1186,28 @@ async function advanceOrderStatus(nextStatus) {
       return;
     }
 
-    const expenses = JSON.parse(localStorage.getItem("expenses") || "[]");
-    const purpose = (row.items || []).map(i => i.name).join(", ") || "Order Purchase";
-    const expenseEntryId = createOrderId();
-
-    expenses.push({
-      id: expenseEntryId,
-      amount: -Math.abs(total),
-      type: "expense",
-      category: "Orders",
-      purpose: "Order Purchase: " + purpose,
+    const postedEntries = createOrderFinancialEntries(row, {
       sourceId,
       sourceName: row.sourceName || summary.name,
       sourceType,
       paymentType,
-      date: now,
-      linkedOrderId: row.id
+      date: now
     });
-    localStorage.setItem("expenses", JSON.stringify(expenses));
+    const expenses = JSON.parse(localStorage.getItem("expenses") || "[]");
+    expenses.push(...postedEntries.expenses);
+    if (typeof saveExpenses === "function") saveExpenses(expenses);
+    else localStorage.setItem("expenses", JSON.stringify(expenses));
 
     if (sourceType === "savings") {
       const savings = JSON.parse(localStorage.getItem("savingsTransactions") || "[]");
-      savings.push({
-        id: createOrderId(),
-        type: "expense",
-        amount: -Math.abs(total),
-        note: row.sourceName || summary.name,
-        sourceId,
-        paymentType,
-        date: now,
-        linkedOrderId: row.id
-      });
-      localStorage.setItem("savingsTransactions", JSON.stringify(savings));
+      savings.push(...postedEntries.savings);
+      if (typeof saveSavings === "function") saveSavings(savings);
+      else localStorage.setItem("savingsTransactions", JSON.stringify(savings));
     }
 
     row.financialPosted = true;
-    row.financialEntryId = expenseEntryId;
+    row.financialEntryId = postedEntries.expenses[0] ? postedEntries.expenses[0].id : null;
+    row.financialEntryIds = postedEntries.expenses.map(entry => entry.id);
     if (!Array.isArray(row.statusHistory)) row.statusHistory = [];
     row.statusHistory.push({
       at: now,
