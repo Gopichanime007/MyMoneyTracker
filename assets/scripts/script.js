@@ -2300,6 +2300,13 @@ function loadHistory(list = getExpenses()) {
                 return `<button type="button" class="tab-bar-btn ${expenseArchiveFilter === key ? "is-active" : ""}" onclick="setExpenseArchiveFilter('${key}')">${label}</button>`;
             }).join("");
         }
+        let archiveSummary = document.getElementById("expenseArchiveSummary");
+        if (archiveSummary) {
+            let allEntries = Array.isArray(list) ? list : [];
+            let archivedCount = allEntries.filter(isArchivedExpense).length;
+            let activeCount = allEntries.filter(isValidActiveExpense).length;
+            archiveSummary.textContent = `${activeCount} active · ${archivedCount} archived`;
+        }
 
         container.innerHTML = "";
 
