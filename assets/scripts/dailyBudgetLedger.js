@@ -194,6 +194,12 @@
     renderDailyBudgetLedger();
   }
 
+  function closeOpenLedgerModal(event) {
+    if (event.key !== 'Escape') return;
+    closeLedgerFilterModal();
+    closeLedgerSortModal();
+  }
+
   function renderLedgerQueryChips() {
     const host = document.getElementById('dailyLedgerQueryChips');
     if (!host) return;
@@ -668,11 +674,15 @@
   root.handleBudgetSave = handleBudgetSave;
   root.openLedgerFilterModal = openLedgerFilterModal;
   root.closeLedgerFilterModal = closeLedgerFilterModal;
+  root.closeLedgerSortModal = closeLedgerSortModal;
+  root.applyLedgerSortModal = applyLedgerSortModal;
+  root.clearLedgerSortModal = clearLedgerSortModal;
   root.handleLedgerSortChange = handleLedgerSortChange;
   root.downloadDailyBudgetLedgerPdf = downloadDailyBudgetLedgerPdf;
   root.downloadDailyBudgetLedgerExcel = downloadDailyBudgetLedgerExcel;
 
   if (typeof document !== 'undefined') {
+    document.addEventListener('keydown', closeOpenLedgerModal);
     document.addEventListener('DOMContentLoaded', initDailyBudgetLedgerPage);
   }
 

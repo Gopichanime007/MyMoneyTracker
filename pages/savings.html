@@ -382,8 +382,8 @@
   </div>
 
   <!-- MODAL -->
-  <div id="savingsDateModal" class="modal">
-    <div class="modal-content">
+  <div id="savingsDateModal" class="modal hidden" onclick="closeSavingsModal()">
+    <div class="modal-content" onclick="event.stopPropagation()">
       <h3>Select Period</h3>
 
       <input type="date" id="sFromDate">

@@ -2050,7 +2050,10 @@ function handleSavingsFilter(type) {
     // =========================
     if (type === "period") {
         let modal = document.getElementById("savingsDateModal");
-        if (modal) modal.style.display = "flex";
+        if (modal) {
+            modal.classList.remove("hidden");
+            modal.style.display = "flex";
+        }
         return; // ⛔ STOP execution
     }
 
@@ -2540,8 +2543,15 @@ function renderIncomeList() {
 // Closes the savings date filter modal
 function closeSavingsModal() {
     let modal = document.getElementById("savingsDateModal");
-    if (modal) modal.style.display = "none";
+    if (modal) {
+        modal.classList.add("hidden");
+        modal.style.display = "none";
+    }
 }
+
+document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") closeSavingsModal();
+});
 
 // Controls UI fields based on selected type (income / transfer / budget)
 function handleSavingsTypeChange() {
