@@ -12,6 +12,7 @@
   <!-- Styles -->
   <link rel="stylesheet" href="assets/styles/style.css">
   <link rel="stylesheet" href="assets/styles/daily-budget-ledger.css">
+  <link rel="stylesheet" href="assets/styles/theme-consistency.css">
 
   <!-- Libraries -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
@@ -255,6 +256,8 @@
 
             <div id="expenseQueryChips" class="query-chip-row"></div>
 
+            <div id="expenseArchiveFilterBar" class="tab-bar" aria-label="Expense archive view"></div>
+
             <div id="historyList" class="history-list-premium"></div>
           </div>
         </div>
@@ -330,23 +333,23 @@
           <div class="entry-summary-grid">
             <div>
               <small>Assigned</small>
-              <strong id="walletAssignedTotal">₹0</strong>
+              <strong id="walletAssignedTotal">0</strong>
             </div>
             <div>
               <small>Unassigned</small>
-              <strong id="walletUnassignedTotal">₹0</strong>
+              <strong id="walletUnassignedTotal">0</strong>
             </div>
             <div>
               <small>Spent</small>
-              <strong id="walletSpentTotal">₹0</strong>
+              <strong id="walletSpentTotal">0</strong>
             </div>
             <div>
               <small>Remaining</small>
-              <strong id="walletRemainingTotal">₹0</strong>
+              <strong id="walletRemainingTotal">0</strong>
             </div>
             <div>
               <small>Adjustments</small>
-              <strong id="walletAdjustmentTotal">₹0</strong>
+              <strong id="walletAdjustmentTotal">0</strong>
             </div>
           </div>
 
@@ -356,15 +359,15 @@
           <div class="budget-insights">
             <div class="insight-card success">
               <small>Daily Remaining</small>
-              <h4 id="savedToday">₹0</h4>
+              <h4 id="savedToday">0</h4>
             </div>
             <div class="insight-card info">
               <small>Weekly Remaining</small>
-              <h4 id="savedWeek">₹0</h4>
+              <h4 id="savedWeek">0</h4>
             </div>
             <div class="insight-card premium">
               <small>Monthly Remaining</small>
-              <h4 id="savedPeriod">₹0</h4>
+              <h4 id="savedPeriod">0</h4>
             </div>
           </div>
         </div>

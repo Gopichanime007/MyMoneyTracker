@@ -1,5 +1,6 @@
 const isSavingsPage = (typeof window !== 'undefined' && window.location && typeof window.location.pathname === 'string' && window.location.pathname.includes("savings")) || false;
 let currentFilteredExpenses = [];
+let expenseArchiveFilter = "active";
 let expenseBudgetSelectionState = {
     userSelectedBudget: false,
     lastSuggestedBudgetId: ""
@@ -159,6 +160,18 @@ function getActiveExpenseEntries(entries = getExpenses()) {
     return (Array.isArray(entries) ? entries : []).filter(isValidActiveExpense);
 }
 
+function getExpenseArchiveEntries(entries = getExpenses(), filter = expenseArchiveFilter) {
+    let list = Array.isArray(entries) ? entries : [];
+    if (filter === "archived") return list.filter(isArchivedExpense);
+    if (filter === "all") return list.filter(entry => isValidActiveExpense(entry) || isArchivedExpense(entry));
+    return getActiveExpenseEntries(list);
+}
+
+function setExpenseArchiveFilter(filter) {
+    expenseArchiveFilter = ["active", "archived", "all"].includes(filter) ? filter : "active";
+    loadHistory(getExpenses());
+}
+
 function archiveExpense(id) {
     const expenses = getExpenses();
     const target = expenses.find(entry => String(entry && entry.id) === String(id));
@@ -189,6 +202,14 @@ function archiveExpenseUI(id) {
     loadDashboard();
     loadGraph();
     showToast("Expense archived");
+}
+
+function unarchiveExpenseUI(id) {
+    if (!unarchiveExpense(id)) return;
+    loadHistory();
+    loadDashboard();
+    loadGraph();
+    showToast("Expense restored");
 }
 
 function calculateSpentForPeriod(start, end) {
@@ -2002,7 +2023,7 @@ function getRealSpentForBudget(budgetId, expensesList) {
 // Net Adjustment total for a Budget Wallet, signed — negative means
 // corrected downward, positive means corrected upward.
 function getNetAdjustmentForBudget(budgetId, expensesList) {
-    let expenses = Array.isArray(expensesList) ? expensesList : getExpenses();
+    let expenses = getActiveExpenseEntries(Array.isArray(expensesList) ? expensesList : getExpenses());
     let net = 0;
 
     for (let e of expenses) {
@@ -2257,7 +2278,7 @@ if (!window.AppDialog) {
 function loadHistory(list = getExpenses()) {
 
     try {
-        let sourceList = getActiveExpenseEntries(list);
+        let sourceList = getExpenseArchiveEntries(list);
         let queryResult = (window.SearchService && typeof window.SearchService.applyModuleSearch === "function")
             ? window.SearchService.applyModuleSearch("expenses", sourceList)
             : { results: sourceList };
@@ -2271,6 +2292,14 @@ function loadHistory(list = getExpenses()) {
 
         let container = document.getElementById("historyList");
         if (!container) return;
+
+        let archiveBar = document.getElementById("expenseArchiveFilterBar");
+        if (archiveBar) {
+            archiveBar.innerHTML = ["active", "archived", "all"].map(key => {
+                let label = key[0].toUpperCase() + key.slice(1);
+                return `<button type="button" class="tab-bar-btn ${expenseArchiveFilter === key ? "is-active" : ""}" onclick="setExpenseArchiveFilter('${key}')">${label}</button>`;
+            }).join("");
+        }
 
         container.innerHTML = "";
 
@@ -2314,7 +2343,7 @@ function loadHistory(list = getExpenses()) {
                 <div class="transaction-card-foot">
                     <div class="history-amount ${amountClass}">${escapeHtml(amount)}</div>
                     <div class="history-actions">
-                        <button class="entry-action-btn" onclick="event.stopPropagation(); archiveExpenseUI('${e.id}')" title="Archive">Archive</button>
+                        <button class="entry-action-btn" onclick="event.stopPropagation(); ${isArchivedExpense(e) ? `unarchiveExpenseUI('${e.id}')` : `archiveExpenseUI('${e.id}')`}" title="${isArchivedExpense(e) ? "Unarchive" : "Archive"}">${isArchivedExpense(e) ? "Unarchive" : "Archive"}</button>
                         <button class="delete-btn" onclick="event.stopPropagation(); deleteExpenseUI('${e.id}')" title="Delete">
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                 <path d="M3 6h18"></path>
@@ -6696,10 +6725,12 @@ function loadBudgetOptions(options = null) {
 function getSelectableBudgetEntries(budgets) {
     let list = Array.isArray(budgets) ? budgets : [];
 
-    return list.filter(b => {
-        if (!b || typeof b !== "object") return false;
-        return !!String(b.budgetId || "").trim();
-    });
+    return list.filter(isValidBudgetEntry);
+}
+
+function isValidBudgetEntry(budget) {
+    if (!budget || typeof budget !== "object") return false;
+    return !!String(budget.budgetId || "").trim() && Number.isFinite(Number(budget.totalAllocated)) && Number(budget.totalAllocated) > 0;
 }
 
 function parseDateToDayStart(value) {
@@ -9818,7 +9849,7 @@ function loadBudgetScreen() {
 function renderBudgetEntries() {
 
     let budgetsAll = JSON.parse(localStorage.getItem("budgets")) || [];
-    let budgets = budgetsAll;
+    let budgets = budgetsAll.filter(isValidBudgetEntry);
     let expenses = getActiveExpenseEntries();
     let savings = JSON.parse(localStorage.getItem("savingsTransactions")) || [];
 
@@ -12570,6 +12601,7 @@ function filterByActivePeriod(expenses) {
     });
 }
 function filterBudgetsByActivePeriod(budgets) {
+    budgets = (Array.isArray(budgets) ? budgets : []).filter(isValidBudgetEntry);
     let periodKey = typeof getActivePeriodKey === "function"
         ? getActivePeriodKey()
         : null;
@@ -12579,7 +12611,6 @@ function filterBudgetsByActivePeriod(budgets) {
         return budgets.filter(b => b.periodKey === periodKey);
     }
 
-    // Fallback → month
     let now = new Date();
 
     let currentMonth = [now.getFullYear(), String(now.getMonth() + 1).padStart(2, "0")].join("-");
@@ -12838,7 +12869,7 @@ function openSplitModal(split) {
             <p>This expense will be allocated as:</p>
             <ul>
                 ${split.map(s => `
-                    <li>₹${s.amount} from ${s.budget.entity || "Budget"}</li>
+                    <li>${formatCurrency(s.amount)} from ${s.budget.entity || "Budget"}</li>
                 `).join("")}
             </ul>
         `;
