@@ -37,6 +37,7 @@
   let activeExpenseFilter = null;
   let ledgerFilterBuilder = null;
   let currentLedgerRows = [];
+  let ledgerEventsBound = false;
 
   function ensureQueryAdapter() {
     if (!root.SearchService || typeof root.SearchService.registerAdapter !== 'function') return;
@@ -161,6 +162,17 @@
     return `${code}. ${safeNumber(value).toFixed(2)}`;
   }
 
+  function formatExcelCurrency(value) {
+    let code = 'INR';
+    try {
+      code = String(localStorage.getItem('currencyCode') || 'INR').trim().toUpperCase() || 'INR';
+    } catch (_err) {
+      // Use the base currency when storage is unavailable.
+    }
+    const symbols = { INR: '₹', USD: '$', EUR: '€', GBP: '£' };
+    return `${symbols[code] || code} ${safeNumber(value).toFixed(2)}`;
+  }
+
   function downloadDailyBudgetLedgerExcel() {
     const xlsx = root.XLSX;
     if (!xlsx || !xlsx.utils || !xlsx.writeFile) {
@@ -168,20 +180,27 @@
       return;
     }
 
-    const rows = getDownloadRows().map(row => ({
-      Type: row.type === 'summary' ? `${row.kind} summary` : 'Daily entry',
-      Date: row.date || row.label || '',
-      Day: row.day || '',
-      Budget: formatExportCurrency(row.budget),
-      Spent: formatExportCurrency(row.spent),
-      'Remaining Budget': formatExportCurrency(row.savings),
-      Deficit: formatExportCurrency(row.deficit),
-      'Running Balance': formatExportCurrency(row.runningBalance ?? row.closingBalance)
-    }));
+    const rows = getDownloadRows().map(row => [
+      row.type === 'summary' ? `${row.kind} summary` : 'Daily entry',
+      row.date || row.label || '',
+      row.day || '',
+      formatExcelCurrency(row.budget),
+      formatExcelCurrency(row.spent),
+      formatExcelCurrency(row.savings),
+      formatExcelCurrency(row.deficit),
+      formatExcelCurrency(row.runningBalance ?? row.closingBalance)
+    ]);
+    const headers = ['Type', 'Date', 'Day', 'Daily Budget', 'Expense', 'Remaining Budget', 'Deficit', 'Running Balance'];
     const workbook = xlsx.utils.book_new();
-    const sheet = xlsx.utils.json_to_sheet(rows);
+    const sheet = xlsx.utils.aoa_to_sheet([headers, ...rows]);
+    sheet['!cols'] = [
+      { wch: 16 }, { wch: 14 }, { wch: 10 }, { wch: 18 },
+      { wch: 16 }, { wch: 22 }, { wch: 14 }, { wch: 20 }
+    ];
     xlsx.utils.book_append_sheet(workbook, sheet, 'Daily Ledger');
-    xlsx.writeFile(workbook, `MoneyTracker_DailyLedger_${new Date().toISOString().slice(0, 10)}.xlsx`);
+    const filename = `MoneyTracker_DailyLedger_${new Date().toISOString().slice(0, 10)}.xlsx`;
+    const write = xlsx.writeFileXLSX || xlsx.writeFile;
+    write(workbook, filename, { bookType: 'xlsx', compression: true });
   }
 
   function downloadDailyBudgetLedgerPdf() {
@@ -193,7 +212,7 @@
 
     const doc = new jsPDF({ orientation: 'landscape' });
     const rows = getDownloadRows();
-    const columns = ['Date', 'Day', 'Budget', 'Spent', 'Remaining', 'Deficit', 'Running Balance'];
+    const columns = ['Date', 'Day', 'Daily Budget', 'Expense', 'Remaining Budget', 'Deficit', 'Running Balance'];
     const values = row => [
       row.date || row.label || '',
       row.day || '',
@@ -550,6 +569,8 @@
   }
 
   function bindEvents() {
+    if (ledgerEventsBound) return;
+    ledgerEventsBound = true;
     ensureQueryAdapter();
     const filterButton = document.getElementById('dailyLedgerFilterButton');
     if (filterButton) filterButton.addEventListener('click', openLedgerFilterModal);
