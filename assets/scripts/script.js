@@ -6921,6 +6921,25 @@ function applyCustomColor(color) {
     if (picker) picker.style.display = "none";
 }
 
+function updateProgressBar() {
+    let budgets = getBudgets();
+    let filteredBudgets = filterBudgetsByActivePeriod(budgets);
+    let filteredExpenses = filterByActivePeriod(getExpenses());
+
+    let totalBudget = filteredBudgets.reduce(
+        (sum, budget) => sum + (Number(budget.totalAllocated) || 0),
+        0
+    );
+    let budgetIds = filteredBudgets.map(budget => budget && budget.budgetId).filter(Boolean);
+    let totalSpent = getNetSpentForBudgetSet(budgetIds, filteredExpenses);
+    let percent = totalBudget > 0 ? Math.min((totalSpent / totalBudget) * 100, 100) : 0;
+
+    let fill = document.getElementById("progressFill");
+    let text = document.getElementById("progressText");
+    if (fill) fill.style.width = `${percent}%`;
+    if (text) text.innerText = `${percent.toFixed(1)}% used`;
+}
+
 // Opens category modal
 function openCategoryModal() {
     document.getElementById("categoryModal").style.display = "flex";
