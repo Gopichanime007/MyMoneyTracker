@@ -2341,6 +2341,9 @@ function renderIncomeList() {
     let data = getSavings() || [];
     let scoped = [...data];
     let allSources = scoped.filter(isSavingsSourceSeed);
+    let activeCount = allSources.filter(s => s.status !== "archived").length;
+    let archivedSources = allSources.filter(s => s.status === "archived");
+    let depletedCount = archivedSources.filter(s => s.archiveReason === "depleted").length;
 
     let sources = allSources.filter(s => {
         if (savingsSourceFilter === "all") return true;
@@ -2353,6 +2356,7 @@ function renderIncomeList() {
 
     let filterBar = document.getElementById("savingsSourceFilterBar");
     if (filterBar) {
+        filterBar.classList.add("is-prominent");
         filterBar.innerHTML = ["active", "archived", "all"].map(key => {
             let label = key === "active" ? "Active" : (key === "archived" ? "Archived" : "All");
             let activeClass = savingsSourceFilter === key ? "is-active" : "";
@@ -2361,6 +2365,12 @@ function renderIncomeList() {
     }
 
     container.innerHTML = "";
+    let summary = document.getElementById("sourceSummary");
+    if (!summary) {
+        container.insertAdjacentHTML("beforebegin", '<p id="sourceSummary" class="source-summary"></p>');
+        summary = document.getElementById("sourceSummary");
+    }
+    if (summary) summary.textContent = `${activeCount} active · ${archivedSources.length} archived (${depletedCount} depleted)`;
 
     if (!sources.length) {
         container.innerHTML = `<p class="empty-state">No savings sources ${savingsSourceFilter === "all" ? "yet" : "in this view"}</p>`;

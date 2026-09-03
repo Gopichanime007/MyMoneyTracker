@@ -8575,7 +8575,7 @@ function applyImportData(data) {
 
     return imported;
 }
-function importData() {
+function obsoleteImportData() {
     setImportStage("validation-input");
 
     const importText = document.getElementById("importText");
@@ -8711,7 +8711,7 @@ function importData() {
      * same import logic.
      */
 
-    ImportEngine.importPayload(
+    obsoleteImportExecutor.importPayload(
         text,
         {
             fileName:
@@ -8934,6 +8934,185 @@ function importData() {
                 "error"
             );
         });
+}
+
+function importData() {
+    setImportStage("validation-input");
+    const importText = document.getElementById("importText");
+    const rawText = importText?.value || "";
+    const decodedText = typeof chooseImportDecodedText === "function"
+        ? chooseImportDecodedText(rawText).selected.normalizedText
+        : rawText;
+    const text = normalizeImportRawText(decodedText);
+
+    if (!text) {
+        showToast("Paste data");
+        return;
+    }
+
+    let parsed;
+    try {
+        setImportStage("json-parse");
+        parsed = JSON.parse(text);
+    } catch (err) {
+        const parseError = getJsonParseErrorMessage(err);
+        renderImportValidationReport({
+            version: "unknown",
+            found: { expenses: 0, savings: 0, budgets: 0, budgetPeriods: 0 },
+            imported: { expenses: 0, savings: 0, budgets: 0, budgetPeriods: 0 },
+            warnings: [],
+            errors: [parseError]
+        });
+        showToast("JSON Parse Error", "error");
+        return;
+    }
+
+    const incomingVersion = validateIncomingImportVersion(
+        parsed && parsed.meta && Object.prototype.hasOwnProperty.call(parsed.meta, "version")
+            ? parsed.meta.version
+            : null
+    );
+
+    if (!incomingVersion.supported) {
+        const normalizationResult = normalizeImportPayload(parsed, { skipMigration: true });
+        const diagnostics = buildImportDiagnostics(normalizationResult.normalized);
+        renderImportValidationReport({
+            version: "unknown",
+            found: {
+                expenses: diagnostics.expensesCount,
+                savings: diagnostics.savingsCount,
+                budgets: diagnostics.budgetsCount,
+                budgetPeriods: diagnostics.budgetPeriodsCount
+            },
+            imported: { expenses: 0, savings: 0, budgets: 0, budgetPeriods: 0 },
+            warnings: normalizationResult.report.warnings || [],
+            normalization: normalizationResult.report,
+            errors: [`Unsupported Version: ${incomingVersion.display}`]
+        });
+        showToast("Import Validation Failed", "error");
+        return;
+    }
+
+    setImportStage("normalization");
+    const normalizationResult = normalizeImportPayload(parsed);
+    const normalizedParsed = normalizationResult.normalized;
+    setImportStage("schema-validation");
+    const diagnostics = buildImportDiagnostics(normalizedParsed);
+    const validation = validateImportPayload(normalizedParsed);
+    const found = {
+        expenses: diagnostics.expensesCount,
+        savings: diagnostics.savingsCount,
+        budgets: diagnostics.budgetsCount,
+        budgetPeriods: diagnostics.budgetPeriodsCount
+    };
+
+    if (validation.errors.length) {
+        renderImportValidationReport({
+            version: validation.version,
+            found,
+            imported: { expenses: 0, savings: 0, budgets: 0, budgetPeriods: 0 },
+            warnings: validation.warnings.concat(normalizationResult.report.warnings || []),
+            normalization: normalizationResult.report,
+            errors: validation.errors
+        });
+        showToast("Import Validation Failed", "error");
+        return;
+    }
+
+    const data = validation.normalized;
+
+    try {
+        setImportStage("import-mapping");
+        if (Array.isArray(data.expenses)) saveExpenses(data.expenses);
+        if (Array.isArray(data.budgets)) saveBudgets(data.budgets);
+        if (Array.isArray(data.savings)) saveSavings(data.savings);
+        if (Array.isArray(data.orders)) localStorage.setItem("orders", JSON.stringify(data.orders));
+        if (Array.isArray(data.categories)) localStorage.setItem("categories", JSON.stringify(data.categories));
+        if (Array.isArray(data.persons)) localStorage.setItem("persons", JSON.stringify(data.persons));
+        if (Array.isArray(data.budgetPeriods)) localStorage.setItem("bp", JSON.stringify(data.budgetPeriods));
+        if (Array.isArray(data.unassignedTopups)) localStorage.setItem("unassignedTopups", JSON.stringify(data.unassignedTopups));
+
+        if (data.quotations && typeof data.quotations === "object") {
+            localStorage.setItem("quotationData", JSON.stringify(data.quotations.quotationData || null));
+            localStorage.setItem("quotationItems", JSON.stringify(Array.isArray(data.quotations.quotationItems) ? data.quotations.quotationItems : []));
+            localStorage.setItem("quotationCharges", JSON.stringify(Array.isArray(data.quotations.quotationCharges) ? data.quotations.quotationCharges : []));
+            localStorage.setItem("quotationRegistry", JSON.stringify(Array.isArray(data.quotations.quotationRegistry) ? data.quotations.quotationRegistry : []));
+            localStorage.setItem("quotationMeta", JSON.stringify(data.quotations.quotationMeta || null));
+            localStorage.setItem("activeQuotationId", JSON.stringify(data.quotations.activeQuotationId || null));
+            localStorage.setItem("documentRelations", JSON.stringify(Array.isArray(data.quotations.documentRelations) ? data.quotations.documentRelations : []));
+            localStorage.setItem("noSeriesConfig", JSON.stringify(data.quotations.noSeriesConfig || null));
+        }
+
+        if (data.settings) {
+            if (data.settings.currencyCode) localStorage.setItem("currencyCode", data.settings.currencyCode);
+            if (data.settings.appearanceMode && typeof setAppearanceMode === "function") setAppearanceMode(data.settings.appearanceMode);
+            if (data.settings.accentColor && typeof changeTheme === "function") changeTheme(data.settings.accentColor);
+            else if (data.settings.theme && typeof changeTheme === "function") changeTheme(data.settings.theme);
+            if (typeof saveAutoBackupSettings === "function" &&
+                (Object.prototype.hasOwnProperty.call(data.settings, "autoBackupEnabled") || data.settings.autoBackupFrequency || data.settings.autoBackupTarget)) {
+                saveAutoBackupSettings({
+                    enabled: !!data.settings.autoBackupEnabled,
+                    frequency: data.settings.autoBackupFrequency || "weekly",
+                    target: data.settings.autoBackupTarget || "local_download"
+                });
+            } else if (typeof saveAutoBackupSettings === "function" &&
+                (Object.prototype.hasOwnProperty.call(data.settings, "autoBackup") || data.settings.backupFrequency)) {
+                saveAutoBackupSettings({
+                    enabled: !!data.settings.autoBackup,
+                    frequency: data.settings.backupFrequency || "weekly",
+                    target: "local_download"
+                });
+            }
+        }
+
+        runIntegrityRepairSilently();
+        setImportStage("ledger-rebuild");
+        if (typeof loadTheme === "function") loadTheme();
+        if (typeof syncThemeSelectors === "function") syncThemeSelectors();
+        if (typeof refreshSettingsPanels === "function") refreshSettingsPanels();
+        if (typeof loadHistory === "function") loadHistory();
+        if (typeof loadBudgetOptions === "function") loadBudgetOptions();
+        if (typeof loadDashboard === "function") loadDashboard();
+        if (typeof loadGraph === "function") loadGraph();
+        if (typeof renderBudgetEntries === "function") renderBudgetEntries();
+        if (typeof renderIncomeList === "function") renderIncomeList();
+        if (typeof loadSavings === "function") loadSavings();
+
+        renderImportValidationReport({
+            version: validation.version,
+            found,
+            imported: {
+                expenses: Array.isArray(data.expenses) ? data.expenses.length : 0,
+                savings: Array.isArray(data.savings) ? data.savings.length : 0,
+                budgets: Array.isArray(data.budgets) ? data.budgets.length : 0,
+                budgetPeriods: Array.isArray(data.budgetPeriods) ? data.budgetPeriods.length : 0
+            },
+            warnings: validation.warnings.concat(normalizationResult.report.warnings || []),
+            normalization: normalizationResult.report,
+            errors: []
+        });
+
+        showToast("Import successful ✅");
+        setImportStage("completed");
+        if (Array.isArray(data.__expectedAssertions) && data.__expectedAssertions.length && typeof runTestAssertions === "function") {
+            const results = runTestAssertions(data.__expectedAssertions);
+            if (typeof renderTestAssertionReport === "function") renderTestAssertionReport(results);
+            return;
+        }
+        if (importText) importText.value = "";
+        if (typeof closeImportModal === "function") closeImportModal();
+    } catch (err) {
+        console.error(err);
+        renderImportValidationReport({
+            version: validation.version,
+            found,
+            imported: { expenses: 0, savings: 0, budgets: 0, budgetPeriods: 0 },
+            warnings: validation.warnings.concat(normalizationResult.report.warnings || []),
+            normalization: normalizationResult.report,
+            errors: ["Import Validation Failed: invalid transactions or data mapping"]
+        });
+        showToast("Import Validation Failed", "error");
+    }
 }
 // Fixes old data structure to new system
 function runMigration() {

@@ -26,6 +26,18 @@
   line-height: 1.1;
 }
 
+.source-summary {
+  margin: 0 0 var(--space-sm);
+  color: var(--muted);
+  font-size: 0.86rem;
+  font-weight: 600;
+}
+
+#savingsSourceFilterBar.is-prominent {
+  border-color: color-mix(in srgb, var(--theme), var(--border) 45%);
+  box-shadow: 0 2px 8px color-mix(in srgb, var(--theme), transparent 82%);
+}
+
 .savings-summary-grid .summary.box,
 .activity-summary-grid .summary.box {
   display: block;
