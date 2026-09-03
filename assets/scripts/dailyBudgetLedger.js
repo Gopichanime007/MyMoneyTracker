@@ -173,34 +173,66 @@
     return `${symbols[code] || code} ${safeNumber(value).toFixed(2)}`;
   }
 
-  function downloadDailyBudgetLedgerExcel() {
-    const xlsx = root.XLSX;
-    if (!xlsx || !xlsx.utils || !xlsx.writeFile) {
-      root.alert('Excel export is unavailable because the XLSX library is not loaded.');
+  async function downloadDailyBudgetLedgerExcel() {
+    const exceljs = root.ExcelJS;
+    if (!exceljs || typeof exceljs.Workbook !== 'function') {
+      root.alert('Excel export is unavailable because the Excel library is not loaded.');
       return;
     }
 
-    const rows = getDownloadRows().map(row => [
-      row.type === 'summary' ? `${row.kind} summary` : 'Daily entry',
-      row.date || row.label || '',
-      row.day || '',
-      formatExcelCurrency(row.budget),
-      formatExcelCurrency(row.spent),
-      formatExcelCurrency(row.savings),
-      formatExcelCurrency(row.deficit),
-      formatExcelCurrency(row.runningBalance ?? row.closingBalance)
-    ]);
-    const headers = ['Type', 'Date', 'Day', 'Daily Budget', 'Expense', 'Remaining Budget', 'Deficit', 'Running Balance'];
-    const workbook = xlsx.utils.book_new();
-    const sheet = xlsx.utils.aoa_to_sheet([headers, ...rows]);
-    sheet['!cols'] = [
-      { wch: 16 }, { wch: 14 }, { wch: 10 }, { wch: 18 },
-      { wch: 16 }, { wch: 22 }, { wch: 14 }, { wch: 20 }
+    const workbook = new exceljs.Workbook();
+    workbook.creator = 'MyMoneyTracker';
+    workbook.created = new Date();
+    const sheet = workbook.addWorksheet('Daily Ledger', {
+      properties: { defaultRowHeight: 20 },
+      views: [{ state: 'frozen', ySplit: 1 }]
+    });
+    sheet.columns = [
+      { header: 'Type', key: 'type', width: 16 },
+      { header: 'Date', key: 'date', width: 14 },
+      { header: 'Day', key: 'day', width: 10 },
+      { header: 'Daily Budget', key: 'budget', width: 18 },
+      { header: 'Expense', key: 'expense', width: 16 },
+      { header: 'Remaining Budget', key: 'remaining', width: 22 },
+      { header: 'Deficit', key: 'deficit', width: 14 },
+      { header: 'Running Balance', key: 'balance', width: 20 }
     ];
-    xlsx.utils.book_append_sheet(workbook, sheet, 'Daily Ledger');
+    sheet.getRow(1).font = { bold: true, color: { argb: 'FFFFFFFF' } };
+    sheet.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1D2229' } };
+    sheet.getRow(1).alignment = { vertical: 'middle' };
+
+    getDownloadRows().forEach(row => {
+      sheet.addRow({
+        type: row.type === 'summary' ? `${row.kind} summary` : 'Daily entry',
+        date: row.date || row.label || '',
+        day: row.day || '',
+        budget: formatExcelCurrency(row.budget),
+        expense: formatExcelCurrency(row.spent),
+        remaining: formatExcelCurrency(row.savings),
+        deficit: formatExcelCurrency(row.deficit),
+        balance: formatExcelCurrency(row.runningBalance ?? row.closingBalance)
+      });
+    });
+    sheet.eachRow((row, rowNumber) => {
+      row.alignment = { vertical: 'middle' };
+      if (rowNumber > 1 && rowNumber % 2 === 0) {
+        row.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF7F6F3' } };
+      }
+    });
+
+    const buffer = await workbook.xlsx.writeBuffer();
+    const blob = new Blob([buffer], {
+      type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    });
     const filename = `MoneyTracker_DailyLedger_${new Date().toISOString().slice(0, 10)}.xlsx`;
-    const write = xlsx.writeFileXLSX || xlsx.writeFile;
-    write(workbook, filename, { bookType: 'xlsx', compression: true });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = filename;
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 15000);
   }
 
   function downloadDailyBudgetLedgerPdf() {
@@ -232,13 +264,19 @@
 
     const drawRow = (cells, bold, fill) => {
       let x = 14;
-      if (fill) doc.setFillColor(235, 232, 224);
+      if (fill) {
+        doc.setFillColor(bold ? 29 : 235, bold ? 34 : 232, bold ? 41 : 224);
+        doc.setTextColor(bold ? 255 : 0);
+      } else {
+        doc.setTextColor(0);
+      }
       cells.forEach((cell, index) => {
         if (fill) doc.rect(x - 2, y - 5, widths[index], 8, 'F');
         doc.setFont(undefined, bold ? 'bold' : 'normal');
         doc.text(String(cell), x, y);
         x += widths[index];
       });
+      doc.setTextColor(0);
       y += 8;
     };
 
