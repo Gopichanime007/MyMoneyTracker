@@ -147,31 +147,82 @@
     renderDailyBudgetLedger();
   }
 
-  async function downloadDailyBudgetLedger() {
-    const rows = currentLedgerRows.slice();
-    const payload = {
-      type: 'daily-budget-ledger',
-      exportedAt: new Date().toISOString(),
-      dailyBudget: getStoredConfig().dailyBudget,
-      query: getQueryState(),
-      rows
-    };
-    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json;charset=utf-8' });
-    const filename = `MoneyTracker_DailyLedger_${new Date().toISOString().slice(0, 10)}.json`;
+  function getDownloadRows() {
+    return currentLedgerRows.slice();
+  }
 
-    if (typeof root.downloadBlobWithBestEffort === 'function') {
-      await root.downloadBlobWithBestEffort(blob, filename);
+  function downloadDailyBudgetLedgerExcel() {
+    const xlsx = root.XLSX;
+    if (!xlsx || !xlsx.utils || !xlsx.writeFile) {
+      root.alert('Excel export is unavailable because the XLSX library is not loaded.');
       return;
     }
 
-    const url = URL.createObjectURL(blob);
-    const anchor = document.createElement('a');
-    anchor.href = url;
-    anchor.download = filename;
-    document.body.appendChild(anchor);
-    anchor.click();
-    anchor.remove();
-    setTimeout(() => URL.revokeObjectURL(url), 4000);
+    const rows = getDownloadRows().map(row => ({
+      Type: row.type === 'summary' ? `${row.kind} summary` : 'Daily entry',
+      Date: row.date || row.label || '',
+      Day: row.day || '',
+      Budget: safeNumber(row.budget),
+      Spent: safeNumber(row.spent),
+      'Remaining Budget': safeNumber(row.savings),
+      Deficit: safeNumber(row.deficit),
+      'Running Balance': safeNumber(row.runningBalance ?? row.closingBalance)
+    }));
+    const workbook = xlsx.utils.book_new();
+    const sheet = xlsx.utils.json_to_sheet(rows);
+    xlsx.utils.book_append_sheet(workbook, sheet, 'Daily Ledger');
+    xlsx.writeFile(workbook, `MoneyTracker_DailyLedger_${new Date().toISOString().slice(0, 10)}.xlsx`);
+  }
+
+  function downloadDailyBudgetLedgerPdf() {
+    const jsPDF = root.jspdf && root.jspdf.jsPDF;
+    if (!jsPDF) {
+      root.alert('PDF export is unavailable because the jsPDF library is not loaded.');
+      return;
+    }
+
+    const doc = new jsPDF({ orientation: 'landscape' });
+    const rows = getDownloadRows();
+    const columns = ['Date', 'Day', 'Budget', 'Spent', 'Remaining', 'Deficit', 'Running Balance'];
+    const values = row => [
+      row.date || row.label || '',
+      row.day || '',
+      formatCurrency(row.budget),
+      formatCurrency(row.spent),
+      formatCurrency(row.savings),
+      formatCurrency(row.deficit),
+      formatCurrency(row.runningBalance ?? row.closingBalance)
+    ];
+    const widths = [38, 24, 32, 32, 38, 32, 44];
+    let y = 18;
+    doc.setFontSize(16);
+    doc.text('Daily Budget Ledger', 14, y);
+    doc.setFontSize(9);
+    doc.text(`Daily Budget: ${formatCurrency(getStoredConfig().dailyBudget)}`, 14, y + 7);
+    y += 16;
+
+    const drawRow = (cells, bold, fill) => {
+      let x = 14;
+      if (fill) doc.setFillColor(235, 232, 224);
+      cells.forEach((cell, index) => {
+        if (fill) doc.rect(x - 2, y - 5, widths[index], 8, 'F');
+        doc.setFont(undefined, bold ? 'bold' : 'normal');
+        doc.text(String(cell), x, y);
+        x += widths[index];
+      });
+      y += 8;
+    };
+
+    drawRow(columns, true, true);
+    rows.forEach(row => {
+      if (y > 190) {
+        doc.addPage('landscape');
+        y = 18;
+        drawRow(columns, true, true);
+      }
+      drawRow(values(row), row.type === 'summary', row.type === 'summary');
+    });
+    doc.save(`MoneyTracker_DailyLedger_${new Date().toISOString().slice(0, 10)}.pdf`);
   }
 
   function clearLedgerFilter() {
@@ -498,8 +549,10 @@
       sortSelect.value = Array.isArray(state.sort) && state.sort[0] && state.sort[0].direction === 'asc' ? 'asc' : 'desc';
       sortSelect.addEventListener('change', () => handleLedgerSortChange(sortSelect.value));
     }
-    const downloadButton = document.getElementById('downloadDailyLedger');
-    if (downloadButton) downloadButton.addEventListener('click', downloadDailyBudgetLedger);
+    const downloadPdfButton = document.getElementById('downloadDailyLedgerPdf');
+    if (downloadPdfButton) downloadPdfButton.addEventListener('click', downloadDailyBudgetLedgerPdf);
+    const downloadExcelButton = document.getElementById('downloadDailyLedgerExcel');
+    if (downloadExcelButton) downloadExcelButton.addEventListener('click', downloadDailyBudgetLedgerExcel);
     const saveBudgetButton = document.getElementById('saveDailyBudget');
     if (saveBudgetButton) saveBudgetButton.addEventListener('click', handleBudgetSave);
 
@@ -525,7 +578,8 @@
   root.openLedgerFilterModal = openLedgerFilterModal;
   root.closeLedgerFilterModal = closeLedgerFilterModal;
   root.handleLedgerSortChange = handleLedgerSortChange;
-  root.downloadDailyBudgetLedger = downloadDailyBudgetLedger;
+  root.downloadDailyBudgetLedgerPdf = downloadDailyBudgetLedgerPdf;
+  root.downloadDailyBudgetLedgerExcel = downloadDailyBudgetLedgerExcel;
 
   if (typeof document !== 'undefined') {
     document.addEventListener('DOMContentLoaded', initDailyBudgetLedgerPage);
