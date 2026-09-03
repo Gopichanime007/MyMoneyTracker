@@ -223,6 +223,27 @@
 
     <!-- ================= HISTORY ================= -->
     <section id="history" class="screen">
+      <section class="card ledger-settings-panel">
+        <div class="section-title-row">
+          <h3>Daily Budget Settings</h3>
+          <span class="muted-note">Applies to every ledger day</span>
+        </div>
+        <div class="ledger-budget-control">
+          <label for="dailyBudgetInput">Fixed Daily Budget</label>
+          <input id="dailyBudgetInput" type="number" min="0" step="1" placeholder="100" />
+          <button id="saveDailyBudget" class="primary" type="button">Save Budget</button>
+        </div>
+        <label for="weekStartDaySelect">Week Starts On</label>
+        <select id="weekStartDaySelect">
+          <option value="0">Sunday</option>
+          <option value="1">Monday</option>
+          <option value="2">Tuesday</option>
+          <option value="3">Wednesday</option>
+          <option value="4">Thursday</option>
+          <option value="5">Friday</option>
+          <option value="6">Saturday</option>
+        </select>
+      </section>
       <div class="card">
         <div class="tab-bar" data-tab-group="historyTabs">
           <button type="button" class="tab-bar-btn is-active" data-tab-key="history"
@@ -265,29 +286,17 @@
             <span id="ledgerEntryCount" class="ledger-pill">0 entries</span>
           </div>
 
-          <div class="ledger-budget-control">
-            <label for="dailyBudgetInput">Fixed Daily Budget</label>
-            <input id="dailyBudgetInput" type="number" min="0" step="1" placeholder="100" />
-            <button id="saveDailyBudget" class="primary" type="button">Save Budget</button>
-          </div>
-
-          <label for="weekStartDaySelect">Week Starts On</label>
-          <select id="weekStartDaySelect">
-            <option value="0">Sunday</option>
-            <option value="1">Monday</option>
-            <option value="2">Tuesday</option>
-            <option value="3">Wednesday</option>
-            <option value="4">Thursday</option>
-            <option value="5">Friday</option>
-            <option value="6">Saturday</option>
-          </select>
-
           <div class="section-title-row" style="margin-top: var(--space-md);">
             <h3>Ledger View</h3>
             <div class="ledger-tools">
               <button id="dailyLedgerFilterButton" class="secondary" type="button">Filter</button>
-              <button id="downloadDailyLedgerPdf" class="secondary" type="button">Download PDF</button>
-              <button id="downloadDailyLedgerExcel" class="secondary" type="button">Download Excel</button>
+              <details class="secondary-accordion ledger-download-menu">
+                <summary>Download</summary>
+                <div class="ledger-download-options">
+                  <button id="downloadDailyLedgerPdf" class="secondary" type="button">PDF</button>
+                  <button id="downloadDailyLedgerExcel" class="secondary" type="button">Excel</button>
+                </div>
+              </details>
               <label class="sr-only" for="dailyLedgerSort">Sort ledger</label>
               <select id="dailyLedgerSort" aria-label="Sort ledger">
                 <option value="desc">Newest first</option>

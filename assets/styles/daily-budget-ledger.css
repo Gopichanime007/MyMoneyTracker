@@ -40,6 +40,41 @@
     min-height: 36px;
 }
 
+.ledger-download-menu {
+    position: relative;
+}
+
+.ledger-download-menu summary {
+    cursor: pointer;
+    list-style: none;
+    min-height: 36px;
+    display: flex;
+    align-items: center;
+}
+
+.ledger-download-menu summary::-webkit-details-marker {
+    display: none;
+}
+
+.ledger-download-options {
+    position: absolute;
+    right: 0;
+    top: calc(100% + 6px);
+    z-index: 5;
+    display: grid;
+    gap: 6px;
+    min-width: 110px;
+    padding: 8px;
+    border: 1px solid #E4E1D9;
+    border-radius: 8px;
+    background: #FFFFFF;
+    box-shadow: 0 8px 20px rgba(29, 34, 41, 0.12);
+}
+
+.ledger-settings-panel {
+    margin-bottom: var(--space-md);
+}
+
 
 /* ==========================================
    HEADER ROW

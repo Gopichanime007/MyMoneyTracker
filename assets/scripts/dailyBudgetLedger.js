@@ -151,6 +151,16 @@
     return currentLedgerRows.slice();
   }
 
+  function formatExportCurrency(value) {
+    let code = 'INR';
+    try {
+      code = String(localStorage.getItem('currencyCode') || 'INR').trim().toUpperCase() || 'INR';
+    } catch (_err) {
+      // Use the base currency when storage is unavailable.
+    }
+    return `${code}. ${safeNumber(value).toFixed(2)}`;
+  }
+
   function downloadDailyBudgetLedgerExcel() {
     const xlsx = root.XLSX;
     if (!xlsx || !xlsx.utils || !xlsx.writeFile) {
@@ -162,11 +172,11 @@
       Type: row.type === 'summary' ? `${row.kind} summary` : 'Daily entry',
       Date: row.date || row.label || '',
       Day: row.day || '',
-      Budget: safeNumber(row.budget),
-      Spent: safeNumber(row.spent),
-      'Remaining Budget': safeNumber(row.savings),
-      Deficit: safeNumber(row.deficit),
-      'Running Balance': safeNumber(row.runningBalance ?? row.closingBalance)
+      Budget: formatExportCurrency(row.budget),
+      Spent: formatExportCurrency(row.spent),
+      'Remaining Budget': formatExportCurrency(row.savings),
+      Deficit: formatExportCurrency(row.deficit),
+      'Running Balance': formatExportCurrency(row.runningBalance ?? row.closingBalance)
     }));
     const workbook = xlsx.utils.book_new();
     const sheet = xlsx.utils.json_to_sheet(rows);
@@ -187,18 +197,18 @@
     const values = row => [
       row.date || row.label || '',
       row.day || '',
-      formatCurrency(row.budget),
-      formatCurrency(row.spent),
-      formatCurrency(row.savings),
-      formatCurrency(row.deficit),
-      formatCurrency(row.runningBalance ?? row.closingBalance)
+      formatExportCurrency(row.budget),
+      formatExportCurrency(row.spent),
+      formatExportCurrency(row.savings),
+      formatExportCurrency(row.deficit),
+      formatExportCurrency(row.runningBalance ?? row.closingBalance)
     ];
     const widths = [38, 24, 32, 32, 38, 32, 44];
     let y = 18;
     doc.setFontSize(16);
     doc.text('Daily Budget Ledger', 14, y);
     doc.setFontSize(9);
-    doc.text(`Daily Budget: ${formatCurrency(getStoredConfig().dailyBudget)}`, 14, y + 7);
+    doc.text(`Daily Budget: ${formatExportCurrency(getStoredConfig().dailyBudget)}`, 14, y + 7);
     y += 16;
 
     const drawRow = (cells, bold, fill) => {
