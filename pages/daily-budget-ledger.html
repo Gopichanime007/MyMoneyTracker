@@ -7,7 +7,6 @@
   <title>Daily Budget Ledger</title>
   <link rel="stylesheet" href="../assets/styles/style.css" />
   <link rel="stylesheet" href="../assets/styles/daily-budget-ledger.css" />
-  <link rel="stylesheet" href="../assets/styles/theme-consistency.css" />
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 
@@ -31,11 +30,8 @@
         <span id="ledgerEntryCount" class="ledger-pill">0 entries</span>
       </div>
 
-      <div class="ledger-budget-control">
-        <label for="dailyBudgetInput">Fixed Daily Budget</label>
-        <input id="dailyBudgetInput" type="number" min="0" step="1" placeholder="100" />
-        <button id="saveDailyBudget" class="primary" type="button">Save Budget</button>
-      </div>
+      <label for="dailyBudgetInput">Fixed Daily Budget</label>
+      <input id="dailyBudgetInput" type="number" min="0" step="1" placeholder="100" />
 
       <!-- NEW: week-start control. The JS reads this automatically
            (id must stay exactly "weekStartDaySelect") — no other
@@ -51,26 +47,12 @@
         <option value="6">Saturday</option>
       </select>
 
+      <button id="saveDailyBudget" class="primary" type="button">Save Budget</button>
     </section>
 
     <section class="card ledger-shell">
       <div class="section-title-row">
         <h3>Ledger View</h3>
-        <div class="ledger-tools">
-          <button id="dailyLedgerFilterButton" class="secondary" type="button">Filter</button>
-          <details class="secondary-accordion ledger-download-menu">
-            <summary>Download</summary>
-            <div class="ledger-download-options">
-              <button id="downloadDailyLedgerPdf" class="secondary" type="button">PDF</button>
-              <button id="downloadDailyLedgerExcel" class="secondary" type="button">Excel</button>
-            </div>
-          </details>
-          <label class="sr-only" for="dailyLedgerSort">Sort ledger</label>
-          <select id="dailyLedgerSort" aria-label="Sort ledger">
-            <option value="desc">Newest first</option>
-            <option value="asc">Oldest first</option>
-          </select>
-        </div>
       </div>
       <div class="ledger-table-container">
         <table class="ledger-table">
@@ -92,18 +74,6 @@
     </section>
   </div>
 
-  <div id="dailyLedgerFilterModal" class="modal hidden" onclick="closeLedgerFilterModal()">
-    <div class="modal-content" onclick="event.stopPropagation()">
-      <h3>Daily Ledger Filter</h3>
-      <div id="dailyLedgerFilterBuilderRoot"></div>
-    </div>
-  </div>
-
-  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-  <script src="../assets/scripts/queryEngine.js"></script>
-  <script src="../assets/scripts/searchService.js"></script>
-  <script src="../assets/scripts/filterBuilder.js"></script>
   <script src="../assets/scripts/dailyBudgetLedger.js"></script>
   <script>
     function goBackToPreviousPage() {

@@ -10,7 +10,6 @@
   <!-- <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script> -->
   <link rel="stylesheet" href="../assets/styles/savings.css">
   <link rel="stylesheet" href="../assets/styles/style.css">
-  <link rel="stylesheet" href="../assets/styles/theme-consistency.css">
 </head>
 
 <body>
@@ -36,33 +35,32 @@
     <section id="home" class="screen active">
       <div class="card">
         <h3>Savings Dashboard</h3>
-        <small class="dashboard-eyebrow">Savings overview</small>
-        <h1 id="savingsBalance">0</h1>
+        <h1 id="savingsBalance">₹0</h1>
 
-        <div class="dashboard-grid savings-dashboard-grid">
-          <div class="dash-card savings-kpi savings-kpi-deposits">
+        <div class="savings-summary-grid">
+          <div class="summary box">
             <small>Total Deposits</small>
-            <h2 id="totalDeposits">0</h2>
+            <h3 id="totalDeposits">₹0</h3>
           </div>
-          <div class="dash-card savings-kpi savings-kpi-transfers">
+          <div class="summary box">
             <small>Total Transfers</small>
-            <h2 id="totalTransfers">0</h2>
+            <h3 id="totalTransfers">₹0</h3>
           </div>
-          <div class="dash-card savings-kpi savings-kpi-refunds">
+          <div class="summary box">
             <small>Total Refunds</small>
-            <h2 id="totalRefunds">0</h2>
+            <h3 id="totalRefunds">₹0</h3>
           </div>
-          <div class="dash-card savings-kpi savings-kpi-movement">
+          <div class="summary box">
             <small>Net Movement</small>
-            <h2 id="netSavingsMovement">0</h2>
+            <h3 id="netSavingsMovement">₹0</h3>
           </div>
-          <div class="dash-card savings-kpi savings-kpi-allocation">
+          <div class="summary box">
             <small>Current Budget Allocation</small>
-            <h2 id="allocatedToBudget">0</h2>
+            <h3 id="allocatedToBudget">₹0</h3>
           </div>
-          <div class="dash-card savings-kpi savings-kpi-available">
+          <div class="summary box success">
             <small>Available Savings</small>
-            <h2 id="availableBalance">0</h2>
+            <h3 id="availableBalance">₹0</h3>
           </div>
         </div>
 
@@ -100,11 +98,11 @@
           </div>
           <div class="summary box">
             <small>Largest Expense Transfer</small>
-            <h3 id="largestExpenseTransfer">0</h3>
+            <h3 id="largestExpenseTransfer">₹0</h3>
           </div>
           <div class="summary box">
             <small>Largest Refund</small>
-            <h3 id="largestRefund">0</h3>
+            <h3 id="largestRefund">₹0</h3>
           </div>
         </div>
 
@@ -113,15 +111,15 @@
           <div class="health-grid">
             <div>
               <small>Savings Balance</small>
-              <strong id="savingsHealthBalance">0</strong>
+              <strong id="savingsHealthBalance">₹0</strong>
             </div>
             <div>
               <small>Allocated to Budget</small>
-              <strong id="savingsHealthAllocated">0</strong>
+              <strong id="savingsHealthAllocated">₹0</strong>
             </div>
             <div>
               <small>Net Movement</small>
-              <strong id="savingsHealthNet">0</strong>
+              <strong id="savingsHealthNet">₹0</strong>
             </div>
             <div>
               <small>Transactions</small>

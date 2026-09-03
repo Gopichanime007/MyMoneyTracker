@@ -22,7 +22,6 @@
      remembered in localStorage.
   ========================================================== */
   const DEFAULT_WEEK_START_DAY = 1; // Monday
-  const QUERY_MODULE = 'dailyLedger';
 
   /* ==========================================================
      ⚠️  UPDATE HERE #4 — filter engine integration point.
@@ -35,229 +34,10 @@
      it never happened.
   ========================================================== */
   let activeExpenseFilter = null;
-  let ledgerFilterBuilder = null;
-  let currentLedgerRows = [];
-  let ledgerEventsBound = false;
-
-  function ensureQueryAdapter() {
-    if (!root.SearchService || typeof root.SearchService.registerAdapter !== 'function') return;
-    root.SearchService.registerAdapter(QUERY_MODULE, {
-      searchFields: ['date', 'type', 'amount', 'category', 'purpose', 'entity', 'paymentType', 'budgetId', 'person']
-    });
-  }
-
-  function getQueryState() {
-    ensureQueryAdapter();
-    if (!root.SearchService || typeof root.SearchService.getState !== 'function') {
-      return { filters: [], sort: [] };
-    }
-    return root.SearchService.getState(QUERY_MODULE);
-  }
-
-  function getFilteredExpenses() {
-    const source = getStoredExpenses().filter((entry) => {
-      if (!entry || entry.isArchived === true || entry.archived === true) return false;
-      if (String(entry.status || '').toLowerCase() === 'archived' || String(entry.archiveStatus || '').toLowerCase() === 'archived') return false;
-      const amount = safeNumber(entry.amount, 0);
-      return amount !== 0 && (entry.type === 'expense' || entry.type === 'loss' || amount < 0);
-    });
-
-    if (!root.SearchService || typeof root.SearchService.applyModuleSearch !== 'function') return source;
-    const state = getQueryState();
-    const filters = (Array.isArray(state.filters) ? state.filters : []).map((filter) => {
-      if (filter && filter.field === 'date' && filter.op === 'between') {
-        return {
-          version: 'v1',
-          field: 'date',
-          op: 'period',
-          value: { type: 'custom', from: filter.from, to: filter.to }
-        };
-      }
-      return filter;
-    });
-    const result = root.SearchService.applyModuleSearch(QUERY_MODULE, source, {
-      filters
-    });
-    return Array.isArray(result.results) ? result.results : source;
-  }
-
-  function sortLedgerRows(rows) {
-    const state = getQueryState();
-    const sort = Array.isArray(state.sort) && state.sort[0] ? state.sort[0] : { field: 'date', direction: 'desc' };
-    const direction = String(sort.direction || 'desc').toLowerCase() === 'asc' ? 1 : -1;
-    const entries = rows.filter((row) => row.type === 'entry').sort((a, b) => direction * (new Date(a.date) - new Date(b.date)));
-    const summaries = rows.filter((row) => row.type === 'summary');
-    return entries.concat(summaries);
-  }
 
   function setLedgerFilter(filterFn) {
     activeExpenseFilter = typeof filterFn === 'function' ? filterFn : null;
     renderDailyBudgetLedger();
-  }
-
-  function openLedgerFilterModal() {
-    initializeLedgerFilterBuilder();
-    const modal = document.getElementById('dailyLedgerFilterModal');
-    if (modal) {
-      modal.classList.remove('hidden');
-      modal.style.display = 'flex';
-    }
-  }
-
-  function closeLedgerFilterModal() {
-    const modal = document.getElementById('dailyLedgerFilterModal');
-    if (modal) {
-      modal.classList.add('hidden');
-      modal.style.display = 'none';
-    }
-  }
-
-  function initializeLedgerFilterBuilder() {
-    if (ledgerFilterBuilder || !root.FilterBuilder || typeof root.FilterBuilder.create !== 'function') return;
-    ledgerFilterBuilder = root.FilterBuilder.create({
-      module: QUERY_MODULE,
-      dateField: 'date',
-      templates: [
-        { key: 'date', label: 'Date', field: 'date', type: 'date', hint: 'Use Equals, Before, After, or Between' },
-        { key: 'category', label: 'Category', field: 'category', type: 'text' },
-        { key: 'type', label: 'Type', field: 'type', type: 'text' },
-        { key: 'amount', label: 'Amount', field: 'amount', type: 'number' },
-        { key: 'payment', label: 'Payment Type', field: 'paymentType', type: 'enum' },
-        { key: 'source', label: 'Source', field: 'entity', type: 'text' }
-      ],
-      onApply: (filters) => {
-        if (root.SearchService && typeof root.SearchService.setFilters === 'function') root.SearchService.setFilters(QUERY_MODULE, filters);
-        closeLedgerFilterModal();
-        renderDailyBudgetLedger();
-      },
-      onClear: () => {
-        if (root.SearchService && typeof root.SearchService.clearFilters === 'function') root.SearchService.clearFilters(QUERY_MODULE);
-        closeLedgerFilterModal();
-        renderDailyBudgetLedger();
-      },
-      onClose: closeLedgerFilterModal
-    });
-    ledgerFilterBuilder.mount(document.getElementById('dailyLedgerFilterBuilderRoot'));
-  }
-
-  function handleLedgerSortChange(direction) {
-    ensureQueryAdapter();
-    if (root.SearchService && typeof root.SearchService.setSort === 'function') {
-      root.SearchService.setSort(QUERY_MODULE, [{ field: 'date', direction: direction === 'asc' ? 'asc' : 'desc', type: 'date' }]);
-    }
-    renderDailyBudgetLedger();
-  }
-
-  function getDownloadRows() {
-    return currentLedgerRows.slice();
-  }
-
-  function formatExportCurrency(value) {
-    let code = 'INR';
-    try {
-      code = String(localStorage.getItem('currencyCode') || 'INR').trim().toUpperCase() || 'INR';
-    } catch (_err) {
-      // Use the base currency when storage is unavailable.
-    }
-    return `${code}. ${safeNumber(value).toFixed(2)}`;
-  }
-
-  function formatExcelCurrency(value) {
-    let code = 'INR';
-    try {
-      code = String(localStorage.getItem('currencyCode') || 'INR').trim().toUpperCase() || 'INR';
-    } catch (_err) {
-      // Use the base currency when storage is unavailable.
-    }
-    const symbols = { INR: '₹', USD: '$', EUR: '€', GBP: '£' };
-    return `${symbols[code] || code} ${safeNumber(value).toFixed(2)}`;
-  }
-
-  function downloadDailyBudgetLedgerExcel() {
-    const xlsx = root.XLSX;
-    if (!xlsx || !xlsx.utils || typeof xlsx.writeFile !== 'function') {
-      root.alert('Excel export is unavailable because SheetJS is not loaded.');
-      return;
-    }
-
-    const headers = ['Type', 'Date', 'Day', 'Daily Budget', 'Expense', 'Remaining Budget', 'Deficit', 'Running Balance'];
-    const rows = getDownloadRows().map(row => [
-      row.type === 'summary' ? `${row.kind} summary` : 'Daily entry',
-      row.date || row.label || '',
-      row.day || '',
-      formatExcelCurrency(row.budget),
-      formatExcelCurrency(row.spent),
-      formatExcelCurrency(row.savings),
-      formatExcelCurrency(row.deficit),
-      formatExcelCurrency(row.runningBalance ?? row.closingBalance)
-    ]);
-    const workbook = xlsx.utils.book_new();
-    const sheet = xlsx.utils.aoa_to_sheet([headers, ...rows]);
-    sheet['!cols'] = [
-      { wch: 16 }, { wch: 14 }, { wch: 10 }, { wch: 18 },
-      { wch: 16 }, { wch: 22 }, { wch: 14 }, { wch: 20 }
-    ];
-    sheet['!freeze'] = { xSplit: 0, ySplit: 1 };
-    xlsx.utils.book_append_sheet(workbook, sheet, 'Daily Ledger');
-    const filename = `MoneyTracker_DailyLedger_${new Date().toISOString().slice(0, 10)}.xlsx`;
-    xlsx.writeFile(workbook, filename, { bookType: 'xlsx', compression: true });
-  }
-
-  function downloadDailyBudgetLedgerPdf() {
-    const jsPDF = root.jspdf && root.jspdf.jsPDF;
-    if (!jsPDF) {
-      root.alert('PDF export is unavailable because the jsPDF library is not loaded.');
-      return;
-    }
-
-    const doc = new jsPDF({ orientation: 'landscape' });
-    const rows = getDownloadRows();
-    const columns = ['Date', 'Day', 'Daily Budget', 'Expense', 'Remaining Budget', 'Deficit', 'Running Balance'];
-    const values = row => [
-      row.date || row.label || '',
-      row.day || '',
-      formatExportCurrency(row.budget),
-      formatExportCurrency(row.spent),
-      formatExportCurrency(row.savings),
-      formatExportCurrency(row.deficit),
-      formatExportCurrency(row.runningBalance ?? row.closingBalance)
-    ];
-    const widths = [38, 24, 32, 32, 38, 32, 44];
-    let y = 18;
-    doc.setFontSize(16);
-    doc.text('Daily Budget Ledger', 14, y);
-    doc.setFontSize(9);
-    doc.text(`Daily Budget: ${formatExportCurrency(getStoredConfig().dailyBudget)}`, 14, y + 7);
-    y += 16;
-
-    const drawRow = (cells, bold, fill) => {
-      let x = 14;
-      if (fill) {
-        doc.setFillColor(bold ? 235 : 248, bold ? 235 : 248, bold ? 235 : 248);
-        doc.setTextColor(0, 0, 0);
-      } else {
-        doc.setTextColor(0, 0, 0);
-      }
-      cells.forEach((cell, index) => {
-        if (fill) doc.rect(x - 2, y - 5, widths[index], 8, 'F');
-        doc.setFont(undefined, bold ? 'bold' : 'normal');
-        doc.text(String(cell), x, y);
-        x += widths[index];
-      });
-      doc.setTextColor(0, 0, 0);
-      y += 8;
-    };
-
-    drawRow(columns, true, true);
-    rows.forEach(row => {
-      if (y > 190) {
-        doc.addPage('landscape');
-        y = 18;
-        drawRow(columns, true, true);
-      }
-      drawRow(values(row), row.type === 'summary', row.type === 'summary');
-    });
-    doc.save(`MoneyTracker_DailyLedger_${new Date().toISOString().slice(0, 10)}.pdf`);
   }
 
   function clearLedgerFilter() {
@@ -345,14 +125,11 @@
     return (Array.isArray(expenses) ? expenses : [])
       .filter((entry) => {
         if (!entry) return false;
-        if (entry.isArchived === true || entry.archived === true ||
-            String(entry.status || '').toLowerCase() === 'archived' ||
-            String(entry.archiveStatus || '').toLowerCase() === 'archived') return false;
         // Corrections and Budget-closure returns aren't real spending —
         // don't let them inflate a day's "Spent" figure.
         if (entry.type === 'adjustment' || entry.type === 'transfer_back') return false;
         const amount = safeNumber(entry.amount, 0);
-        return amount !== 0 && (entry.type === 'expense' || entry.type === 'loss' || amount < 0);
+        return entry.type === 'expense' || entry.type === 'loss' || amount < 0;
       })
       .filter((entry) => !activeExpenseFilter || activeExpenseFilter(entry))
       .map((entry) => ({
@@ -564,8 +341,7 @@
     const config = getStoredConfig();
     populateBudgetField(config);
 
-    const rows = sortLedgerRows(buildLedgerRows(config.dailyBudget, getFilteredExpenses(), config.weekStartDay));
-    currentLedgerRows = rows.slice();
+    const rows = buildLedgerRows(config.dailyBudget, null, config.weekStartDay);
     renderLedger(rows);
 
     const summaryCount = document.getElementById('ledgerEntryCount');
@@ -575,21 +351,6 @@
   }
 
   function bindEvents() {
-    if (ledgerEventsBound) return;
-    ledgerEventsBound = true;
-    ensureQueryAdapter();
-    const filterButton = document.getElementById('dailyLedgerFilterButton');
-    if (filterButton) filterButton.addEventListener('click', openLedgerFilterModal);
-    const sortSelect = document.getElementById('dailyLedgerSort');
-    if (sortSelect) {
-      const state = getQueryState();
-      sortSelect.value = Array.isArray(state.sort) && state.sort[0] && state.sort[0].direction === 'asc' ? 'asc' : 'desc';
-      sortSelect.addEventListener('change', () => handleLedgerSortChange(sortSelect.value));
-    }
-    const downloadPdfButton = document.getElementById('downloadDailyLedgerPdf');
-    if (downloadPdfButton) downloadPdfButton.addEventListener('click', downloadDailyBudgetLedgerPdf);
-    const downloadExcelButton = document.getElementById('downloadDailyLedgerExcel');
-    if (downloadExcelButton) downloadExcelButton.addEventListener('click', downloadDailyBudgetLedgerExcel);
     const saveBudgetButton = document.getElementById('saveDailyBudget');
     if (saveBudgetButton) saveBudgetButton.addEventListener('click', handleBudgetSave);
 
@@ -612,11 +373,6 @@
   root.setLedgerFilter = setLedgerFilter;
   root.clearLedgerFilter = clearLedgerFilter;
   root.handleBudgetSave = handleBudgetSave;
-  root.openLedgerFilterModal = openLedgerFilterModal;
-  root.closeLedgerFilterModal = closeLedgerFilterModal;
-  root.handleLedgerSortChange = handleLedgerSortChange;
-  root.downloadDailyBudgetLedgerPdf = downloadDailyBudgetLedgerPdf;
-  root.downloadDailyBudgetLedgerExcel = downloadDailyBudgetLedgerExcel;
 
   if (typeof document !== 'undefined') {
     document.addEventListener('DOMContentLoaded', initDailyBudgetLedgerPage);

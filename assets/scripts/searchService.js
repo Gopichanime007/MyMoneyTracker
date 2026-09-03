@@ -353,9 +353,7 @@
                 ? options.searchFields
                 : adapter.searchFields;
 
-            var rawFilters = Array.isArray(options.filters)
-                ? options.filters
-                : (Array.isArray(descriptor.filters) ? descriptor.filters : []);
+            var rawFilters = Array.isArray(descriptor.filters) ? descriptor.filters : [];
             var groupAnyFilter = rawFilters.find(function (item) {
                 return item && item.op === 'group_any' && item.value && Array.isArray(item.value.conditions);
             });
