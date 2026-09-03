@@ -371,7 +371,7 @@
                     fields: searchFields
                 },
                 filters: filtersWithoutGroupAny,
-                sort: Array.isArray(descriptor.sort) ? descriptor.sort : []
+                sort: Array.isArray(options.sort) ? options.sort : (Array.isArray(descriptor.sort) ? descriptor.sort : [])
             };
 
             if (!hasQueryEngine() || typeof globalScope.QueryEngine.runQueryPipeline !== 'function') {
@@ -481,7 +481,7 @@
     var service = createSearchService();
 
     service.registerAdapter('expenses', {
-        searchFields: ['type', 'category', 'purpose', 'entity', 'paymentType', 'budgetId', 'person', 'resolutionType', 'refundType', 'id']
+        searchFields: ['type', 'category', 'purpose', 'entity', 'paymentType', 'budgetId', 'person', 'resolutionType', 'refundType', 'date', 'amount', 'id']
     });
 
     service.registerAdapter('savings', {

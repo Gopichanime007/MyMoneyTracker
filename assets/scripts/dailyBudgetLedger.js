@@ -83,11 +83,13 @@
 
   function sortLedgerRows(rows) {
     const state = getQueryState();
-    const sort = Array.isArray(state.sort) && state.sort[0] ? state.sort[0] : { field: 'date', direction: 'desc' };
-    const direction = String(sort.direction || 'desc').toLowerCase() === 'asc' ? 1 : -1;
-    const entries = rows.filter((row) => row.type === 'entry').sort((a, b) => direction * (new Date(a.date) - new Date(b.date)));
+    const sort = Array.isArray(state.sort) && state.sort.length ? state.sort : [{ field: 'date', direction: 'desc', type: 'date' }];
+    const entries = rows.filter((row) => row.type === 'entry');
+    const result = root.SearchService && typeof root.SearchService.applyModuleSearch === 'function'
+      ? root.SearchService.applyModuleSearch(QUERY_MODULE, entries, { filters: [], sort })
+      : { results: entries };
     const summaries = rows.filter((row) => row.type === 'summary');
-    return entries.concat(summaries);
+    return (Array.isArray(result.results) ? result.results : entries).concat(summaries);
   }
 
   function setLedgerFilter(filterFn) {
@@ -97,6 +99,10 @@
 
   function openLedgerFilterModal() {
     initializeLedgerFilterBuilder();
+    if (ledgerFilterBuilder && typeof ledgerFilterBuilder.setFromFilters === 'function') {
+      const state = getQueryState();
+      ledgerFilterBuilder.setFromFilters(Array.isArray(state.filters) ? state.filters : []);
+    }
     const modal = document.getElementById('dailyLedgerFilterModal');
     if (modal) {
       modal.classList.remove('hidden');
@@ -146,6 +152,57 @@
       root.SearchService.setSort(QUERY_MODULE, [{ field: 'date', direction: direction === 'asc' ? 'asc' : 'desc', type: 'date' }]);
     }
     renderDailyBudgetLedger();
+  }
+
+  function openLedgerSortModal() {
+    const modal = document.getElementById('dailyLedgerSortModal');
+    const state = getQueryState();
+    const sort = Array.isArray(state.sort) && state.sort[0] ? state.sort[0] : { field: 'date', direction: 'desc' };
+    const field = document.getElementById('dailyLedgerSortField');
+    const direction = document.getElementById('dailyLedgerSortDirection');
+    if (field) field.value = sort.field || 'date';
+    if (direction) direction.value = sort.direction === 'asc' ? 'asc' : 'desc';
+    if (modal) {
+      modal.classList.remove('hidden');
+      modal.style.display = 'flex';
+    }
+  }
+
+  function closeLedgerSortModal() {
+    const modal = document.getElementById('dailyLedgerSortModal');
+    if (modal) {
+      modal.classList.add('hidden');
+      modal.style.display = 'none';
+    }
+  }
+
+  function applyLedgerSortModal() {
+    const field = document.getElementById('dailyLedgerSortField')?.value || 'date';
+    const direction = document.getElementById('dailyLedgerSortDirection')?.value === 'asc' ? 'asc' : 'desc';
+    if (root.SearchService && typeof root.SearchService.setSort === 'function') {
+      root.SearchService.setSort(QUERY_MODULE, [{ field, direction, type: field === 'date' ? 'date' : 'number' }]);
+    }
+    closeLedgerSortModal();
+    renderDailyBudgetLedger();
+  }
+
+  function clearLedgerSortModal() {
+    if (root.SearchService && typeof root.SearchService.clearSort === 'function') {
+      root.SearchService.clearSort(QUERY_MODULE);
+    }
+    closeLedgerSortModal();
+    renderDailyBudgetLedger();
+  }
+
+  function renderLedgerQueryChips() {
+    const host = document.getElementById('dailyLedgerQueryChips');
+    if (!host) return;
+    const state = getQueryState();
+    const filters = Array.isArray(state.filters) ? state.filters : [];
+    const sort = Array.isArray(state.sort) && state.sort[0] ? state.sort[0] : null;
+    const labels = filters.map((filter) => `${filter.field} ${filter.op}`);
+    if (sort) labels.push(`Sort: ${sort.field} ${sort.direction === 'asc' ? '↑' : '↓'}`);
+    host.innerHTML = labels.map((label) => `<span class="query-chip">${label}</span>`).join('');
   }
 
   function getDownloadRows() {
@@ -565,6 +622,7 @@
     populateBudgetField(config);
 
     const rows = sortLedgerRows(buildLedgerRows(config.dailyBudget, getFilteredExpenses(), config.weekStartDay));
+    renderLedgerQueryChips();
     currentLedgerRows = rows.slice();
     renderLedger(rows);
 
@@ -580,12 +638,8 @@
     ensureQueryAdapter();
     const filterButton = document.getElementById('dailyLedgerFilterButton');
     if (filterButton) filterButton.addEventListener('click', openLedgerFilterModal);
-    const sortSelect = document.getElementById('dailyLedgerSort');
-    if (sortSelect) {
-      const state = getQueryState();
-      sortSelect.value = Array.isArray(state.sort) && state.sort[0] && state.sort[0].direction === 'asc' ? 'asc' : 'desc';
-      sortSelect.addEventListener('change', () => handleLedgerSortChange(sortSelect.value));
-    }
+    const sortButton = document.getElementById('dailyLedgerSortButton');
+    if (sortButton) sortButton.addEventListener('click', openLedgerSortModal);
     const downloadPdfButton = document.getElementById('downloadDailyLedgerPdf');
     if (downloadPdfButton) downloadPdfButton.addEventListener('click', downloadDailyBudgetLedgerPdf);
     const downloadExcelButton = document.getElementById('downloadDailyLedgerExcel');

@@ -9855,8 +9855,7 @@ function loadBudgetScreen() {
 // Displays all budget entries
 function renderBudgetEntries() {
 
-    let budgetsAll = JSON.parse(localStorage.getItem("budgets")) || [];
-    let budgets = budgetsAll.filter(isValidBudgetEntry);
+    let budgets = getSelectableBudgetEntries(getBudgets());
     let expenses = getActiveExpenseEntries();
     let savings = JSON.parse(localStorage.getItem("savingsTransactions")) || [];
 

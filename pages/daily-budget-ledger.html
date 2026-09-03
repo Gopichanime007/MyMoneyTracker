@@ -58,6 +58,7 @@
         <h3>Ledger View</h3>
         <div class="ledger-tools">
           <button id="dailyLedgerFilterButton" class="secondary" type="button">Filter</button>
+          <button id="dailyLedgerSortButton" class="secondary" type="button">Sort</button>
           <details class="secondary-accordion ledger-download-menu">
             <summary>Download</summary>
             <div class="ledger-download-options">
@@ -65,13 +66,9 @@
               <button id="downloadDailyLedgerExcel" class="secondary" type="button">Excel</button>
             </div>
           </details>
-          <label class="sr-only" for="dailyLedgerSort">Sort ledger</label>
-          <select id="dailyLedgerSort" aria-label="Sort ledger">
-            <option value="desc">Newest first</option>
-            <option value="asc">Oldest first</option>
-          </select>
         </div>
       </div>
+      <div id="dailyLedgerQueryChips" class="query-chip-row"></div>
       <div class="ledger-table-container">
         <table class="ledger-table">
           <thead>
@@ -96,6 +93,28 @@
     <div class="modal-content" onclick="event.stopPropagation()">
       <h3>Daily Ledger Filter</h3>
       <div id="dailyLedgerFilterBuilderRoot"></div>
+    </div>
+  </div>
+  <div id="dailyLedgerSortModal" class="modal hidden" onclick="closeLedgerSortModal()">
+    <div class="modal-content" onclick="event.stopPropagation()">
+      <h3>Daily Ledger Sort</h3>
+      <label for="dailyLedgerSortField">Field</label>
+      <select id="dailyLedgerSortField">
+        <option value="date">Date</option>
+        <option value="spent">Spent</option>
+        <option value="savings">Savings</option>
+        <option value="deficit">Deficit</option>
+      </select>
+      <label for="dailyLedgerSortDirection">Direction</label>
+      <select id="dailyLedgerSortDirection">
+        <option value="desc">Descending</option>
+        <option value="asc">Ascending</option>
+      </select>
+      <div class="modal-actions sort-modal-actions">
+        <button class="secondary" type="button" onclick="closeLedgerSortModal()">Close</button>
+        <button class="secondary" type="button" onclick="clearLedgerSortModal()">Clear</button>
+        <button class="primary" type="button" onclick="applyLedgerSortModal()">Apply</button>
+      </div>
     </div>
   </div>
 
