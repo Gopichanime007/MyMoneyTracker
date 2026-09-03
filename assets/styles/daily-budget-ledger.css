@@ -8,9 +8,36 @@
 .ledger-shell {
     display: flex;
     flex-direction: column;
-    gap: 18px;
+    gap: 12px;
     font-family: 'Inter', -apple-system, sans-serif;
     color: #1D2229;
+}
+
+.ledger-budget-control {
+    display: grid;
+    grid-template-columns: auto minmax(120px, 1fr) auto;
+    align-items: end;
+    gap: 10px;
+}
+
+.ledger-budget-control label {
+    margin: 0;
+}
+
+.ledger-budget-control input,
+.ledger-tools select {
+    min-width: 0;
+}
+
+.ledger-tools {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.ledger-tools button,
+.ledger-tools select {
+    min-height: 36px;
 }
 
 
@@ -48,6 +75,8 @@
     border-radius: 14px;
     background: #FFFFFF;
     box-shadow: 0 1px 2px rgba(29, 34, 41, 0.04), 0 8px 24px rgba(29, 34, 41, 0.05);
+    max-height: min(68vh, 720px);
+    overflow-y: auto;
 }
 
 .ledger-table {
@@ -241,6 +270,18 @@
 ========================================== */
 
 @media (max-width: 768px) {
+
+    .ledger-budget-control {
+        grid-template-columns: 1fr auto;
+    }
+
+    .ledger-budget-control label {
+        grid-column: 1 / -1;
+    }
+
+    .ledger-tools {
+        gap: 5px;
+    }
 
     .ledger-table {
         min-width: 750px;

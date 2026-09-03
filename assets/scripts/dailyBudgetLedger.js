@@ -22,6 +22,7 @@
      remembered in localStorage.
   ========================================================== */
   const DEFAULT_WEEK_START_DAY = 1; // Monday
+  const QUERY_MODULE = 'dailyLedger';
 
   /* ==========================================================
      ⚠️  UPDATE HERE #4 — filter engine integration point.
@@ -34,10 +35,143 @@
      it never happened.
   ========================================================== */
   let activeExpenseFilter = null;
+  let ledgerFilterBuilder = null;
+  let currentLedgerRows = [];
+
+  function ensureQueryAdapter() {
+    if (!root.SearchService || typeof root.SearchService.registerAdapter !== 'function') return;
+    root.SearchService.registerAdapter(QUERY_MODULE, {
+      searchFields: ['date', 'type', 'amount', 'category', 'purpose', 'entity', 'paymentType', 'budgetId', 'person']
+    });
+  }
+
+  function getQueryState() {
+    ensureQueryAdapter();
+    if (!root.SearchService || typeof root.SearchService.getState !== 'function') {
+      return { filters: [], sort: [] };
+    }
+    return root.SearchService.getState(QUERY_MODULE);
+  }
+
+  function getFilteredExpenses() {
+    const source = getStoredExpenses().filter((entry) => {
+      if (!entry || entry.isArchived === true || entry.archived === true) return false;
+      if (String(entry.status || '').toLowerCase() === 'archived' || String(entry.archiveStatus || '').toLowerCase() === 'archived') return false;
+      const amount = safeNumber(entry.amount, 0);
+      return amount !== 0 && (entry.type === 'expense' || entry.type === 'loss' || amount < 0);
+    });
+
+    if (!root.SearchService || typeof root.SearchService.applyModuleSearch !== 'function') return source;
+    const state = getQueryState();
+    const filters = (Array.isArray(state.filters) ? state.filters : []).map((filter) => {
+      if (filter && filter.field === 'date' && filter.op === 'between') {
+        return {
+          version: 'v1',
+          field: 'date',
+          op: 'period',
+          value: { type: 'custom', from: filter.from, to: filter.to }
+        };
+      }
+      return filter;
+    });
+    const result = root.SearchService.applyModuleSearch(QUERY_MODULE, source, {
+      filters
+    });
+    return Array.isArray(result.results) ? result.results : source;
+  }
+
+  function sortLedgerRows(rows) {
+    const state = getQueryState();
+    const sort = Array.isArray(state.sort) && state.sort[0] ? state.sort[0] : { field: 'date', direction: 'desc' };
+    const direction = String(sort.direction || 'desc').toLowerCase() === 'asc' ? 1 : -1;
+    const entries = rows.filter((row) => row.type === 'entry').sort((a, b) => direction * (new Date(a.date) - new Date(b.date)));
+    const summaries = rows.filter((row) => row.type === 'summary');
+    return entries.concat(summaries);
+  }
 
   function setLedgerFilter(filterFn) {
     activeExpenseFilter = typeof filterFn === 'function' ? filterFn : null;
     renderDailyBudgetLedger();
+  }
+
+  function openLedgerFilterModal() {
+    initializeLedgerFilterBuilder();
+    const modal = document.getElementById('dailyLedgerFilterModal');
+    if (modal) {
+      modal.classList.remove('hidden');
+      modal.style.display = 'flex';
+    }
+  }
+
+  function closeLedgerFilterModal() {
+    const modal = document.getElementById('dailyLedgerFilterModal');
+    if (modal) {
+      modal.classList.add('hidden');
+      modal.style.display = 'none';
+    }
+  }
+
+  function initializeLedgerFilterBuilder() {
+    if (ledgerFilterBuilder || !root.FilterBuilder || typeof root.FilterBuilder.create !== 'function') return;
+    ledgerFilterBuilder = root.FilterBuilder.create({
+      module: QUERY_MODULE,
+      dateField: 'date',
+      templates: [
+        { key: 'date', label: 'Date', field: 'date', type: 'date', hint: 'Use Equals, Before, After, or Between' },
+        { key: 'category', label: 'Category', field: 'category', type: 'text' },
+        { key: 'type', label: 'Type', field: 'type', type: 'text' },
+        { key: 'amount', label: 'Amount', field: 'amount', type: 'number' },
+        { key: 'payment', label: 'Payment Type', field: 'paymentType', type: 'enum' },
+        { key: 'source', label: 'Source', field: 'entity', type: 'text' }
+      ],
+      onApply: (filters) => {
+        if (root.SearchService && typeof root.SearchService.setFilters === 'function') root.SearchService.setFilters(QUERY_MODULE, filters);
+        closeLedgerFilterModal();
+        renderDailyBudgetLedger();
+      },
+      onClear: () => {
+        if (root.SearchService && typeof root.SearchService.clearFilters === 'function') root.SearchService.clearFilters(QUERY_MODULE);
+        closeLedgerFilterModal();
+        renderDailyBudgetLedger();
+      },
+      onClose: closeLedgerFilterModal
+    });
+    ledgerFilterBuilder.mount(document.getElementById('dailyLedgerFilterBuilderRoot'));
+  }
+
+  function handleLedgerSortChange(direction) {
+    ensureQueryAdapter();
+    if (root.SearchService && typeof root.SearchService.setSort === 'function') {
+      root.SearchService.setSort(QUERY_MODULE, [{ field: 'date', direction: direction === 'asc' ? 'asc' : 'desc', type: 'date' }]);
+    }
+    renderDailyBudgetLedger();
+  }
+
+  async function downloadDailyBudgetLedger() {
+    const rows = currentLedgerRows.slice();
+    const payload = {
+      type: 'daily-budget-ledger',
+      exportedAt: new Date().toISOString(),
+      dailyBudget: getStoredConfig().dailyBudget,
+      query: getQueryState(),
+      rows
+    };
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json;charset=utf-8' });
+    const filename = `MoneyTracker_DailyLedger_${new Date().toISOString().slice(0, 10)}.json`;
+
+    if (typeof root.downloadBlobWithBestEffort === 'function') {
+      await root.downloadBlobWithBestEffort(blob, filename);
+      return;
+    }
+
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = filename;
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 4000);
   }
 
   function clearLedgerFilter() {
@@ -125,11 +259,14 @@
     return (Array.isArray(expenses) ? expenses : [])
       .filter((entry) => {
         if (!entry) return false;
+        if (entry.isArchived === true || entry.archived === true ||
+            String(entry.status || '').toLowerCase() === 'archived' ||
+            String(entry.archiveStatus || '').toLowerCase() === 'archived') return false;
         // Corrections and Budget-closure returns aren't real spending —
         // don't let them inflate a day's "Spent" figure.
         if (entry.type === 'adjustment' || entry.type === 'transfer_back') return false;
         const amount = safeNumber(entry.amount, 0);
-        return entry.type === 'expense' || entry.type === 'loss' || amount < 0;
+        return amount !== 0 && (entry.type === 'expense' || entry.type === 'loss' || amount < 0);
       })
       .filter((entry) => !activeExpenseFilter || activeExpenseFilter(entry))
       .map((entry) => ({
@@ -341,7 +478,8 @@
     const config = getStoredConfig();
     populateBudgetField(config);
 
-    const rows = buildLedgerRows(config.dailyBudget, null, config.weekStartDay);
+    const rows = sortLedgerRows(buildLedgerRows(config.dailyBudget, getFilteredExpenses(), config.weekStartDay));
+    currentLedgerRows = rows.slice();
     renderLedger(rows);
 
     const summaryCount = document.getElementById('ledgerEntryCount');
@@ -351,6 +489,17 @@
   }
 
   function bindEvents() {
+    ensureQueryAdapter();
+    const filterButton = document.getElementById('dailyLedgerFilterButton');
+    if (filterButton) filterButton.addEventListener('click', openLedgerFilterModal);
+    const sortSelect = document.getElementById('dailyLedgerSort');
+    if (sortSelect) {
+      const state = getQueryState();
+      sortSelect.value = Array.isArray(state.sort) && state.sort[0] && state.sort[0].direction === 'asc' ? 'asc' : 'desc';
+      sortSelect.addEventListener('change', () => handleLedgerSortChange(sortSelect.value));
+    }
+    const downloadButton = document.getElementById('downloadDailyLedger');
+    if (downloadButton) downloadButton.addEventListener('click', downloadDailyBudgetLedger);
     const saveBudgetButton = document.getElementById('saveDailyBudget');
     if (saveBudgetButton) saveBudgetButton.addEventListener('click', handleBudgetSave);
 
@@ -373,6 +522,10 @@
   root.setLedgerFilter = setLedgerFilter;
   root.clearLedgerFilter = clearLedgerFilter;
   root.handleBudgetSave = handleBudgetSave;
+  root.openLedgerFilterModal = openLedgerFilterModal;
+  root.closeLedgerFilterModal = closeLedgerFilterModal;
+  root.handleLedgerSortChange = handleLedgerSortChange;
+  root.downloadDailyBudgetLedger = downloadDailyBudgetLedger;
 
   if (typeof document !== 'undefined') {
     document.addEventListener('DOMContentLoaded', initDailyBudgetLedgerPage);

@@ -265,8 +265,11 @@
             <span id="ledgerEntryCount" class="ledger-pill">0 entries</span>
           </div>
 
-          <label for="dailyBudgetInput">Fixed Daily Budget</label>
-          <input id="dailyBudgetInput" type="number" min="0" step="1" placeholder="100" />
+          <div class="ledger-budget-control">
+            <label for="dailyBudgetInput">Fixed Daily Budget</label>
+            <input id="dailyBudgetInput" type="number" min="0" step="1" placeholder="100" />
+            <button id="saveDailyBudget" class="primary" type="button">Save Budget</button>
+          </div>
 
           <label for="weekStartDaySelect">Week Starts On</label>
           <select id="weekStartDaySelect">
@@ -279,10 +282,17 @@
             <option value="6">Saturday</option>
           </select>
 
-          <button id="saveDailyBudget" class="primary" type="button">Save Budget</button>
-
           <div class="section-title-row" style="margin-top: var(--space-md);">
             <h3>Ledger View</h3>
+            <div class="ledger-tools">
+              <button id="dailyLedgerFilterButton" class="secondary" type="button">Filter</button>
+              <button id="downloadDailyLedger" class="secondary" type="button">Download</button>
+              <label class="sr-only" for="dailyLedgerSort">Sort ledger</label>
+              <select id="dailyLedgerSort" aria-label="Sort ledger">
+                <option value="desc">Newest first</option>
+                <option value="asc">Oldest first</option>
+              </select>
+            </div>
           </div>
           <div class="ledger-table-container">
             <table class="ledger-table">
@@ -302,6 +312,12 @@
         </div>
       </div>
     </section>
+    <div id="dailyLedgerFilterModal" class="modal hidden" onclick="closeLedgerFilterModal()">
+      <div class="modal-content" onclick="event.stopPropagation()">
+        <h3>Daily Ledger Filter</h3>
+        <div id="dailyLedgerFilterBuilderRoot"></div>
+      </div>
+    </div>
     <!-- ================= BUDGET ================= -->
     <section id="budget" class="screen">
       <div class="card">
@@ -685,6 +701,7 @@
 
   <!-- Main Application -->
   <script src="assets/scripts/script.js"></script>
+  <script src="assets/scripts/importEngine.js"></script>
 
   <script src="assets/scripts/dailyBudgetLedger.js"></script>
   <script src="assets/scripts/applyTheme.js"></script>
