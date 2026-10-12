@@ -539,7 +539,8 @@ window.addEventListener("load", function () {
     // Only run savings initialization when savings form element exists
     if (!document.getElementById || !document.getElementById("sType")) return;
 
-    loadSavings();
+    clearFilter();
+    loadSavings(false);
     setTodayDate();
     loadSourceOptions();
     loadRefundCandidates();
@@ -558,10 +559,8 @@ window.addEventListener("load", function () {
     renderCategoryList();
     renderPersonList();
     setTimeout(() => {
-        loadSavings();
+        loadSavings(false);
     }, 50);
-
-    renderSavingsHistory();
 
     let theme = localStorage.getItem("theme") || "#4caf50";
     document.documentElement.style.setProperty("--theme", theme);
@@ -1329,7 +1328,7 @@ function getPeriodEntriesForSavingsDashboard(allRows, activePeriod, periodKey) {
 }
 
 // Calculates totals and updates savings dashboard UI
-function loadSavings() {
+function loadSavings(renderHistory = true) {
     let allRows = (typeof getSavings === "function") ? (getSavings() || []) : [];
     let periodRows = getPeriodEntriesForSavingsDashboard(allRows, null, null);
 
@@ -1395,7 +1394,7 @@ function loadSavings() {
     setTextById("savingsHealthNet", formatSavingsAmount(netMovement));
     setTextById("savingsHealthTransactions", String(periodRows.length));
 
-    renderSavingsHistory();
+    if (renderHistory) renderSavingsHistory();
 }
 
 // =========================
@@ -2140,6 +2139,7 @@ function loadSavingsGraph(data) {
 
 // Switches between different UI screens (home, graph, income, details)
 function showSavingsScreen(id) {
+    clearFilter();
     console.log("Switching to:", id);
 
     // 🔹 Reset all screens
@@ -2172,17 +2172,8 @@ function showSavingsScreen(id) {
 
     // 🔹 Controlled rendering
     switch (id) {
-
-        case "history":
-            renderSavingsHistory();
-            break;
-
         case "income":
             renderIncomeList();
-            break;
-
-        case "graph":
-            loadSavingsGraph(Array.isArray(visibleSavingsRows) ? visibleSavingsRows : (getSavings() || []));
             break;
     }
 }
