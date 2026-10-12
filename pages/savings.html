@@ -259,7 +259,12 @@
           <button class="secondary" type="button" onclick="exportSavingsPDF()">Export</button>
         </div>
 
-        <div id="savingsQueryChips" class="query-chip-row"></div>
+        <div class="savings-filter-controls">
+          <div id="savingsQueryChips" class="query-chip-row"></div>
+          <button id="savingsQueryClearFilter" class="secondary query-chip savings-clear-filter" type="button" hidden onclick="clearFilter()">
+            Clear Filter
+          </button>
+        </div>
 
         <div id="savingsHistory"></div>
       </div>
@@ -398,6 +403,11 @@
     <div class="modal-content" onclick="event.stopPropagation()">
       <h3>Savings Filter Builder</h3>
       <div id="savingsFilterBuilderRoot"></div>
+      <div class="modal-actions savings-filter-modal-actions">
+        <button id="savingsModalClearFilter" class="secondary savings-clear-filter" type="button" hidden onclick="clearFilter()">
+          Clear Filter
+        </button>
+      </div>
     </div>
   </div>
 

@@ -561,7 +561,7 @@ window.addEventListener("load", function () {
         loadSavings();
     }, 50);
 
-    renderSavingsHistory(getSavings());
+    renderSavingsHistory();
 
     let theme = localStorage.getItem("theme") || "#4caf50";
     document.documentElement.style.setProperty("--theme", theme);
@@ -1330,8 +1330,7 @@ function getPeriodEntriesForSavingsDashboard(allRows, activePeriod, periodKey) {
 
 // Calculates totals and updates savings dashboard UI
 function loadSavings() {
-    let scoped = (typeof getScopedSavings === "function") ? getScopedSavings() : (getSavings() || []);
-    let allRows = (typeof getSavings === "function") ? (getSavings() || []) : scoped;
+    let allRows = (typeof getSavings === "function") ? (getSavings() || []) : [];
     let periodRows = getPeriodEntriesForSavingsDashboard(allRows, null, null);
 
     let daily = getDailyBudget();
@@ -1396,7 +1395,7 @@ function loadSavings() {
     setTextById("savingsHealthNet", formatSavingsAmount(netMovement));
     setTextById("savingsHealthTransactions", String(periodRows.length));
 
-    renderSavingsHistory(scoped);
+    renderSavingsHistory();
 }
 
 // =========================
@@ -1453,7 +1452,8 @@ function renderSavingsHistory(data) {
     let container = document.getElementById("savingsHistory");
     if (!container) return;
 
-    let sourceData = applySavingsSearch(data);
+    let sourceData = Array.isArray(data) ? data : getFilteredSavings();
+    visibleSavingsRows = sourceData;
     renderSavingsQueryChips();
     updateSavingsSortIndicator();
 
@@ -1690,8 +1690,21 @@ function setTodayDate() {
 
 
 
-//Filter
-let filteredSavingsData = [];
+// Filter state is separate from the persisted source data; all views derive from the source.
+const SAVINGS_FILTER_DEFAULTS = Object.freeze({
+    period: "all",
+    fromDate: "",
+    toDate: "",
+    filters: []
+});
+let savingsFilterState = Object.assign({}, SAVINGS_FILTER_DEFAULTS);
+let allSavingsData = [];
+let visibleSavingsRows = null;
+
+if (window.SearchService && typeof window.SearchService.getState === "function") {
+    let savedFilters = window.SearchService.getState("savings").filters;
+    savingsFilterState.filters = Array.isArray(savedFilters) ? savedFilters.slice() : [];
+}
 
 function applySavingsSearch(rows) {
     let list = Array.isArray(rows) ? rows : [];
@@ -1703,12 +1716,112 @@ function applySavingsSearch(rows) {
     return Array.isArray(queryResult.results) ? queryResult.results : list;
 }
 
+function getFilteredSavings() {
+    let sourceRows = typeof getSavings === "function" ? getSavings() : [];
+    allSavingsData = Array.isArray(sourceRows) ? sourceRows : [];
+    let rows = allSavingsData.slice();
+    let now = new Date();
+
+    if (savingsFilterState.period === "today") {
+        let start = new Date(now);
+        start.setHours(0, 0, 0, 0);
+        let end = new Date(now);
+        end.setHours(23, 59, 59, 999);
+        rows = rows.filter(entry => {
+            let date = new Date(entry.date);
+            return !Number.isNaN(date.getTime()) && date >= start && date <= end;
+        });
+    } else if (savingsFilterState.period === "week") {
+        let start = new Date(now);
+        start.setDate(now.getDate() - 6);
+        start.setHours(0, 0, 0, 0);
+        let end = new Date(now);
+        end.setHours(23, 59, 59, 999);
+        rows = rows.filter(entry => {
+            let date = new Date(entry.date);
+            return !Number.isNaN(date.getTime()) && date >= start && date <= end;
+        });
+    } else if (savingsFilterState.period === "month") {
+        let start = new Date(now.getFullYear(), now.getMonth(), 1);
+        let end = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
+        rows = rows.filter(entry => {
+            let date = new Date(entry.date);
+            return !Number.isNaN(date.getTime()) && date >= start && date <= end;
+        });
+    } else if (savingsFilterState.period === "period" && (savingsFilterState.fromDate || savingsFilterState.toDate)) {
+        rows = rows.filter(entry => {
+            let date = new Date(entry.date);
+            if (Number.isNaN(date.getTime())) return false;
+            let dateKey = date.toISOString().slice(0, 10);
+            return (!savingsFilterState.fromDate || dateKey >= savingsFilterState.fromDate)
+                && (!savingsFilterState.toDate || dateKey <= savingsFilterState.toDate);
+        });
+    }
+
+    return applySavingsSearch(rows);
+}
+
+function renderFilteredSavings() {
+    renderSavingsHistory();
+    loadSavingsGraph(visibleSavingsRows);
+    renderSavingsQueryChips();
+}
+
+function applyFilter(filters) {
+    if (Array.isArray(filters)) {
+        savingsFilterState.filters = filters.slice();
+    }
+    if (window.SearchService && typeof window.SearchService.setFilters === "function") {
+        window.SearchService.setFilters("savings", savingsFilterState.filters);
+    }
+    renderFilteredSavings();
+}
+
+function clearFilter(closeAfterClear = true) {
+    savingsFilterState = Object.assign({}, SAVINGS_FILTER_DEFAULTS);
+    if (window.SearchService && typeof window.SearchService.clearFilters === "function") {
+        window.SearchService.clearFilters("savings");
+    }
+
+    initializeSavingsFilterBuilder();
+    if (savingsFilterBuilderInstance) {
+        savingsFilterBuilderInstance.clearAll();
+    }
+    document.querySelectorAll("#history select, #graph select").forEach(select => {
+        select.value = "all";
+    });
+    ["sFromDate", "sToDate"].forEach(id => {
+        let input = document.getElementById(id);
+        if (input) input.value = "";
+    });
+
+    try {
+        let storageKey = window.SearchService && window.SearchService.STORAGE_KEY
+            ? window.SearchService.STORAGE_KEY
+            : "query.state.v1";
+        let stateMap = JSON.parse(localStorage.getItem(storageKey) || "{}");
+        if (stateMap.savings) {
+            delete stateMap.savings.filters;
+            localStorage.setItem(storageKey, JSON.stringify(stateMap));
+        }
+    } catch (_error) {
+        // Keep clearing the visible and in-memory filter if storage is unavailable.
+    }
+
+    if (closeAfterClear) {
+        closeSavingsFilterModal();
+        closeSavingsModal();
+    }
+    renderFilteredSavings();
+}
+
 function openSavingsFilterModal() {
     initializeSavingsFilterBuilder();
     if (window.SearchService && typeof window.SearchService.getState === "function" && savingsFilterBuilderInstance) {
         let state = window.SearchService.getState("savings");
         savingsFilterBuilderInstance.setFromFilters(Array.isArray(state.filters) ? state.filters : []);
     }
+    updateSavingsClearFilterVisibility();
     let modal = document.getElementById("savingsFilterModal");
     if (modal) {
         modal.classList.remove("hidden");
@@ -1777,17 +1890,9 @@ function buildSavingsFilterDescriptorsFromModal() {
 }
 
 function applySavingsFilterModal(explicitFilters) {
-    if (window.SearchService && typeof window.SearchService.setFilters === "function") {
-        let filters = Array.isArray(explicitFilters) ? explicitFilters : buildSavingsFilterDescriptorsFromModal();
-        window.SearchService.setFilters("savings", filters);
-    }
-
+    let filters = Array.isArray(explicitFilters) ? explicitFilters : buildSavingsFilterDescriptorsFromModal();
     closeSavingsFilterModal();
-    let base = filteredSavingsData.length ? filteredSavingsData : getScopedSavings();
-    filteredSavingsData = applySavingsSearch(base);
-    renderSavingsHistory(filteredSavingsData);
-    loadSavingsGraph(filteredSavingsData);
-    renderSavingsQueryChips();
+    applyFilter(filters);
 }
 
 async function saveSavingsFilterModal() {
@@ -1802,22 +1907,7 @@ async function saveSavingsFilterModal() {
 }
 
 function clearSavingsFilterModal(closeAfterClear = true) {
-    initializeSavingsFilterBuilder();
-    if (savingsFilterBuilderInstance) {
-        savingsFilterBuilderInstance.clearAll();
-    }
-
-    if (window.SearchService && typeof window.SearchService.clearFilters === "function") {
-        window.SearchService.clearFilters("savings");
-    }
-
-    if (closeAfterClear) {
-        closeSavingsFilterModal();
-    }
-    filteredSavingsData = applySavingsSearch(getScopedSavings());
-    renderSavingsHistory(filteredSavingsData);
-    loadSavingsGraph(filteredSavingsData);
-    renderSavingsQueryChips();
+    clearFilter(closeAfterClear);
 }
 
 function countSavingsFilterConditions(filters) {
@@ -1873,6 +1963,7 @@ function getSavingsFilterChipLabel(filter) {
 }
 
 function renderSavingsQueryChips() {
+    updateSavingsClearFilterVisibility();
     let host = document.getElementById("savingsQueryChips");
     if (!host || !window.SearchService || typeof window.SearchService.getState !== "function") {
         return;
@@ -1906,44 +1997,45 @@ function renderSavingsQueryChips() {
     }
 }
 
+function updateSavingsClearFilterVisibility() {
+    let filters = savingsFilterState.filters;
+    if (window.SearchService && typeof window.SearchService.getState === "function") {
+        let state = window.SearchService.getState("savings");
+        if (Array.isArray(state.filters)) filters = state.filters;
+    }
+
+    let active = countSavingsFilterConditions(filters) > 0
+        || savingsFilterState.period !== SAVINGS_FILTER_DEFAULTS.period
+        || Boolean(savingsFilterState.fromDate || savingsFilterState.toDate);
+    let queryClearButton = document.getElementById("savingsQueryClearFilter");
+    if (queryClearButton) queryClearButton.hidden = !active;
+
+    let modalClearButton = document.getElementById("savingsModalClearFilter");
+    let builderHasClearAction = savingsFilterBuilderInstance && countSavingsFilterConditions(filters) > 0;
+    if (modalClearButton) modalClearButton.hidden = !active || Boolean(builderHasClearAction);
+}
+
 function removeSavingsFilterChip(index) {
     if (!window.SearchService || typeof window.SearchService.getState !== "function") return;
     let state = window.SearchService.getState("savings");
     let filters = Array.isArray(state.filters) ? state.filters.slice() : [];
     filters.splice(index, 1);
-    if (typeof window.SearchService.setFilters === "function") {
-        window.SearchService.setFilters("savings", filters);
-    }
-    let base = filteredSavingsData.length ? filteredSavingsData : getScopedSavings();
-    filteredSavingsData = applySavingsSearch(base);
-    renderSavingsHistory(filteredSavingsData);
-    loadSavingsGraph(filteredSavingsData);
-    renderSavingsQueryChips();
+    applyFilter(filters);
 }
 
 function clearSavingsSortChip() {
     if (window.SearchService && typeof window.SearchService.clearSort === "function") {
         window.SearchService.clearSort("savings");
     }
-    let base = filteredSavingsData.length ? filteredSavingsData : getScopedSavings();
-    filteredSavingsData = applySavingsSearch(base);
-    renderSavingsHistory(filteredSavingsData);
-    loadSavingsGraph(filteredSavingsData);
+    renderFilteredSavings();
 }
 
 function clearSavingsQueryChips() {
-    if (window.SearchService) {
-        if (typeof window.SearchService.clearFilters === "function") {
-            window.SearchService.clearFilters("savings");
-        }
-        if (typeof window.SearchService.clearSort === "function") {
-            window.SearchService.clearSort("savings");
-        }
+    clearFilter(false);
+    if (window.SearchService && typeof window.SearchService.clearSort === "function") {
+        window.SearchService.clearSort("savings");
     }
-    filteredSavingsData = applySavingsSearch(getScopedSavings());
-    renderSavingsHistory(filteredSavingsData);
-    loadSavingsGraph(filteredSavingsData);
-    renderSavingsQueryChips();
+    renderFilteredSavings();
 }
 
 function openSavingsSortModal() {
@@ -1973,11 +2065,7 @@ function applySavingsSortModal() {
 
     closeSavingsSortModal();
     updateSavingsSortIndicator();
-    let base = filteredSavingsData.length ? filteredSavingsData : getScopedSavings();
-    filteredSavingsData = applySavingsSearch(base);
-    renderSavingsHistory(filteredSavingsData);
-    loadSavingsGraph(filteredSavingsData);
-    renderSavingsQueryChips();
+    renderFilteredSavings();
 }
 
 function clearSavingsSortModal() {
@@ -1992,98 +2080,20 @@ function clearSavingsSortModal() {
 
     closeSavingsSortModal();
     updateSavingsSortIndicator();
-    let base = filteredSavingsData.length ? filteredSavingsData : getScopedSavings();
-    filteredSavingsData = applySavingsSearch(base);
-    renderSavingsHistory(filteredSavingsData);
-    loadSavingsGraph(filteredSavingsData);
-    renderSavingsQueryChips();
+    renderFilteredSavings();
 }
 
 // Filters savings data by time (today, week, month, all) and updates UI
 function handleSavingsFilter(type) {
-
-    let data = getSavings() || [];
-
-    let now = new Date();
-
-    let baseData = [...data];
-
-    // =========================
-    // 🧠 SAFE DATE PARSER
-    // =========================
-    function getSafeDate(d) {
-        let parsed = new Date(d);
-        return isNaN(parsed) ? null : parsed;
-    }
-
-    // =========================
-    // 🔥 CUSTOM PERIOD (MODAL)
-    // =========================
     if (type === "period") {
+        savingsFilterState.period = "period";
+        updateSavingsClearFilterVisibility();
         let modal = document.getElementById("savingsDateModal");
         if (modal) modal.style.display = "flex";
-        return; // ⛔ STOP execution
+        return;
     }
-
-    // =========================
-    // 🎯 FILTER LOGIC
-    // =========================
-
-    let result = [];
-
-    // 🔥 TODAY
-    if (type === "today") {
-
-        let start = new Date();
-        start.setHours(0, 0, 0, 0);
-
-        let end = new Date();
-        end.setHours(23, 59, 59, 999);
-
-        result = baseData.filter(t => {
-            let d = getSafeDate(t.date);
-            return d && d >= start && d <= end;
-        });
-    }
-
-    // 🔥 WEEK (LAST 7 DAYS)
-    else if (type === "week") {
-
-        let start = new Date(now);
-        start.setDate(now.getDate() - 6);
-        start.setHours(0, 0, 0, 0);
-
-        let end = new Date(now);
-        end.setHours(23, 59, 59, 999);
-
-        result = baseData.filter(t => {
-            let d = getSafeDate(t.date);
-            return d && d >= start && d <= end;
-        });
-    }
-
-    // 🔥 MONTH
-    else if (type === "month") {
-        let monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
-        let monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
-        result = baseData.filter(t => {
-            let d = getSafeDate(t.date);
-            return d && d >= monthStart && d <= monthEnd;
-        });
-    }
-
-    // 🔥 ALL
-    else {
-        result = [...baseData];
-    }
-
-    // =========================
-    // 📊 STORE + UPDATE UI
-    // =========================
-    filteredSavingsData = applySavingsSearch(result);
-
-    renderSavingsHistory(filteredSavingsData);
-    loadSavingsGraph(filteredSavingsData);
+    savingsFilterState.period = type;
+    renderFilteredSavings();
 }
 // Generates income vs expense chart using filtered or full data
 function loadSavingsGraph(data) {
@@ -2096,7 +2106,7 @@ function loadSavingsGraph(data) {
     let d = data;
 
     if (!d) {
-        d = getSavings() || [];
+        d = (typeof getSavings === "function" ? getSavings() : []) || [];
     }
 
     let income = 0;
@@ -2164,11 +2174,7 @@ function showSavingsScreen(id) {
     switch (id) {
 
         case "history":
-            renderSavingsHistory(
-                filteredSavingsData.length
-                    ? filteredSavingsData
-                    : getScopedSavings()
-            );
+            renderSavingsHistory();
             break;
 
         case "income":
@@ -2176,12 +2182,7 @@ function showSavingsScreen(id) {
             break;
 
         case "graph":
-            // 🔥 use scoped data (fixed)
-            loadSavingsGraph(
-                filteredSavingsData.length
-                    ? filteredSavingsData
-                    : getScopedSavings()
-            );
+            loadSavingsGraph(Array.isArray(visibleSavingsRows) ? visibleSavingsRows : (getSavings() || []));
             break;
     }
 }
@@ -2583,24 +2584,10 @@ function loadBudgetYears() {
 function applySavingsDateFilter() {
     let from = document.getElementById("sFromDate").value;
     let to = document.getElementById("sToDate").value;
-
-    let data = getSavings() || [];
-
-    let scoped = data.filter(t => {
-        let d = new Date(t.date).toISOString().slice(0, 10);
-
-        if (from && !to) return d === from;
-        if (!from && to) return d <= to;
-        if (from && to) return d >= from && d <= to;
-
-        return true;
-    });
-
-    filteredSavingsData = applySavingsSearch(scoped);
-
-    renderSavingsHistory(filteredSavingsData);
-    loadSavingsGraph(filteredSavingsData);
-
+    savingsFilterState.period = "period";
+    savingsFilterState.fromDate = from;
+    savingsFilterState.toDate = to;
+    renderFilteredSavings();
     closeSavingsModal();
 }
 
@@ -2750,7 +2737,7 @@ function exportSavingsPDF() {
     }
     const doc = new jsPDF();
 
-    let data = applySavingsSearch(getSavings());
+    let data = getFilteredSavings();
 
     if (!data.length) {
         showToast("No data to export", "warning");

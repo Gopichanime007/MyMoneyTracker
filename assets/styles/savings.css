@@ -6,6 +6,38 @@
   --surface: #ffffff;
 }
 
+.savings-filter-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.savings-filter-controls .query-chip-row {
+  flex: 1 1 200px;
+  min-width: 0;
+}
+
+.savings-filter-controls > .savings-clear-filter {
+  width: auto;
+  min-height: 40px;
+  margin: 0;
+  flex: 0 0 auto;
+}
+
+.savings-filter-modal-actions {
+  margin-top: 10px;
+}
+
+.savings-filter-modal-actions .savings-clear-filter {
+  min-height: 40px;
+}
+
+.savings-clear-filter[hidden] {
+  display: none !important;
+}
+
 .summary {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));

@@ -7545,6 +7545,7 @@ function normalizeImportPayload(parsed, options = {}) {
         "budgetPeriods",
         "categories",
         "persons",
+        "unassignedTopups",
         "settings",
         "meta",
         "orders",
@@ -11945,6 +11946,17 @@ function exportDataAsExcel() {
         budgetPeriods: JSON.parse(localStorage.getItem("bp")) || []
     };
 
+    const countRows = (rows) => Array.isArray(rows) ? rows.length : 0;
+    const rawSourceCounts = {
+        expenses: countRows(getExpenses()),
+        budgets: countRows(getBudgets()),
+        savings: countRows(getSavings()),
+        orders: countRows(JSON.parse(localStorage.getItem("orders") || "[]")),
+        categories: countRows(JSON.parse(localStorage.getItem("categories") || "[]")),
+        persons: countRows(JSON.parse(localStorage.getItem("persons") || "[]")),
+        budgetPeriods: countRows(JSON.parse(localStorage.getItem("bp") || "[]"))
+    };
+
     function normalizeOrderId(id) {
         let str = String(id || "");
         return str.startsWith("order_") ? str : "order_" + str;
@@ -12014,6 +12026,19 @@ function exportDataAsExcel() {
                 itemTotal: Number(i.total) || (i.qty * i.price) || 0
             });
         });
+    });
+
+    rawSourceCounts.orderItems = data.orders.reduce((count, order) => count + (Array.isArray(order.items) ? order.items.length : 0), 0);
+    Object.keys(rawSourceCounts).forEach((moduleName) => {
+        const exportRows = moduleName === "orderItems" ? orderItems : data[moduleName];
+        const exportCount = countRows(exportRows);
+        if (rawSourceCounts[moduleName] !== exportCount) {
+            console.warn("Excel export record count mismatch", {
+                module: moduleName,
+                rawSourceCount: rawSourceCounts[moduleName],
+                exportCount
+            });
+        }
     });
 
     XLSX.utils.book_append_sheet(
@@ -13068,7 +13093,48 @@ function getFullAppData() {
         }
     };
 
-    return migrateDataVersion(exportPayload, { direction: "toDevelopment" }).data;
+    const countRows = (rows) => Array.isArray(rows) ? rows.length : 0;
+    const sourceRecordCounts = {
+        expenses: countRows(getExpenses()),
+        budgets: countRows(getBudgets()),
+        savings: countRows(getSavings()),
+        orders: countRows(JSON.parse(localStorage.getItem("orders") || "[]")),
+        categories: countRows(JSON.parse(localStorage.getItem("categories") || "[]")),
+        persons: countRows(JSON.parse(localStorage.getItem("persons") || "[]")),
+        budgetPeriods: countRows(JSON.parse(localStorage.getItem("bp") || "[]")),
+        unassignedTopups: countRows(JSON.parse(localStorage.getItem("unassignedTopups") || "[]")),
+        quotationItems: countRows(JSON.parse(localStorage.getItem("quotationItems") || "[]")),
+        quotationCharges: countRows(JSON.parse(localStorage.getItem("quotationCharges") || "[]")),
+        quotationRegistry: countRows(JSON.parse(localStorage.getItem("quotationRegistry") || "[]")),
+        documentRelations: countRows(JSON.parse(localStorage.getItem("documentRelations") || "[]"))
+    };
+    const backupData = migrateDataVersion(exportPayload, { direction: "toDevelopment" }).data;
+    const backupRecordCounts = {
+        expenses: countRows(backupData.expenses),
+        budgets: countRows(backupData.budgets),
+        savings: countRows(backupData.savings),
+        orders: countRows(backupData.orders),
+        categories: countRows(backupData.categories),
+        persons: countRows(backupData.persons),
+        budgetPeriods: countRows(backupData.budgetPeriods),
+        unassignedTopups: countRows(backupData.unassignedTopups),
+        quotationItems: countRows(backupData.quotations.quotationItems),
+        quotationCharges: countRows(backupData.quotations.quotationCharges),
+        quotationRegistry: countRows(backupData.quotations.quotationRegistry),
+        documentRelations: countRows(backupData.quotations.documentRelations)
+    };
+
+    Object.keys(sourceRecordCounts).forEach((moduleName) => {
+        if (sourceRecordCounts[moduleName] !== backupRecordCounts[moduleName] && typeof console !== "undefined") {
+            console.warn("Backup record count mismatch", {
+                module: moduleName,
+                rawSourceCount: sourceRecordCounts[moduleName],
+                backupCount: backupRecordCounts[moduleName]
+            });
+        }
+    });
+
+    return backupData;
 }
 
 if (typeof window !== "undefined") {
