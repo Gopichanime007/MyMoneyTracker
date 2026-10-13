@@ -791,6 +791,11 @@ const ImportEngine = (() => {
 
             success: true,
 
+            testAssertions:
+                Array.isArray(data.__expectedAssertions)
+                    ? data.__expectedAssertions
+                    : [],
+
             version:
                 validation.version ||
                 incomingVersion.display ||

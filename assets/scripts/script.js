@@ -8856,8 +8856,8 @@ function importData() {
             showToast("Import successful ✅");
             setImportStage("completed");
 
-            if (Array.isArray(data.__expectedAssertions) && data.__expectedAssertions.length) {
-                let results = runTestAssertions(data.__expectedAssertions);
+            if (Array.isArray(result.testAssertions) && result.testAssertions.length) {
+                let results = runTestAssertions(result.testAssertions);
                 renderTestAssertionReport(results);
                 return; // keep the report visible instead of closing the modal
             }
