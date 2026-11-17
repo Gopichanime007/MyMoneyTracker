@@ -144,12 +144,28 @@
         root.budgetTransactions.forEach((tx, i) => {
             const path = "budgetTransactions[" + i + "]";
             if (!wallets.has(idKey(tx.budgetWalletId))) fail(path + " references a missing budget wallet");
-            if (!txnTypes.has(String(tx.type || "").toUpperCase())) fail(path + ".type is invalid");
-            if (!directions.has(String(tx.direction || "").toUpperCase())) fail(path + ".direction is invalid");
+            const type = String(tx.type || "").toUpperCase();
+            const direction = String(tx.direction || "").toUpperCase();
+            if (!txnTypes.has(type)) fail(path + ".type is invalid");
+            if (!directions.has(direction)) fail(path + ".direction is invalid");
+            if ((type === "EXPENSE" || type === "TRANSFER" || type === "TRANSFER_BACK") && direction !== "OUT") fail(path + " must use OUT direction for " + type);
+            if ((type === "INCOME" || type === "REFUND") && direction !== "IN") fail(path + " must use IN direction for " + type);
             amountFromMinor(tx.amount, path + ".amount", false);
             dateFromEpoch(tx.date, path + ".date", false);
             if (tx.categoryId != null && !categories.has(idKey(tx.categoryId))) fail(path + " references a missing category");
             if (tx.personId != null && !persons.has(idKey(tx.personId))) fail(path + " references a missing person");
+            if (type === "TRANSFER" && tx.personId == null) fail(path + " requires personId for TRANSFER");
+            if (type === "REFUND") {
+                if (tx.direction !== "IN") fail(path + " REFUND direction must be IN");
+                if (tx.linkedTransactionId == null || !budgetTx.has(idKey(tx.linkedTransactionId))) fail(path + " REFUND must link to an existing budget transaction");
+                if (!tx.refundType || !tx.resolutionType) fail(path + " REFUND requires refundType and resolutionType");
+                if (!new Set(["FULL", "PARTIAL", "LOSS"]).has(String(tx.resolutionType).toUpperCase())) fail(path + " REFUND has an invalid resolutionType");
+                if (String(tx.refundType).toUpperCase() === "CASHBACK") fail(path + " CASHBACK must be represented as a separate income transaction");
+                const original = budgetTx.get(idKey(tx.linkedTransactionId));
+                if (original && (idKey(original.budgetWalletId) !== idKey(tx.budgetWalletId) || !["EXPENSE", "TRANSFER"].includes(String(original.type || "").toUpperCase()))) {
+                    fail(path + " REFUND must link to an EXPENSE or TRANSFER in the same wallet");
+                }
+            }
         });
 
         root.savingsTransactions.forEach((tx, i) => {
