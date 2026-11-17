@@ -401,6 +401,16 @@ const ImportEngine = (() => {
             progress: 20
         });
 
+        // Android native backups use schemaVersion rather than the legacy meta.version.
+        // Adapt a validated copy before legacy version/schema normalization.
+        let nativeBackupSummary = null;
+        const androidAdapter = getGlobalFunction('MyMoneyAndroidBackupAdapter');
+        if (androidAdapter && typeof androidAdapter.isNative === 'function' && androidAdapter.isNative(parsed)) {
+            const adapted = androidAdapter.adapt(parsed);
+            parsed = adapted.payload;
+            nativeBackupSummary = adapted.summary || null;
+            info?.('Android native backup structure validated and adapted.', nativeBackupSummary || {});
+        }
 
         /**
          * -----------------------------------------------------
@@ -480,7 +490,8 @@ const ImportEngine = (() => {
 
         const normalizationResult =
             normalizeImportPayload(
-                parsed
+                parsed,
+                { skipMigration: parsed && parsed.__nativeAndroidBackup === true }
             );
 
 
@@ -644,6 +655,10 @@ const ImportEngine = (() => {
         const data =
             validation.normalized;
 
+        if (nativeBackupSummary) {
+            data.__nativeBackupSummary = nativeBackupSummary;
+        }
+
 
         updateProgress?.({
             progress: 65
@@ -670,6 +685,8 @@ const ImportEngine = (() => {
 
                 version:
                     incomingVersion.display,
+
+                nativeBackupSummary,
 
                 found,
 
@@ -800,6 +817,8 @@ const ImportEngine = (() => {
                 validation.version ||
                 incomingVersion.display ||
                 'unknown',
+
+            nativeBackupSummary,
 
             found,
 
