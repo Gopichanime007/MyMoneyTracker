@@ -216,8 +216,14 @@
 
     function periodKeyFor(period) {
         const start = localDateFromEpoch(period.startDate, "budget period startDate", false);
-        const end = localDateFromEpoch(period.endDate, "budget period endDate", true);
-        return start + "_to_" + (end || "open");
+        let end = localDateFromEpoch(period.endDate, "budget period endDate", true);
+        if (!end) {
+            const effectiveEnd = new Date();
+            effectiveEnd.setHours(0, 0, 0, 0);
+            effectiveEnd.setDate(effectiveEnd.getDate() + Math.max(0, Math.floor(Number(period.extraDays || 0))));
+            end = effectiveEnd.getFullYear() + "-" + String(effectiveEnd.getMonth() + 1).padStart(2, "0") + "-" + String(effectiveEnd.getDate()).padStart(2, "0");
+        }
+        return start + "_to_" + end;
     }
 
     function legacyTxnType(type) {
@@ -285,6 +291,7 @@
                 type: "budget",
                 budgetId: wallet.id,
                 legacyId: wallet.id,
+                nativeWalletId: wallet.id,
                 sourceId: wallet.budgetPeriodId,
                 totalAllocated: amountFromMinor(wallet.totalAllocated, "budgetWallets[" + i + "].totalAllocated", false),
                 entity: "Budget Wallet",
@@ -318,6 +325,7 @@
                 note: tx.note || "",
                 budgetId: tx.budgetWalletId,
                 budgetWalletId: tx.budgetWalletId,
+                nativeWalletId: tx.budgetWalletId,
                 paymentType: tx.paymentMethod || null,
                 entity: String(wallet.walletType || "CASH").toLowerCase(),
                 person: person || null,
