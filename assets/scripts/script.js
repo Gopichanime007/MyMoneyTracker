@@ -8313,7 +8313,10 @@ function applyImportData(data) {
         categories: 0,
         persons: 0,
         budgetPeriods: 0,
-        unassignedTopups: 0
+        unassignedTopups: 0,
+        quotations: 0,
+        quotationItems: 0,
+        quotationCharges: 0
     };
 
 
@@ -8533,7 +8536,13 @@ function applyImportData(data) {
             )
         );
 
+        imported.quotations = Array.isArray(data.quotations.quotationRegistry) ? data.quotations.quotationRegistry.length : 0;
+        imported.quotationItems = Array.isArray(data.quotations.quotationItems) ? data.quotations.quotationItems.length : 0;
+        imported.quotationCharges = Array.isArray(data.quotations.quotationCharges) ? data.quotations.quotationCharges.length : 0;
+
         if (nativeImport) {
+            // Avoid carrying a stale selected order from the old legacy dataset.
+            localStorage.setItem("activeOrderId", JSON.stringify(null));
             if (data.quotations.noSeriesConfig && typeof data.quotations.noSeriesConfig === "object") {
                 let existingSeries = null;
                 try { existingSeries = JSON.parse(localStorage.getItem("noSeriesConfig") || "null"); } catch (_err) { existingSeries = null; }
@@ -8660,10 +8669,25 @@ function applyImportData(data) {
             throw new Error("Could not verify the preserved Android source archive.");
         }
 
-        // Check that all primary collections were written as valid arrays.
-        ["expenses", "budgets", "savingsTransactions", "bp", "categories", "persons", "unassignedTopups"].forEach((key) => {
+        // Verify exact collection counts before reporting success.
+        const expectedCollections = {
+            expenses: (data.expenses || []).length,
+            budgets: (data.budgets || []).length,
+            savingsTransactions: (data.savings || []).length,
+            bp: (data.budgetPeriods || []).length,
+            categories: (data.categories || []).length,
+            persons: (data.persons || []).length,
+            unassignedTopups: (data.unassignedTopups || []).length,
+            orders: (data.orders || []).length,
+            quotationRegistry: (data.quotations.quotationRegistry || []).length,
+            quotationItems: (data.quotations.quotationItems || []).length,
+            quotationCharges: (data.quotations.quotationCharges || []).length
+        };
+        Object.keys(expectedCollections).forEach((key) => {
             const value = JSON.parse(localStorage.getItem(key) || "null");
-            if (!Array.isArray(value)) throw new Error("Post-import verification failed for " + key + ".");
+            if (!Array.isArray(value) || value.length !== expectedCollections[key]) {
+                throw new Error("Post-import verification failed for " + key + ": expected " + expectedCollections[key] + " records.");
+            }
         });
     } else {
         runIntegrityRepairSilently();
