@@ -656,9 +656,11 @@
         });
 
         const documentRelations = root.documentRelations.map((relation, i) => ({
+            id: relation.id,
             quotationId: relation.quotationId,
             orderId: relation.orderId || null,
             relationshipStatus: String(relation.relationshipStatus || "unlinked").toLowerCase(),
+            createdAt: optionalTimestamp(relation.createdAt, "documentRelations[" + i + "].createdAt"),
             updatedAt: optionalTimestamp(relation.createdAt, "documentRelations[" + i + "].createdAt")
         }));
 
