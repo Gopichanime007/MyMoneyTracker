@@ -1,0 +1,418 @@
+/*
+ * Android native backup compatibility adapter.
+ *
+ * This module is intentionally read-only with respect to the source payload.
+ * It creates a legacy-shaped copy and retains the complete original backup
+ * for recovery/audit. It never writes to localStorage.
+ */
+(function (globalScope) {
+    "use strict";
+
+    const REQUIRED = [
+        "categories", "persons", "budgetPeriods", "budgetWallets",
+        "budgetTransactions", "savingsTransactions", "unassignedTopups",
+        "quotations", "orders", "documentRelations", "attachments",
+        "transactionAttachments", "quotationEvents", "orderEvents",
+        "noSeriesConfigs"
+    ];
+
+    function fail(message) {
+        throw new Error("Android backup validation failed: " + message);
+    }
+
+    function isObject(value) {
+        return value !== null && typeof value === "object" && !Array.isArray(value);
+    }
+
+    function idKey(value) {
+        return value === null || value === undefined || value === "" ? "" : String(value);
+    }
+
+    function requireId(row, path) {
+        const id = idKey(row && row.id);
+        if (!id) fail(path + ".id is missing");
+        return id;
+    }
+
+    function uniqueIndex(rows, label) {
+        const index = new Map();
+        rows.forEach((row, i) => {
+            if (!isObject(row)) fail(label + "[" + i + "] must be an object");
+            const id = requireId(row, label + "[" + i + "]");
+            if (index.has(id)) fail(label + " contains duplicate ID " + id);
+            index.set(id, row);
+        });
+        return index;
+    }
+
+    function amountFromMinor(value, path, allowNegative) {
+        const n = Number(value);
+        if (!Number.isFinite(n)) fail(path + " must be a finite paisa amount");
+        if (!allowNegative && n < 0) fail(path + " cannot be negative");
+        const rupees = n / 100;
+        return Number(rupees.toFixed(2));
+    }
+
+    function dateFromEpoch(value, path, allowNull) {
+        if ((value === null || value === undefined) && allowNull) return null;
+        const n = Number(value);
+        if (!Number.isFinite(n) || n <= 0) fail(path + " must be a valid epoch-millisecond timestamp");
+        const date = new Date(n);
+        if (Number.isNaN(date.getTime())) fail(path + " is outside the supported date range");
+        return date.toISOString();
+    }
+
+    function localDateFromEpoch(value, path, allowNull) {
+        if ((value === null || value === undefined) && allowNull) return null;
+        const n = Number(value);
+        if (!Number.isFinite(n) || n <= 0) fail(path + " must be a valid epoch-millisecond timestamp");
+        const date = new Date(n);
+        if (Number.isNaN(date.getTime())) fail(path + " is outside the supported date range");
+        const yyyy = date.getFullYear();
+        const mm = String(date.getMonth() + 1).padStart(2, "0");
+        const dd = String(date.getDate()).padStart(2, "0");
+        return yyyy + "-" + mm + "-" + dd;
+    }
+
+    function optionalTimestamp(value, path) {
+        if (value === null || value === undefined || value === "") return null;
+        if (typeof value === "number" || /^\d+$/.test(String(value))) {
+            return dateFromEpoch(value, path, true);
+        }
+        const parsed = new Date(value);
+        if (Number.isNaN(parsed.getTime())) fail(path + " is not a valid date");
+        return parsed.toISOString();
+    }
+
+    function validateNativeBackup(root) {
+        if (!isObject(root)) fail("root must be a JSON object");
+        if (!isObject(root.meta) || root.meta.format !== "MyMoneyTracker" || Number(root.meta.schemaVersion) !== 1) {
+            fail("unsupported format or schemaVersion (expected MyMoneyTracker schema 1)");
+        }
+
+        REQUIRED.forEach((key) => {
+            if (!Array.isArray(root[key])) fail("required collection '" + key + "' must be an array");
+            root[key].forEach((row, i) => {
+                if (!isObject(row)) fail(key + "[" + i + "] must be an object");
+            });
+        });
+
+        ["quotations", "orders"].forEach((collection) => {
+            root[collection].forEach((row, i) => {
+                ["items", "charges"].forEach((child) => {
+                    if (!Array.isArray(row[child])) fail(collection + "[" + i + "]." + child + " must be an array");
+                    row[child].forEach((entry, j) => {
+                        if (!isObject(entry)) fail(collection + "[" + i + "]." + child + "[" + j + "] must be an object");
+                    });
+                });
+            });
+        });
+
+        const categories = uniqueIndex(root.categories, "categories");
+        const persons = uniqueIndex(root.persons, "persons");
+        const periods = uniqueIndex(root.budgetPeriods, "budgetPeriods");
+        const wallets = uniqueIndex(root.budgetWallets, "budgetWallets");
+        const budgetTx = uniqueIndex(root.budgetTransactions, "budgetTransactions");
+        const savingsTx = uniqueIndex(root.savingsTransactions, "savingsTransactions");
+        uniqueIndex(root.unassignedTopups, "unassignedTopups");
+
+        const walletTypes = new Set(["CASH", "BANK", "UPI", "CARD", "OTHER"]);
+        const periodStatuses = new Set(["ACTIVE", "CLOSED"]);
+        const txnTypes = new Set(["EXPENSE", "INCOME", "TRANSFER", "TRANSFER_BACK", "REFUND", "ADJUSTMENT"]);
+        const directions = new Set(["IN", "OUT"]);
+
+        root.budgetPeriods.forEach((p, i) => {
+            localDateFromEpoch(p.startDate, "budgetPeriods[" + i + "].startDate", false);
+            localDateFromEpoch(p.endDate, "budgetPeriods[" + i + "].endDate", true);
+            if (p.status != null && !periodStatuses.has(String(p.status).toUpperCase())) fail("budgetPeriods[" + i + "].status is invalid");
+        });
+
+        root.budgetWallets.forEach((w, i) => {
+            if (!periods.has(idKey(w.budgetPeriodId))) fail("budgetWallets[" + i + "] references a missing budget period");
+            if (w.walletType != null && !walletTypes.has(String(w.walletType).toUpperCase())) fail("budgetWallets[" + i + "].walletType is invalid");
+            amountFromMinor(w.totalAllocated, "budgetWallets[" + i + "].totalAllocated", false);
+        });
+
+        root.budgetTransactions.forEach((tx, i) => {
+            const path = "budgetTransactions[" + i + "]";
+            if (!wallets.has(idKey(tx.budgetWalletId))) fail(path + " references a missing budget wallet");
+            if (!txnTypes.has(String(tx.type || "").toUpperCase())) fail(path + ".type is invalid");
+            if (!directions.has(String(tx.direction || "").toUpperCase())) fail(path + ".direction is invalid");
+            amountFromMinor(tx.amount, path + ".amount", false);
+            dateFromEpoch(tx.date, path + ".date", false);
+            if (tx.categoryId != null && !categories.has(idKey(tx.categoryId))) fail(path + " references a missing category");
+            if (tx.personId != null && !persons.has(idKey(tx.personId))) fail(path + " references a missing person");
+        });
+
+        root.savingsTransactions.forEach((tx, i) => {
+            const path = "savingsTransactions[" + i + "]";
+            amountFromMinor(tx.amount, path + ".amount", true);
+            dateFromEpoch(tx.date, path + ".date", false);
+            if (tx.targetBudgetId != null && !wallets.has(idKey(tx.targetBudgetId))) fail(path + " references a missing target budget wallet");
+            if (tx.budgetWalletId != null && !wallets.has(idKey(tx.budgetWalletId))) fail(path + " references a missing budget wallet");
+            if (tx.sourceId != null && !savingsTx.has(idKey(tx.sourceId))) fail(path + " references a missing savings source");
+        });
+
+        root.unassignedTopups.forEach((row, i) => {
+            const path = "unassignedTopups[" + i + "]";
+            if (!wallets.has(idKey(row.budgetWalletId))) fail(path + " references a missing budget wallet");
+            amountFromMinor(row.amount, path + ".amount", false);
+            dateFromEpoch(row.date, path + ".date", false);
+        });
+
+        root.budgetTransactions.forEach((tx, i) => {
+            if (tx.linkedTransactionId != null &&
+                !budgetTx.has(idKey(tx.linkedTransactionId)) &&
+                !savingsTx.has(idKey(tx.linkedTransactionId))) {
+                fail("budgetTransactions[" + i + "] references a missing linked transaction");
+            }
+            if (tx.linkedSavingsTransactionId != null && !savingsTx.has(idKey(tx.linkedSavingsTransactionId))) {
+                fail("budgetTransactions[" + i + "] references a missing linked savings transaction");
+            }
+        });
+
+        return { categories, persons, periods, wallets };
+    }
+
+    function periodKeyFor(period) {
+        const start = localDateFromEpoch(period.startDate, "budget period startDate", false);
+        const end = localDateFromEpoch(period.endDate, "budget period endDate", true);
+        return start + "_to_" + (end || "open");
+    }
+
+    function legacyTxnType(type) {
+        const map = {
+            EXPENSE: "expense",
+            INCOME: "income",
+            TRANSFER: "transfer",
+            TRANSFER_BACK: "transfer_back",
+            REFUND: "refund",
+            ADJUSTMENT: "adjustment"
+        };
+        return map[String(type || "").toUpperCase()] || null;
+    }
+
+    function signedBudgetDelta(tx, path) {
+        const type = String(tx.type || "").toUpperCase();
+        const direction = String(tx.direction || "").toUpperCase();
+        const amount = amountFromMinor(tx.amount, path + ".amount", false);
+
+        if (type === "EXPENSE" || type === "TRANSFER") {
+            if (direction !== "OUT") fail(path + " has an invalid direction for " + type);
+            return -amount;
+        }
+        if (type === "INCOME" || type === "TRANSFER_BACK" || type === "REFUND") {
+            if (direction !== "IN") fail(path + " has an invalid direction for " + type);
+            return amount;
+        }
+        return direction === "IN" ? amount : -amount;
+    }
+
+    function adapt(root) {
+        const indexes = validateNativeBackup(root);
+        const periodKeyById = new Map();
+        const periodById = indexes.periods;
+
+        root.budgetPeriods.forEach((period) => {
+            periodKeyById.set(idKey(period.id), periodKeyFor(period));
+        });
+
+        const categoryNameById = new Map(root.categories.map((row) => [idKey(row.id), String(row.name || "").trim()]));
+        const personNameById = new Map(root.persons.map((row) => [idKey(row.id), String(row.name || "").trim()]));
+
+        const budgetPeriods = root.budgetPeriods.map((period, i) => {
+            const start = localDateFromEpoch(period.startDate, "budgetPeriods[" + i + "].startDate", false);
+            const end = localDateFromEpoch(period.endDate, "budgetPeriods[" + i + "].endDate", true);
+            const key = periodKeyById.get(idKey(period.id));
+            return {
+                id: period.id,
+                start,
+                ...(end ? { end } : {}),
+                periodKey: key,
+                status: String(period.status || "ACTIVE").toLowerCase(),
+                extraDays: Number(period.extraDays || 0),
+                documentNumber: period.documentNumber || null,
+                createdAt: optionalTimestamp(period.createdAt, "budgetPeriods[" + i + "].createdAt"),
+                updatedAt: optionalTimestamp(period.updatedAt, "budgetPeriods[" + i + "].updatedAt")
+            };
+        });
+
+        const budgets = root.budgetWallets.map((wallet, i) => {
+            const period = periodById.get(idKey(wallet.budgetPeriodId));
+            const key = periodKeyById.get(idKey(wallet.budgetPeriodId));
+            return {
+                id: wallet.id,
+                type: "budget",
+                budgetId: wallet.id,
+                legacyId: wallet.id,
+                sourceId: wallet.budgetPeriodId,
+                totalAllocated: amountFromMinor(wallet.totalAllocated, "budgetWallets[" + i + "].totalAllocated", false),
+                entity: "Budget Wallet",
+                note: wallet.documentNumber || ("Android " + String(wallet.walletType || "CASH") + " Wallet"),
+                periodKey: key,
+                monthKey: null,
+                isBudgetWallet: true,
+                walletType: String(wallet.walletType || "CASH").toLowerCase(),
+                createdAt: optionalTimestamp(wallet.createdAt, "budgetWallets[" + i + "].createdAt"),
+                updatedAt: optionalTimestamp(wallet.updatedAt, "budgetWallets[" + i + "].updatedAt")
+            };
+        });
+
+        const expenses = root.budgetTransactions.map((tx, i) => {
+            const path = "budgetTransactions[" + i + "]";
+            const wallet = indexes.wallets.get(idKey(tx.budgetWalletId));
+            const periodKey = periodKeyById.get(idKey(wallet.budgetPeriodId));
+            const date = dateFromEpoch(tx.date, path + ".date", false);
+            const category = tx.categoryId == null ? null : categoryNameById.get(idKey(tx.categoryId));
+            const person = tx.personId == null ? null : personNameById.get(idKey(tx.personId));
+            const type = legacyTxnType(tx.type);
+            if (!type) fail(path + ".type cannot be mapped");
+            const amount = signedBudgetDelta(tx, path);
+
+            return {
+                id: tx.id,
+                type,
+                amount,
+                category: category || (type === "adjustment" ? "Adjustment" : "Others"),
+                purpose: tx.purpose || tx.note || "",
+                note: tx.note || "",
+                budgetId: tx.budgetWalletId,
+                budgetWalletId: tx.budgetWalletId,
+                paymentType: tx.paymentMethod || null,
+                entity: String(wallet.walletType || "CASH").toLowerCase(),
+                person: person || null,
+                date,
+                monthKey: date.slice(0, 7),
+                periodKey,
+                createdAt: optionalTimestamp(tx.createdAt, path + ".createdAt"),
+                updatedAt: optionalTimestamp(tx.updatedAt, path + ".updatedAt"),
+                linkedTransactionId: tx.linkedTransactionId || null,
+                linkedSavingsTransactionId: tx.linkedSavingsTransactionId || null,
+                refundType: tx.refundType || null,
+                resolutionType: tx.resolutionType || null,
+                resolvedAmount: tx.resolvedAmount == null ? 0 : amountFromMinor(tx.resolvedAmount, path + ".resolvedAmount", false),
+                lossAmount: tx.lossAmount == null ? 0 : amountFromMinor(tx.lossAmount, path + ".lossAmount", false),
+                documentNumber: tx.documentNumber || null,
+                nativeCategoryId: tx.categoryId || null,
+                nativePersonId: tx.personId || null,
+                nativeType: tx.type,
+                nativeDirection: tx.direction
+            };
+        });
+
+        const savings = root.savingsTransactions.map((tx, i) => {
+            const path = "savingsTransactions[" + i + "]";
+            const date = dateFromEpoch(tx.date, path + ".date", false);
+            return {
+                id: tx.id,
+                type: String(tx.type || "").toLowerCase(),
+                amount: amountFromMinor(tx.amount, path + ".amount", true),
+                sourceId: tx.sourceId == null ? null : tx.sourceId,
+                entity: tx.entity || null,
+                paymentType: tx.paymentType || null,
+                person: tx.person || null,
+                note: tx.note || "",
+                purpose: tx.note || "",
+                date,
+                monthKey: tx.monthKey || date.slice(0, 7),
+                periodKey: tx.periodKey || null,
+                createdAt: optionalTimestamp(tx.createdAt, path + ".createdAt"),
+                updatedAt: optionalTimestamp(tx.updatedAt, path + ".updatedAt"),
+                attachmentId: tx.attachmentId || null,
+                attachmentStatus: tx.attachmentStatus || (tx.attachmentId ? "missing" : "none"),
+                attachmentError: tx.attachmentError || (tx.attachmentId ? "Attachment binary is not included in the Android JSON backup." : null),
+                linkedTransactionId: tx.linkedTransactionId || null,
+                linkedTopupId: tx.linkedTopupId || null,
+                refundType: tx.refundType || null,
+                resolutionType: tx.resolutionType || null,
+                resolvedAmount: tx.resolvedAmount == null ? 0 : amountFromMinor(tx.resolvedAmount, path + ".resolvedAmount", false),
+                lossAmount: tx.lossAmount == null ? 0 : amountFromMinor(tx.lossAmount, path + ".lossAmount", false),
+                targetBudgetId: tx.targetBudgetId || null,
+                budgetWalletId: tx.budgetWalletId || null,
+                destinationType: tx.destinationType || null,
+                destination: tx.destination || null,
+                documentNumber: tx.documentNumber || null,
+                status: tx.status || null,
+                archiveReason: tx.archiveReason || null,
+                archivedAt: optionalTimestamp(tx.archivedAt, path + ".archivedAt"),
+                archivedBy: tx.archivedBy || null
+            };
+        });
+
+        const unassignedTopups = root.unassignedTopups.map((row, i) => ({
+            id: row.id,
+            budgetWalletId: row.budgetWalletId,
+            amount: amountFromMinor(row.amount, "unassignedTopups[" + i + "].amount", false),
+            date: dateFromEpoch(row.date, "unassignedTopups[" + i + "].date", false),
+            parked: !!row.parked,
+            status: row.parked ? "parked" : "unassigned",
+            assignedAmount: 0,
+            assignments: [],
+            note: row.note || "",
+            createdAt: optionalTimestamp(row.createdAt, "unassignedTopups[" + i + "].createdAt"),
+            updatedAt: optionalTimestamp(row.updatedAt, "unassignedTopups[" + i + "].updatedAt")
+        }));
+
+        const categories = root.categories.map((row) => String(row.name || "").trim()).filter(Boolean);
+        const persons = root.persons.map((row) => String(row.name || "").trim()).filter(Boolean);
+
+        // Documents have a different relational shape in the two applications.
+        // Keep the Android originals in the archive and leave existing legacy
+        // document storage untouched until a dedicated document mapper is used.
+        const quotations = {
+            quotationData: null,
+            quotationItems: [],
+            quotationCharges: [],
+            quotationRegistry: [],
+            quotationMeta: null,
+            activeQuotationId: null,
+            documentRelations: [],
+            noSeriesConfig: null
+        };
+
+        const nativeArchive = JSON.parse(JSON.stringify(root));
+        const nativeSummary = {
+            schemaVersion: Number(root.meta.schemaVersion),
+            exportedAt: root.meta.exportedAt || null,
+            counts: REQUIRED.reduce((out, key) => {
+                out[key] = root[key].length;
+                return out;
+            }, {})
+        };
+
+        return {
+            payload: {
+                expenses,
+                budgets,
+                savings,
+                budgetPeriods,
+                categories,
+                persons,
+                unassignedTopups,
+                orders: [],
+                quotations,
+                settings: {},
+                meta: {
+                    exportedAt: root.meta.exportedAt || new Date().toISOString(),
+                    version: "2.0.0"
+                },
+                __nativeAndroidBackup: true,
+                __nativeBackupArchive: nativeArchive,
+                __nativeBackupSummary: nativeSummary,
+                __preserveSettings: true,
+                __preserveDocuments: true
+            },
+            summary: nativeSummary
+        };
+    }
+
+    globalScope.MyMoneyAndroidBackupAdapter = {
+        isNative: function (root) {
+            return isObject(root) && isObject(root.meta) &&
+                root.meta.format === "MyMoneyTracker" &&
+                Object.prototype.hasOwnProperty.call(root.meta, "schemaVersion");
+        },
+        adapt,
+        validate: validateNativeBackup
+    };
+})(typeof window !== "undefined" ? window : globalThis);
