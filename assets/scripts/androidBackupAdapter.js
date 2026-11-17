@@ -135,6 +135,8 @@
             localDateFromEpoch(p.startDate, "budgetPeriods[" + i + "].startDate", false);
             localDateFromEpoch(p.endDate, "budgetPeriods[" + i + "].endDate", true);
             if (p.status != null && !periodStatuses.has(String(p.status).toUpperCase())) fail("budgetPeriods[" + i + "].status is invalid");
+            if (!Number.isFinite(Number(p.extraDays || 0)) || Number(p.extraDays || 0) < 0) fail("budgetPeriods[" + i + "].extraDays is invalid");
+            if (p.endDate != null && Number(p.endDate) < Number(p.startDate)) fail("budgetPeriods[" + i + "] endDate cannot be before startDate");
         });
 
         root.budgetWallets.forEach((w, i) => {
@@ -153,6 +155,7 @@
             if ((type === "EXPENSE" || type === "TRANSFER" || type === "TRANSFER_BACK") && direction !== "OUT") fail(path + " must use OUT direction for " + type);
             if ((type === "INCOME" || type === "REFUND") && direction !== "IN") fail(path + " must use IN direction for " + type);
             amountFromMinor(tx.amount, path + ".amount", false);
+            if (Number(tx.amount) <= 0) fail(path + ".amount must be greater than zero");
             dateFromEpoch(tx.date, path + ".date", false);
             if (tx.categoryId != null && !categories.has(idKey(tx.categoryId))) fail(path + " references a missing category");
             if (tx.personId != null && !persons.has(idKey(tx.personId))) fail(path + " references a missing person");
@@ -182,17 +185,18 @@
             if (tx.sourceId != null && !savingsTx.has(idKey(tx.sourceId))) fail(path + " references a missing savings source");
             if (tx.linkedTopupId != null && !topups.has(idKey(tx.linkedTopupId))) fail(path + " references a missing unassigned top-up");
             if (String(tx.type || "").toLowerCase() === "unassigned_topup_resolution" && tx.linkedTopupId == null) fail(path + " top-up resolution is missing linkedTopupId");
+            if (String(tx.type || "").toLowerCase() === "unassigned_topup_resolution" && tx.sourceId == null) fail(path + " top-up resolution is missing sourceId");
         });
 
         root.unassignedTopups.forEach((row, i) => {
             const path = "unassignedTopups[" + i + "]";
             if (!wallets.has(idKey(row.budgetWalletId))) fail(path + " references a missing budget wallet");
             amountFromMinor(row.amount, path + ".amount", false);
+            if (Number(row.amount) <= 0) fail(path + ".amount must be greater than zero");
             dateFromEpoch(row.date, path + ".date", false);
         });
 
         const refundTotalsByOriginal = new Map();
-        const refundRowsByOriginal = new Map();
         root.budgetTransactions.forEach((tx, i) => {
             if (tx.linkedTransactionId != null &&
                 !budgetTx.has(idKey(tx.linkedTransactionId)) &&
@@ -206,16 +210,13 @@
                 const originalId = idKey(tx.linkedTransactionId);
                 const original = budgetTx.get(originalId);
                 if (Number(tx.amount) <= 0) fail("budgetTransactions[" + i + "] REFUND amount must be positive");
-                if (tx.resolvedAmount != null && Number(tx.resolvedAmount) !== Number(tx.amount)) fail("budgetTransactions[" + i + "] REFUND resolvedAmount must equal amount");
                 const refundType = String(tx.refundType || "").toUpperCase();
+                if (refundType !== "EXCESS_REFUND" && tx.resolvedAmount != null && Number(tx.resolvedAmount) !== Number(tx.amount)) fail("budgetTransactions[" + i + "] REFUND resolvedAmount must equal amount");
                 const lossAmount = Number(tx.lossAmount || 0);
                 if (String(tx.resolutionType || "").toUpperCase() === "LOSS" && lossAmount <= 0) fail("budgetTransactions[" + i + "] LOSS refund requires lossAmount");
                 if (String(tx.resolutionType || "").toUpperCase() !== "LOSS" && lossAmount > 0) fail("budgetTransactions[" + i + "] lossAmount is only valid for LOSS resolution");
                 if (refundType !== "EXCESS_REFUND") {
                     refundTotalsByOriginal.set(originalId, (refundTotalsByOriginal.get(originalId) || 0) + Number(tx.amount) + lossAmount);
-                    if (!refundRowsByOriginal.has(originalId)) refundRowsByOriginal.set(originalId, []);
-                    refundRowsByOriginal.get(originalId).push(tx);
-                } else {
                 }
             }
         });
