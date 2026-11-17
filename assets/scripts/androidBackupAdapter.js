@@ -256,8 +256,17 @@
                 if (String(charge.applyTo || "ALL_ITEMS").toUpperCase() === "SPECIFIC_ITEM" && !q.items.some((item) => idKey(item.id) === idKey(charge.targetItemId))) fail("quotations[" + i + "].charges[" + j + "] references a missing target item");
             });
         });
+        root.quotations.forEach((q, i) => {
+            const fundingType = String(q.fundingSourceType || "").toLowerCase();
+            if (q.fundingSourceId != null && fundingType === "budget" && !wallets.has(idKey(q.fundingSourceId))) fail("quotations[" + i + "] references a missing funding budget wallet");
+            if (q.fundingSourceId != null && fundingType === "savings" && !savingsTx.has(idKey(q.fundingSourceId))) fail("quotations[" + i + "] references a missing funding savings source");
+        });
         root.orders.forEach((o, i) => {
             if (o.quotationId != null && !quotations.has(idKey(o.quotationId))) fail("orders[" + i + "] references a missing quotation");
+            const sourceType = String(o.sourceType || "").toLowerCase();
+            if (o.sourceId != null && sourceType === "budget" && !wallets.has(idKey(o.sourceId))) fail("orders[" + i + "] references a missing funding budget wallet");
+            if (o.sourceId != null && sourceType === "savings" && !savingsTx.has(idKey(o.sourceId))) fail("orders[" + i + "] references a missing funding savings source");
+            if (o.financialEntryId != null && !budgetTx.has(idKey(o.financialEntryId)) && !savingsTx.has(idKey(o.financialEntryId))) fail("orders[" + i + "] references a missing financial entry");
             ["subtotal", "gst", "total", "plannedAmount"].forEach((field) => {
                 amountFromMinor(o[field], "orders[" + i + "]." + field, false);
             });
