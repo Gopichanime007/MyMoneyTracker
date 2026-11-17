@@ -8527,12 +8527,28 @@ function applyImportData(data) {
             )
         );
 
-        localStorage.setItem(
-            "noSeriesConfig",
-            JSON.stringify(
-                data.quotations.noSeriesConfig || null
-            )
-        );
+        if (nativeImport) {
+            if (data.quotations.noSeriesConfig && typeof data.quotations.noSeriesConfig === "object") {
+                let existingSeries = null;
+                try { existingSeries = JSON.parse(localStorage.getItem("noSeriesConfig") || "null"); } catch (_err) { existingSeries = null; }
+                const defaults = {
+                    quotation: { prefix: "QT", startNumber: 1000, lastNumber: 10000 },
+                    order: { prefix: "ORD", startNumber: 1000, lastNumber: 100000 }
+                };
+                const mergedSeries = Object.assign({}, defaults, existingSeries || {});
+                ["quotation", "order"].forEach((kind) => {
+                    if (data.quotations.noSeriesConfig[kind]) {
+                        mergedSeries[kind] = Object.assign({}, mergedSeries[kind] || defaults[kind], data.quotations.noSeriesConfig[kind]);
+                    }
+                });
+                localStorage.setItem("noSeriesConfig", JSON.stringify(mergedSeries));
+            }
+        } else {
+            localStorage.setItem(
+                "noSeriesConfig",
+                JSON.stringify(data.quotations.noSeriesConfig || null)
+            );
+        }
     }
 
 
