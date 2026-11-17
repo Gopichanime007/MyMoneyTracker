@@ -230,9 +230,13 @@ function getBudgetForPeriod(start, end) {
     let periodKey =
         `${s}_to_${e}`;
 
-    let filtered = budgets.filter(
-        b => b.periodKey === periodKey
+    const matchingPeriod = (JSON.parse(localStorage.getItem("bp") || "[]") || []).find(period =>
+        period && safeDate(period.start) === s && (!end || !period.end || safeDate(period.end) === e)
     );
+    let filtered = budgets.filter(b => b.periodKey === periodKey || (
+        b && b.isBudgetWallet === true && matchingPeriod &&
+        String(b.sourceId || "") === String(matchingPeriod.id || "")
+    ));
 
     if (!filtered.length)
         return null;
@@ -889,24 +893,31 @@ function autoResolveClosedWalletTopups() {
 function renderBudgetWalletOverview() {
     let periodKey = typeof getActivePeriodKey === "function" ? getActivePeriodKey() : null;
     let budgets = getBudgets();
-    let wallet = periodKey ? budgets.find(b => b && b.periodKey === periodKey && b.isBudgetWallet === true) : null;
+    let activePeriod = getActiveBudgetPeriod();
+    let wallets = periodKey ? budgets.filter(b => b && b.isBudgetWallet === true && (
+        b.periodKey === periodKey || (activePeriod && String(b.sourceId || "") === String(activePeriod.id || ""))
+    )) : [];
+    let walletIds = new Set(wallets.map(wallet => String(wallet.budgetId || wallet.id || "")));
 
-    let totalAllocated = wallet ? Number(wallet.totalAllocated || 0) : 0;
+    let totalAllocated = wallets.reduce((sum, wallet) => sum + Number(wallet.totalAllocated || 0), 0);
     let expenses = getExpenses();
 
-    // Remaining keeps using the existing, already-correct net-spent figure
-    // (adjustments included) — untouched on purpose.
-    let netSpentIncludingAdjustments = wallet ? Math.max(0, getNetSpentForBudget(wallet.budgetId, expenses)) : 0;
+    // Sum each native wallet independently so Cash, Bank, UPI and Card do not
+    // accidentally share one running balance.
+    let netSpentIncludingAdjustments = wallets.reduce((sum, wallet) =>
+        sum + Math.max(0, getNetSpentForBudget(wallet.budgetId || wallet.id, expenses)), 0);
     let remaining = totalAllocated - netSpentIncludingAdjustments;
 
     // What the user actually sees as "Spent" excludes adjustments.
-    let realSpent = wallet ? Math.max(0, getRealSpentForBudget(wallet.budgetId, expenses)) : 0;
-    let netAdjustment = wallet ? getNetAdjustmentForBudget(wallet.budgetId, expenses) : 0;
+    let realSpent = wallets.reduce((sum, wallet) =>
+        sum + Math.max(0, getRealSpentForBudget(wallet.budgetId || wallet.id, expenses)), 0);
+    let netAdjustment = wallets.reduce((sum, wallet) =>
+        sum + getNetAdjustmentForBudget(wallet.budgetId || wallet.id, expenses), 0);
 
     let topups = getUnassignedTopups();
-    let unassignedTotal = wallet
+    let unassignedTotal = wallets.length
         ? topups
-            .filter(t => t && t.budgetWalletId === wallet.budgetId && !t.parked)
+            .filter(t => t && walletIds.has(String(t.budgetWalletId || "")) && !t.parked)
             .reduce((sum, t) => sum + getRemainingUnassignedAmount(t), 0)
         : 0;
 
@@ -6594,7 +6605,10 @@ function loadBudgetOptions(options = null) {
     }
     if (mode === "adjustment") {
         let activeKey = typeof getActivePeriodKey === "function" ? getActivePeriodKey() : null;
-        filtered = budgets.filter(b => b && activeKey && b.periodKey === activeKey);
+        let activePeriod = getActiveBudgetPeriod();
+        filtered = budgets.filter(b => b && activeKey && (
+            b.periodKey === activeKey || (b.isBudgetWallet === true && activePeriod && String(b.sourceId || "") === String(activePeriod.id || ""))
+        ));
     }
 
     if (!filtered.length) {
