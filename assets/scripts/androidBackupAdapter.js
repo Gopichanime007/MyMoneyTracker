@@ -77,6 +77,7 @@
     function optionalTimestamp(value, path) {
         if (value === null || value === undefined || value === "") return null;
         if (typeof value === "number" || /^\d+$/.test(String(value))) {
+            if (Number(value) === 0) return null;
             return dateFromEpoch(value, path, true);
         }
         const parsed = new Date(value);
@@ -114,7 +115,14 @@
         const wallets = uniqueIndex(root.budgetWallets, "budgetWallets");
         const budgetTx = uniqueIndex(root.budgetTransactions, "budgetTransactions");
         const savingsTx = uniqueIndex(root.savingsTransactions, "savingsTransactions");
+        const quotations = uniqueIndex(root.quotations, "quotations");
+        const orders = uniqueIndex(root.orders, "orders");
+        const attachments = uniqueIndex(root.attachments, "attachments");
         uniqueIndex(root.unassignedTopups, "unassignedTopups");
+        uniqueIndex(root.documentRelations, "documentRelations");
+        uniqueIndex(root.transactionAttachments, "transactionAttachments");
+        uniqueIndex(root.quotationEvents, "quotationEvents");
+        uniqueIndex(root.orderEvents, "orderEvents");
 
         const walletTypes = new Set(["CASH", "BANK", "UPI", "CARD", "OTHER"]);
         const periodStatuses = new Set(["ACTIVE", "CLOSED"]);
@@ -171,7 +179,39 @@
             }
         });
 
-        return { categories, persons, periods, wallets };
+        root.quotations.forEach((q, i) => {
+            q.items.forEach((item, j) => {
+                if (idKey(item.quotationId) !== idKey(q.id)) fail("quotations[" + i + "].items[" + j + "] has a mismatched quotationId");
+            });
+            q.charges.forEach((charge, j) => {
+                if (idKey(charge.quotationId) !== idKey(q.id)) fail("quotations[" + i + "].charges[" + j + "] has a mismatched quotationId");
+            });
+        });
+        root.orders.forEach((o, i) => {
+            if (o.quotationId != null && !quotations.has(idKey(o.quotationId))) fail("orders[" + i + "] references a missing quotation");
+            o.items.forEach((item, j) => {
+                if (idKey(item.orderId) !== idKey(o.id)) fail("orders[" + i + "].items[" + j + "] has a mismatched orderId");
+            });
+            o.charges.forEach((charge, j) => {
+                if (idKey(charge.orderId) !== idKey(o.id)) fail("orders[" + i + "].charges[" + j + "] has a mismatched orderId");
+            });
+        });
+        root.documentRelations.forEach((row, i) => {
+            if (!quotations.has(idKey(row.quotationId))) fail("documentRelations[" + i + "] references a missing quotation");
+            if (row.orderId != null && !orders.has(idKey(row.orderId))) fail("documentRelations[" + i + "] references a missing order");
+        });
+        root.quotationEvents.forEach((row, i) => {
+            if (!quotations.has(idKey(row.quotationId))) fail("quotationEvents[" + i + "] references a missing quotation");
+        });
+        root.orderEvents.forEach((row, i) => {
+            if (!orders.has(idKey(row.orderId))) fail("orderEvents[" + i + "] references a missing order");
+        });
+        root.transactionAttachments.forEach((row, i) => {
+            if (!attachments.has(idKey(row.attachmentId))) fail("transactionAttachments[" + i + "] references a missing attachment");
+            if (!budgetTx.has(idKey(row.transactionId)) && !savingsTx.has(idKey(row.transactionId))) fail("transactionAttachments[" + i + "] references a missing transaction");
+        });
+
+        return { categories, persons, periods, wallets, quotations, orders };
     }
 
     function periodKeyFor(period) {
@@ -356,18 +396,183 @@
         const categories = root.categories.map((row) => String(row.name || "").trim()).filter(Boolean);
         const persons = root.persons.map((row) => String(row.name || "").trim()).filter(Boolean);
 
-        // Documents have a different relational shape in the two applications.
-        // Keep the Android originals in the archive and leave existing legacy
-        // document storage untouched until a dedicated document mapper is used.
+        const quotationEventsById = new Map();
+        root.quotationEvents.forEach((event, i) => {
+            const key = idKey(event.quotationId);
+            if (!quotationEventsById.has(key)) quotationEventsById.set(key, []);
+            quotationEventsById.get(key).push({
+                at: optionalTimestamp(event.timestamp, "quotationEvents[" + i + "].timestamp"),
+                action: String(event.eventType || "updated").toLowerCase(),
+                status: String(event.resultingStatus || "draft").toLowerCase(),
+                note: event.details || ""
+            });
+        });
+
+        function mapDocumentCharge(charge, path) {
+            const chargeName = String(charge.name || "Charge");
+            const normalizedName = chargeName.toLowerCase();
+            const legacyType = normalizedName.includes("gst") ? "gst"
+                : normalizedName.includes("discount") ? "discount"
+                : normalizedName.includes("delivery") ? "delivery" : "custom";
+            const nativeMode = String(charge.type || "").toUpperCase();
+            const mode = nativeMode === "PERCENTAGE" ? "percent" : "fixed";
+            const value = mode === "percent"
+                ? Number(charge.value || 0)
+                : amountFromMinor(charge.amount, path + ".amount", false);
+            const applyTo = String(charge.applyTo || "ALL_ITEMS").toUpperCase();
+            if (applyTo === "SPECIFIC_ITEM" && !charge.targetItemId) fail(path + " is missing targetItemId");
+            return {
+                id: charge.id,
+                quotationId: charge.quotationId || null,
+                orderId: charge.orderId || null,
+                label: chargeName,
+                name: chargeName,
+                type: legacyType,
+                mode,
+                value,
+                amount: amountFromMinor(charge.amount, path + ".amount", false),
+                adjustmentType: String(charge.adjustment || "ADD").toUpperCase() === "DEDUCT" ? "deduct" : "add",
+                appliesTo: applyTo === "SPECIFIC_ITEM" ? String(charge.targetItemId) : "all",
+                targetItemId: charge.targetItemId || null,
+                createdAt: optionalTimestamp(charge.createdAt, path + ".createdAt"),
+                updatedAt: optionalTimestamp(charge.updatedAt, path + ".updatedAt")
+            };
+        }
+
+        const quotationItems = [];
+        const quotationCharges = [];
+        const quotationRegistry = root.quotations.map((q, i) => {
+            const items = q.items.map((item, j) => {
+                const mapped = {
+                    id: item.id,
+                    quotationId: q.id,
+                    description: item.description || "",
+                    qty: Number(item.quantity || 0),
+                    price: amountFromMinor(item.unitPrice, "quotations[" + i + "].items[" + j + "].unitPrice", false),
+                    total: amountFromMinor(item.totalPrice, "quotations[" + i + "].items[" + j + "].totalPrice", false),
+                    unit: item.unit || null,
+                    source: item.source || null,
+                    productLink: item.productLink || null
+                };
+                quotationItems.push(mapped);
+                return mapped;
+            });
+            const charges = q.charges.map((charge, j) => {
+                const mapped = mapDocumentCharge(charge, "quotations[" + i + "].charges[" + j + "]");
+                quotationCharges.push(mapped);
+                return mapped;
+            });
+            return {
+                id: q.id,
+                quotationNo: q.quotationNo,
+                purpose: q.purpose || "",
+                status: String(q.status || "DRAFT").toLowerCase(),
+                createdAt: optionalTimestamp(q.createdAt, "quotations[" + i + "].createdAt"),
+                updatedAt: optionalTimestamp(q.updatedAt, "quotations[" + i + "].updatedAt"),
+                validUntil: optionalTimestamp(q.validUntil, "quotations[" + i + "].validUntil"),
+                fundingSourceType: q.fundingSourceType || null,
+                fundingSourceId: q.fundingSourceId || null,
+                fundingSourceName: q.fundingSourceName || null,
+                subtotal: amountFromMinor(q.subtotal, "quotations[" + i + "].subtotal", false),
+                discountTotal: amountFromMinor(q.discountTotal, "quotations[" + i + "].discountTotal", false),
+                taxableAmount: amountFromMinor(q.taxableAmount, "quotations[" + i + "].taxableAmount", false),
+                taxTotal: amountFromMinor(q.taxTotal, "quotations[" + i + "].taxTotal", false),
+                additionalChargeTotal: amountFromMinor(q.additionalChargeTotal, "quotations[" + i + "].additionalChargeTotal", false),
+                grandTotal: amountFromMinor(q.grandTotal, "quotations[" + i + "].grandTotal", false),
+                total: amountFromMinor(q.total, "quotations[" + i + "].total", false),
+                itemCount: items.length,
+                items,
+                charges,
+                history: quotationEventsById.get(idKey(q.id)) || []
+            };
+        });
+
+        const orderEventsById = new Map();
+        root.orderEvents.forEach((event, i) => {
+            const key = idKey(event.orderId);
+            if (!orderEventsById.has(key)) orderEventsById.set(key, []);
+            orderEventsById.get(key).push({
+                at: optionalTimestamp(event.timestamp, "orderEvents[" + i + "].timestamp"),
+                from: null,
+                to: String(event.resultingStatus || "").toLowerCase(),
+                note: event.details || event.eventType || ""
+            });
+        });
+
+        const orders = root.orders.map((order, i) => {
+            const items = order.items.map((item, j) => ({
+                id: item.id,
+                orderId: order.id,
+                description: item.description || "",
+                qty: Number(item.quantity || 0),
+                price: amountFromMinor(item.unitPrice, "orders[" + i + "].items[" + j + "].unitPrice", false),
+                total: amountFromMinor(item.totalPrice, "orders[" + i + "].items[" + j + "].totalPrice", false),
+                unit: item.unit || null,
+                source: item.source || null,
+                productLink: item.productLink || null
+            }));
+            const charges = order.charges.map((charge, j) => mapDocumentCharge(charge, "orders[" + i + "].charges[" + j + "]"));
+            return {
+                id: order.id,
+                orderNo: order.orderNo,
+                quotationId: order.quotationId || null,
+                quotationNo: order.quotationNo || null,
+                status: String(order.status || "DRAFT").toLowerCase(),
+                subtotal: amountFromMinor(order.subtotal, "orders[" + i + "].subtotal", false),
+                gst: amountFromMinor(order.gst, "orders[" + i + "].gst", false),
+                total: amountFromMinor(order.total, "orders[" + i + "].total", false),
+                plannedAmount: amountFromMinor(order.plannedAmount, "orders[" + i + "].plannedAmount", false),
+                sourceId: order.sourceId || null,
+                sourceName: order.sourceName || null,
+                sourceType: order.sourceType ? String(order.sourceType).toLowerCase() : null,
+                purpose: order.purpose || "",
+                paymentType: order.paymentType || null,
+                financialPosted: !!order.financialPosted,
+                financialEntryId: order.financialEntryId || null,
+                cancellationReason: order.cancellationReason || null,
+                cancelledAt: optionalTimestamp(order.cancelledAt, "orders[" + i + "].cancelledAt"),
+                createdAt: optionalTimestamp(order.createdAt, "orders[" + i + "].createdAt"),
+                updatedAt: optionalTimestamp(order.updatedAt, "orders[" + i + "].updatedAt"),
+                statusHistory: orderEventsById.get(idKey(order.id)) || [],
+                items,
+                charges
+            };
+        });
+
+        const documentRelations = root.documentRelations.map((relation, i) => ({
+            quotationId: relation.quotationId,
+            orderId: relation.orderId || null,
+            relationshipStatus: String(relation.relationshipStatus || "unlinked").toLowerCase(),
+            updatedAt: optionalTimestamp(relation.createdAt, "documentRelations[" + i + "].createdAt")
+        }));
+
+        const noSeriesConfig = { quotation: null, order: null };
+        root.noSeriesConfigs.forEach((row) => {
+            const kind = String(row.documentType || "").toLowerCase();
+            const target = kind.includes("quotation") || kind.includes("quote") ? "quotation"
+                : kind.includes("order") ? "order" : null;
+            if (!target) return;
+            noSeriesConfig[target] = {
+                prefix: String(row.prefix || (target === "quotation" ? "QT" : "ORD")),
+                startNumber: Number(row.startNumber || 0),
+                lastNumber: Number(row.lastNumber || 0)
+            };
+        });
+        if (!noSeriesConfig.quotation || !noSeriesConfig.order) {
+            // Keep defaults for a missing document type rather than discarding the other series.
+            if (!noSeriesConfig.quotation) noSeriesConfig.quotation = { prefix: "QT", startNumber: 1000, lastNumber: 1000 };
+            if (!noSeriesConfig.order) noSeriesConfig.order = { prefix: "ORD", startNumber: 1000, lastNumber: 1000 };
+        }
+
         const quotations = {
             quotationData: null,
-            quotationItems: [],
-            quotationCharges: [],
-            quotationRegistry: [],
+            quotationItems,
+            quotationCharges,
+            quotationRegistry,
             quotationMeta: null,
             activeQuotationId: null,
-            documentRelations: [],
-            noSeriesConfig: null
+            documentRelations,
+            noSeriesConfig
         };
 
         const nativeArchive = JSON.parse(JSON.stringify(root));
@@ -389,7 +594,7 @@
                 categories,
                 persons,
                 unassignedTopups,
-                orders: [],
+                orders,
                 quotations,
                 settings: {},
                 meta: {
@@ -400,7 +605,7 @@
                 __nativeBackupArchive: nativeArchive,
                 __nativeBackupSummary: nativeSummary,
                 __preserveSettings: true,
-                __preserveDocuments: true
+                __preserveDocuments: false
             },
             summary: nativeSummary
         };
