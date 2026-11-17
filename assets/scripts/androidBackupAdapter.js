@@ -111,6 +111,8 @@
 
         const categories = uniqueIndex(root.categories, "categories");
         const persons = uniqueIndex(root.persons, "persons");
+        root.categories.forEach((row, i) => { if (typeof row.name !== "string" || !row.name.trim()) fail("categories[" + i + "].name is required"); });
+        root.persons.forEach((row, i) => { if (typeof row.name !== "string" || !row.name.trim()) fail("persons[" + i + "].name is required"); });
         const periods = uniqueIndex(root.budgetPeriods, "budgetPeriods");
         const wallets = uniqueIndex(root.budgetWallets, "budgetWallets");
         const budgetTx = uniqueIndex(root.budgetTransactions, "budgetTransactions");
@@ -203,13 +205,37 @@
                 if (idKey(charge.quotationId) !== idKey(q.id)) fail("quotations[" + i + "].charges[" + j + "] has a mismatched quotationId");
             });
         });
+        root.quotations.forEach((q, i) => {
+            ["subtotal", "discountTotal", "taxableAmount", "taxTotal", "additionalChargeTotal", "grandTotal", "total"].forEach((field) => {
+                amountFromMinor(q[field], "quotations[" + i + "]." + field, false);
+            });
+            q.items.forEach((item, j) => {
+                if (!Number.isFinite(Number(item.quantity)) || Number(item.quantity) <= 0) fail("quotations[" + i + "].items[" + j + "].quantity must be positive");
+                amountFromMinor(item.unitPrice, "quotations[" + i + "].items[" + j + "].unitPrice", false);
+                amountFromMinor(item.totalPrice, "quotations[" + i + "].items[" + j + "].totalPrice", false);
+            });
+            q.charges.forEach((charge, j) => {
+                amountFromMinor(charge.amount, "quotations[" + i + "].charges[" + j + "].amount", false);
+                if (!Number.isFinite(Number(charge.value || 0)) || Number(charge.value || 0) < 0) fail("quotations[" + i + "].charges[" + j + "].value is invalid");
+                if (String(charge.applyTo || "ALL_ITEMS").toUpperCase() === "SPECIFIC_ITEM" && !q.items.some((item) => idKey(item.id) === idKey(charge.targetItemId))) fail("quotations[" + i + "].charges[" + j + "] references a missing target item");
+            });
+        });
         root.orders.forEach((o, i) => {
             if (o.quotationId != null && !quotations.has(idKey(o.quotationId))) fail("orders[" + i + "] references a missing quotation");
+            ["subtotal", "gst", "total", "plannedAmount"].forEach((field) => {
+                amountFromMinor(o[field], "orders[" + i + "]." + field, false);
+            });
             o.items.forEach((item, j) => {
                 if (idKey(item.orderId) !== idKey(o.id)) fail("orders[" + i + "].items[" + j + "] has a mismatched orderId");
+                if (!Number.isFinite(Number(item.quantity)) || Number(item.quantity) <= 0) fail("orders[" + i + "].items[" + j + "].quantity must be positive");
+                amountFromMinor(item.unitPrice, "orders[" + i + "].items[" + j + "].unitPrice", false);
+                amountFromMinor(item.totalPrice, "orders[" + i + "].items[" + j + "].totalPrice", false);
             });
             o.charges.forEach((charge, j) => {
                 if (idKey(charge.orderId) !== idKey(o.id)) fail("orders[" + i + "].charges[" + j + "] has a mismatched orderId");
+                amountFromMinor(charge.amount, "orders[" + i + "].charges[" + j + "].amount", false);
+                if (!Number.isFinite(Number(charge.value || 0)) || Number(charge.value || 0) < 0) fail("orders[" + i + "].charges[" + j + "].value is invalid");
+                if (String(charge.applyTo || "ALL_ITEMS").toUpperCase() === "SPECIFIC_ITEM" && !o.items.some((item) => idKey(item.id) === idKey(charge.targetItemId))) fail("orders[" + i + "].charges[" + j + "] references a missing target item");
             });
         });
         root.documentRelations.forEach((row, i) => {
