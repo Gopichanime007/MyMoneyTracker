@@ -243,11 +243,11 @@
         const direction = String(tx.direction || "").toUpperCase();
         const amount = amountFromMinor(tx.amount, path + ".amount", false);
 
-        if (type === "EXPENSE" || type === "TRANSFER") {
+        if (type === "EXPENSE" || type === "TRANSFER" || type === "TRANSFER_BACK") {
             if (direction !== "OUT") fail(path + " has an invalid direction for " + type);
             return -amount;
         }
-        if (type === "INCOME" || type === "TRANSFER_BACK" || type === "REFUND") {
+        if (type === "INCOME" || type === "REFUND") {
             if (direction !== "IN") fail(path + " has an invalid direction for " + type);
             return amount;
         }
