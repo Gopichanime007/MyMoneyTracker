@@ -441,19 +441,35 @@
             };
         });
 
-        const unassignedTopups = root.unassignedTopups.map((row, i) => ({
-            id: row.id,
-            budgetWalletId: row.budgetWalletId,
-            amount: amountFromMinor(row.amount, "unassignedTopups[" + i + "].amount", false),
-            date: dateFromEpoch(row.date, "unassignedTopups[" + i + "].date", false),
-            parked: !!row.parked,
-            status: row.parked ? "parked" : "unassigned",
-            assignedAmount: 0,
-            assignments: [],
-            note: row.note || "",
-            createdAt: optionalTimestamp(row.createdAt, "unassignedTopups[" + i + "].createdAt"),
-            updatedAt: optionalTimestamp(row.updatedAt, "unassignedTopups[" + i + "].updatedAt")
-        }));
+        const unassignedTopups = root.unassignedTopups.map((row, i) => {
+            const topupAmount = amountFromMinor(row.amount, "unassignedTopups[" + i + "].amount", false);
+            const assignments = root.savingsTransactions
+                .filter((tx) => String(tx.type || "").toLowerCase() === "unassigned_topup_resolution" && idKey(tx.linkedTopupId) === idKey(row.id))
+                .map((tx, j) => ({
+                    sourceId: tx.sourceId || null,
+                    amount: Math.abs(amountFromMinor(tx.amount, "unassignedTopups[" + i + "].resolution[" + j + "].amount", true)),
+                    date: dateFromEpoch(tx.date, "unassignedTopups[" + i + "].resolution[" + j + "].date", false),
+                    method: String(tx.note || "").toLowerCase().includes("auto-assigned") ? "auto" : "manual",
+                    savingsEntryId: tx.id
+                }));
+            const assignedAmount = Number(assignments.reduce((sum, assignment) => sum + assignment.amount, 0).toFixed(2));
+            if (assignedAmount - topupAmount > 0.01) fail("unassignedTopups[" + i + "] has linked resolutions greater than its original amount");
+            const status = assignedAmount >= topupAmount && topupAmount > 0
+                ? "assigned" : (assignedAmount > 0 ? "partially_assigned" : (row.parked ? "parked" : "unassigned"));
+            return {
+                id: row.id,
+                budgetWalletId: row.budgetWalletId,
+                amount: topupAmount,
+                date: dateFromEpoch(row.date, "unassignedTopups[" + i + "].date", false),
+                parked: !!row.parked,
+                status,
+                assignedAmount,
+                assignments,
+                note: row.note || "",
+                createdAt: optionalTimestamp(row.createdAt, "unassignedTopups[" + i + "].createdAt"),
+                updatedAt: optionalTimestamp(row.updatedAt, "unassignedTopups[" + i + "].updatedAt")
+            };
+        });
 
         const categories = root.categories.map((row) => String(row.name || "").trim()).filter(Boolean);
         const persons = root.persons.map((row) => String(row.name || "").trim()).filter(Boolean);
