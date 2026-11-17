@@ -120,7 +120,7 @@
         const quotations = uniqueIndex(root.quotations, "quotations");
         const orders = uniqueIndex(root.orders, "orders");
         const attachments = uniqueIndex(root.attachments, "attachments");
-        uniqueIndex(root.unassignedTopups, "unassignedTopups");
+        const topups = uniqueIndex(root.unassignedTopups, "unassignedTopups");
         uniqueIndex(root.documentRelations, "documentRelations");
         uniqueIndex(root.transactionAttachments, "transactionAttachments");
         uniqueIndex(root.quotationEvents, "quotationEvents");
@@ -177,6 +177,8 @@
             if (tx.targetBudgetId != null && !wallets.has(idKey(tx.targetBudgetId))) fail(path + " references a missing target budget wallet");
             if (tx.budgetWalletId != null && !wallets.has(idKey(tx.budgetWalletId))) fail(path + " references a missing budget wallet");
             if (tx.sourceId != null && !savingsTx.has(idKey(tx.sourceId))) fail(path + " references a missing savings source");
+            if (tx.linkedTopupId != null && !topups.has(idKey(tx.linkedTopupId))) fail(path + " references a missing unassigned top-up");
+            if (String(tx.type || "").toLowerCase() === "unassigned_topup_resolution" && tx.linkedTopupId == null) fail(path + " top-up resolution is missing linkedTopupId");
         });
 
         root.unassignedTopups.forEach((row, i) => {
