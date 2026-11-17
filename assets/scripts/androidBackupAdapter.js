@@ -566,7 +566,7 @@
             updatedAt: optionalTimestamp(relation.createdAt, "documentRelations[" + i + "].createdAt")
         }));
 
-        const noSeriesConfig = { quotation: null, order: null };
+        const noSeriesConfig = {};
         root.noSeriesConfigs.forEach((row) => {
             const kind = String(row.documentType || "").toLowerCase();
             const target = kind.includes("quotation") || kind.includes("quote") ? "quotation"
@@ -578,11 +578,6 @@
                 lastNumber: Number(row.lastNumber || 0)
             };
         });
-        if (!noSeriesConfig.quotation || !noSeriesConfig.order) {
-            // Keep defaults for a missing document type rather than discarding the other series.
-            if (!noSeriesConfig.quotation) noSeriesConfig.quotation = { prefix: "QT", startNumber: 1000, lastNumber: 1000 };
-            if (!noSeriesConfig.order) noSeriesConfig.order = { prefix: "ORD", startNumber: 1000, lastNumber: 1000 };
-        }
 
         const quotations = {
             quotationData: null,
@@ -592,7 +587,7 @@
             quotationMeta: null,
             activeQuotationId: null,
             documentRelations,
-            noSeriesConfig
+            noSeriesConfig: Object.keys(noSeriesConfig).length ? noSeriesConfig : null
         };
 
         const nativeArchive = JSON.parse(JSON.stringify(root));
