@@ -404,7 +404,7 @@ const ImportEngine = (() => {
         // Android native backups use schemaVersion rather than the legacy meta.version.
         // Adapt a validated copy before legacy version/schema normalization.
         let nativeBackupSummary = null;
-        const androidAdapter = getGlobalFunction('MyMoneyAndroidBackupAdapter');
+        const androidAdapter = (typeof window !== 'undefined' && window.MyMoneyAndroidBackupAdapter) || (typeof globalThis !== 'undefined' && globalThis.MyMoneyAndroidBackupAdapter) || null;
         if (androidAdapter && typeof androidAdapter.isNative === 'function' && androidAdapter.isNative(parsed)) {
             const adapted = androidAdapter.adapt(parsed);
             parsed = adapted.payload;
