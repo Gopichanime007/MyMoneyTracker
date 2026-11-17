@@ -492,9 +492,11 @@
             if (assignedAmount - topupAmount > 0.01) fail("unassignedTopups[" + i + "] has linked resolutions greater than its original amount");
             const status = assignedAmount >= topupAmount && topupAmount > 0
                 ? "assigned" : (assignedAmount > 0 ? "partially_assigned" : (row.parked ? "parked" : "unassigned"));
+            const topupWallet = indexes.wallets.get(idKey(row.budgetWalletId));
             return {
                 id: row.id,
                 budgetWalletId: row.budgetWalletId,
+                periodKey: periodKeyById.get(idKey(topupWallet.budgetPeriodId)),
                 amount: topupAmount,
                 date: dateFromEpoch(row.date, "unassignedTopups[" + i + "].date", false),
                 parked: !!row.parked,
