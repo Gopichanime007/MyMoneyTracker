@@ -8681,7 +8681,8 @@ function applyImportData(data) {
             orders: (data.orders || []).length,
             quotationRegistry: (data.quotations.quotationRegistry || []).length,
             quotationItems: (data.quotations.quotationItems || []).length,
-            quotationCharges: (data.quotations.quotationCharges || []).length
+            quotationCharges: (data.quotations.quotationCharges || []).length,
+            documentRelations: (data.quotations.documentRelations || []).length
         };
         Object.keys(expectedCollections).forEach((key) => {
             const value = JSON.parse(localStorage.getItem(key) || "null");
@@ -8689,6 +8690,13 @@ function applyImportData(data) {
                 throw new Error("Post-import verification failed for " + key + ": expected " + expectedCollections[key] + " records.");
             }
         });
+        const archivedNativeBackup = JSON.parse(localStorage.getItem("myMoneyTrackerAndroidBackupArchive") || "null");
+        if (!archivedNativeBackup || !archivedNativeBackup.meta || Number(archivedNativeBackup.meta.schemaVersion) !== 1) {
+            throw new Error("The original Android backup archive could not be verified.");
+        }
+        if (localStorage.getItem("activeOrderId") !== "null") {
+            throw new Error("Stale active order reference could not be cleared.");
+        }
     } else {
         runIntegrityRepairSilently();
     }
