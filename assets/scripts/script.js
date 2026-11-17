@@ -7214,6 +7214,12 @@ function renderImportValidationReport(report) {
         `Errors: ${errors.length}`
     ];
 
+    if (report.nativeBackupSummary && report.nativeBackupSummary.counts) {
+        const nativeCounts = report.nativeBackupSummary.counts;
+        lines.push(`Android Backup Collections | Periods: ${Number(nativeCounts.budgetPeriods || 0)} | Wallets: ${Number(nativeCounts.budgetWallets || 0)} | Budget Transactions: ${Number(nativeCounts.budgetTransactions || 0)} | Savings Transactions: ${Number(nativeCounts.savingsTransactions || 0)} | Top-ups: ${Number(nativeCounts.unassignedTopups || 0)} | Quotations: ${Number(nativeCounts.quotations || 0)} | Orders: ${Number(nativeCounts.orders || 0)}`);
+        lines.push(`Android Attachments: ${Number(nativeCounts.attachments || 0)} metadata records preserved in the source archive`);
+    }
+
     if (warnings.length) lines.push(`Warning Details: ${warnings.join("; ")}`);
     if (errors.length) lines.push(`Error Details: ${errors.join("; ")}`);
 
@@ -8930,6 +8936,9 @@ function importData() {
 
                 version:
                     result.version,
+
+                nativeBackupSummary:
+                    result.nativeBackupSummary || null,
 
                 found:
                     result.found || {},
