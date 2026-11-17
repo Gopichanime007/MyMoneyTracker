@@ -305,9 +305,17 @@
             };
         });
 
+        const attachmentIdsByTransaction = new Map();
+        root.transactionAttachments.forEach((link) => {
+            const key = idKey(link.transactionId);
+            if (!attachmentIdsByTransaction.has(key)) attachmentIdsByTransaction.set(key, []);
+            attachmentIdsByTransaction.get(key).push(link.attachmentId);
+        });
+
         const expenses = root.budgetTransactions.map((tx, i) => {
             const path = "budgetTransactions[" + i + "]";
             const wallet = indexes.wallets.get(idKey(tx.budgetWalletId));
+            const linkedAttachmentIds = attachmentIdsByTransaction.get(idKey(tx.id)) || [];
             const periodKey = periodKeyById.get(idKey(wallet.budgetPeriodId));
             const date = dateFromEpoch(tx.date, path + ".date", false);
             const category = tx.categoryId == null ? null : categoryNameById.get(idKey(tx.categoryId));
@@ -340,6 +348,10 @@
                 resolutionType: tx.resolutionType || null,
                 resolvedAmount: tx.resolvedAmount == null ? 0 : amountFromMinor(tx.resolvedAmount, path + ".resolvedAmount", false),
                 lossAmount: tx.lossAmount == null ? 0 : amountFromMinor(tx.lossAmount, path + ".lossAmount", false),
+                attachmentId: linkedAttachmentIds[0] || null,
+                attachmentIds: linkedAttachmentIds,
+                attachmentStatus: linkedAttachmentIds.length ? "missing" : "none",
+                attachmentError: linkedAttachmentIds.length ? "Attachment binary is not included in the Android JSON backup." : null,
                 documentNumber: tx.documentNumber || null,
                 nativeCategoryId: tx.categoryId || null,
                 nativePersonId: tx.personId || null,
@@ -367,8 +379,8 @@
                 createdAt: optionalTimestamp(tx.createdAt, path + ".createdAt"),
                 updatedAt: optionalTimestamp(tx.updatedAt, path + ".updatedAt"),
                 attachmentId: tx.attachmentId || null,
-                attachmentStatus: tx.attachmentStatus || (tx.attachmentId ? "missing" : "none"),
-                attachmentError: tx.attachmentError || (tx.attachmentId ? "Attachment binary is not included in the Android JSON backup." : null),
+                attachmentStatus: tx.attachmentId ? "missing" : "none",
+                attachmentError: tx.attachmentId ? "Attachment binary is not included in the Android JSON backup." : null,
                 linkedTransactionId: tx.linkedTransactionId || null,
                 linkedTopupId: tx.linkedTopupId || null,
                 refundType: tx.refundType || null,
