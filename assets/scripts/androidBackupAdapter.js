@@ -188,6 +188,8 @@
             dateFromEpoch(row.date, path + ".date", false);
         });
 
+        const refundTotalsByOriginal = new Map();
+        const refundRowsByOriginal = new Map();
         root.budgetTransactions.forEach((tx, i) => {
             if (tx.linkedTransactionId != null &&
                 !budgetTx.has(idKey(tx.linkedTransactionId)) &&
@@ -197,6 +199,34 @@
             if (tx.linkedSavingsTransactionId != null && !savingsTx.has(idKey(tx.linkedSavingsTransactionId))) {
                 fail("budgetTransactions[" + i + "] references a missing linked savings transaction");
             }
+            if (String(tx.type || "").toUpperCase() === "REFUND") {
+                const originalId = idKey(tx.linkedTransactionId);
+                const original = budgetTx.get(originalId);
+                if (Number(tx.amount) <= 0) fail("budgetTransactions[" + i + "] REFUND amount must be positive");
+                if (tx.resolvedAmount != null && Number(tx.resolvedAmount) !== Number(tx.amount)) fail("budgetTransactions[" + i + "] REFUND resolvedAmount must equal amount");
+                const refundType = String(tx.refundType || "").toUpperCase();
+                const lossAmount = Number(tx.lossAmount || 0);
+                if (String(tx.resolutionType || "").toUpperCase() === "LOSS" && lossAmount <= 0) fail("budgetTransactions[" + i + "] LOSS refund requires lossAmount");
+                if (String(tx.resolutionType || "").toUpperCase() !== "LOSS" && lossAmount > 0) fail("budgetTransactions[" + i + "] lossAmount is only valid for LOSS resolution");
+                if (refundType !== "EXCESS_REFUND") {
+                    refundTotalsByOriginal.set(originalId, (refundTotalsByOriginal.get(originalId) || 0) + Number(tx.amount) + lossAmount);
+                    if (!refundRowsByOriginal.has(originalId)) refundRowsByOriginal.set(originalId, []);
+                    refundRowsByOriginal.get(originalId).push(tx);
+                } else {
+                }
+            }
+        });
+        root.budgetTransactions.forEach((tx, i) => {
+            if (String(tx.type || "").toUpperCase() !== "REFUND" || String(tx.refundType || "").toUpperCase() !== "EXCESS_REFUND") return;
+            const originalId = idKey(tx.linkedTransactionId);
+            const original = budgetTx.get(originalId);
+            if (!original || (refundTotalsByOriginal.get(originalId) || 0) < Number(original.amount)) {
+                fail("budgetTransactions[" + i + "] EXCESS_REFUND requires the original transaction to be fully resolved first");
+            }
+        });
+        refundTotalsByOriginal.forEach((total, originalId) => {
+            const original = budgetTx.get(originalId);
+            if (original && total - Number(original.amount) > 0) fail("Refund resolutions exceed the original amount for transaction " + originalId);
         });
 
         root.quotations.forEach((q, i) => {
