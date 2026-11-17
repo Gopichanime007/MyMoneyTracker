@@ -8542,7 +8542,7 @@ function applyImportData(data) {
      * ---------------------------------------------------------
      */
 
-    if (data.settings) {
+    if (data.settings && !data.__preserveSettings) {
 
         if (data.settings.currencyCode) {
 
