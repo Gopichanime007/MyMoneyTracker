@@ -174,6 +174,9 @@
             const path = "savingsTransactions[" + i + "]";
             amountFromMinor(tx.amount, path + ".amount", true);
             dateFromEpoch(tx.date, path + ".date", false);
+            const savingsType = String(tx.type || "").toLowerCase();
+            if (["transfer", "budget_allocation", "unassigned_topup_resolution"].includes(savingsType) && Number(tx.amount) >= 0) fail(path + " " + savingsType + " amount must be negative");
+            if (["deposit", "income", "refund"].includes(savingsType) && Number(tx.amount) <= 0) fail(path + " " + savingsType + " amount must be positive");
             if (tx.targetBudgetId != null && !wallets.has(idKey(tx.targetBudgetId))) fail(path + " references a missing target budget wallet");
             if (tx.budgetWalletId != null && !wallets.has(idKey(tx.budgetWalletId))) fail(path + " references a missing budget wallet");
             if (tx.sourceId != null && !savingsTx.has(idKey(tx.sourceId))) fail(path + " references a missing savings source");
