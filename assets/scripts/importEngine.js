@@ -502,6 +502,17 @@ const ImportEngine = (() => {
         const normalizationReport =
             normalizationResult.report || {};
 
+        if (nativeBackupSummary) {
+            normalizationReport.warnings = Array.isArray(normalizationReport.warnings)
+                ? normalizationReport.warnings
+                : [];
+            normalizationReport.warnings.push("Android native backup was converted to the legacy web schema. The original JSON is retained in myMoneyTrackerAndroidBackupArchive.");
+            if (Number(nativeBackupSummary.counts && nativeBackupSummary.counts.attachments || 0) > 0) {
+                normalizationReport.warnings.push("Android attachment metadata and links are preserved, but the JSON does not contain attachment file binaries. Those files cannot be opened in the legacy web app until separately transferred.");
+            }
+            normalizationReport.warnings.push("Android quotation/order event history is preserved in the original backup archive; the active quotation and order records are mapped to the legacy document schema.");
+        }
+
 
         if (
             Array.isArray(
